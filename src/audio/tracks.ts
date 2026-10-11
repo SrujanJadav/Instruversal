@@ -260,3 +260,20 @@ export function getTrackManager(): TrackManager {
   }
   return sharedTrackManager;
 }
+
+export function auditionInstrument(instrumentId: string) {
+  const meta = INSTRUMENTS_MAP[instrumentId];
+  if (!meta) return;
+  const tm = getTrackManager();
+  const inst = meta.create();
+  inst.output.connect(tm.masterChain.masterGain);
+  const now = Tone.now();
+  const notes = [60, 64, 67];
+  notes.forEach((note, idx) => {
+    inst.triggerNote(note, '16n', now + idx * 0.08, 0.75);
+  });
+  window.setTimeout(() => {
+    inst.dispose();
+  }, 1200);
+}
+

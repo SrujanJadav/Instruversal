@@ -9,6 +9,7 @@ import { DrawingCanvas } from './canvas/DrawingCanvas';
 import { getTrackManager } from './audio/tracks';
 import { getLoopScheduler } from './audio/schedule';
 import { Toolbar } from './ui/Toolbar';
+import { TrackPanel } from './ui/TrackPanel';
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 
@@ -24,7 +25,12 @@ app.innerHTML = `
   <main class="main-view" id="main-view" aria-hidden="true" style="display: none;">
     <header class="app-header">
       <h2 class="header-title">${CONFIG.appName}</h2>
-      <span class="header-status" id="header-status">AUDIO READY</span>
+      <div class="header-actions">
+        <button type="button" class="header-btn" id="header-mixer-btn" aria-label="Open track mixer and key panel">
+          Mixer · Key
+        </button>
+        <span class="header-status" id="header-status">AUDIO READY</span>
+      </div>
     </header>
 
     <div class="canvas-container" id="canvas-container"></div>
@@ -37,9 +43,18 @@ const startBtn = document.querySelector<HTMLButtonElement>('#start-btn')!;
 const gateScreen = document.querySelector<HTMLElement>('#gate-screen')!;
 const mainView = document.querySelector<HTMLElement>('#main-view')!;
 const headerStatus = document.querySelector<HTMLElement>('#header-status')!;
+const mixerBtn = document.querySelector<HTMLButtonElement>('#header-mixer-btn')!;
 
 let drawingCanvas: DrawingCanvas | null = null;
 let toolbar: Toolbar | null = null;
+let trackPanel: TrackPanel | null = null;
+
+function updateHeaderStatus() {
+  const track = getTrackManager().getTrack(state.selectedTrackId);
+  if (track && headerStatus) {
+    headerStatus.textContent = `${track.name.toUpperCase()} · ${track.instrumentId.toUpperCase()}`;
+  }
+}
 
 async function handleStart() {
   startBtn.disabled = true;
@@ -67,9 +82,7 @@ async function handleStart() {
       mainView.style.display = 'flex';
       mainView.removeAttribute('aria-hidden');
 
-      if (headerStatus && defaultTrack) {
-        headerStatus.textContent = `${defaultTrack.name.toUpperCase()} · ${defaultTrack.instrumentId.toUpperCase()}`;
-      }
+      updateHeaderStatus();
 
       const canvasContainer = document.querySelector<HTMLElement>('#canvas-container');
       if (canvasContainer && !drawingCanvas) {
@@ -79,6 +92,10 @@ async function handleStart() {
       const toolbarContainer = document.querySelector<HTMLElement>('#toolbar-container');
       if (toolbarContainer && !toolbar) {
         toolbar = new Toolbar(toolbarContainer);
+      }
+
+      if (!trackPanel) {
+        trackPanel = new TrackPanel(app);
       }
     }, 220);
   } catch (err) {
@@ -90,9 +107,10 @@ async function handleStart() {
 
 startBtn.addEventListener('click', handleStart);
 
-events.on('track:select', (trackId) => {
-  const track = getTrackManager().getTrack(trackId);
-  if (track && headerStatus) {
-    headerStatus.textContent = `${track.name.toUpperCase()} · ${track.instrumentId.toUpperCase()}`;
+mixerBtn.addEventListener('click', () => {
+  if (trackPanel) {
+    trackPanel.toggle();
   }
 });
+
+events.on('track:select', () => updateHeaderStatus());
