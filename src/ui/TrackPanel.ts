@@ -1,6 +1,7 @@
 import { state, events } from '../state';
-import { getTrackManager, auditionInstrument, Track } from '../audio/tracks';
+import { getTrackManager, auditionInstrument, auditionKit, Track } from '../audio/tracks';
 import { INSTRUMENT_METAS } from '../audio/instruments';
+import { DRUM_KITS, DrumKitId } from '../audio/drums';
 import { SCALES, ScaleName } from '../audio/scales';
 import { getTotalAudioLatencySeconds } from '../audio/context';
 import { getTransport } from '../audio/transport';
@@ -12,6 +13,7 @@ export class TrackPanel {
   private panel: HTMLElement;
   private currentTab: 'tracks' | 'key' = 'tracks';
   private activeInstrumentPickerTrackId: string | null = null;
+  private pickerTab: 'melodic' | 'beats' = 'melodic';
   private unsubs: (() => void)[] = [];
 
   constructor(container: HTMLElement) {
@@ -68,7 +70,10 @@ export class TrackPanel {
 
   public openInstrumentPicker(trackId?: string) {
     this.currentTab = 'tracks';
-    this.activeInstrumentPickerTrackId = trackId || state.selectedTrackId;
+    const targetId = trackId || state.selectedTrackId;
+    this.activeInstrumentPickerTrackId = targetId;
+    const tr = getTrackManager().getTrack(targetId);
+    this.pickerTab = tr?.trackType === 'beat' ? 'beats' : 'melodic';
     this.render();
     this.overlay.classList.remove('hidden');
     this.overlay.removeAttribute('aria-hidden');
@@ -154,22 +159,54 @@ export class TrackPanel {
               ${track.name} Voice
             </span>
           </div>
-          <ul class="instrument-list">
-            ${INSTRUMENT_METAS.map((meta) => {
-              const isSelected = track.instrumentId === meta.id;
-              return `
-                <li class="instrument-item ${isSelected ? 'selected' : ''}">
-                  <button type="button" class="inst-select-btn" data-inst-id="${meta.id}">
-                    <span class="inst-name">${meta.name}</span>
-                    ${isSelected ? '<span class="inst-badge">Active</span>' : ''}
-                  </button>
-                  <button type="button" class="inst-audition-btn" data-audition-id="${meta.id}" aria-label="Audition ${meta.name}">
-                    ▶ Test
-                  </button>
-                </li>
-              `;
-            }).join('')}
-          </ul>
+
+          <div class="picker-category-toggle" role="group" aria-label="Instrument Category">
+            <button type="button" class="mode-pill-btn ${this.pickerTab === 'melodic' ? 'active' : ''}" id="picker-tab-melodic">
+              Melodic (${INSTRUMENT_METAS.length})
+            </button>
+            <button type="button" class="mode-pill-btn ${this.pickerTab === 'beats' ? 'active' : ''}" id="picker-tab-beats">
+              Beats (${Object.keys(DRUM_KITS).length})
+            </button>
+          </div>
+
+          ${this.pickerTab === 'melodic' ? `
+            <ul class="instrument-list">
+              ${INSTRUMENT_METAS.map((meta) => {
+                const isSelected = track.trackType === 'melodic' && track.instrumentId === meta.id;
+                return `
+                  <li class="instrument-item ${isSelected ? 'selected' : ''}">
+                    <button type="button" class="inst-select-btn" data-inst-id="${meta.id}">
+                      <span class="inst-name">${meta.name}</span>
+                      ${isSelected ? '<span class="inst-badge">Active</span>' : ''}
+                    </button>
+                    <button type="button" class="inst-audition-btn" data-audition-id="${meta.id}" aria-label="Audition ${meta.name}">
+                      ▶ Test
+                    </button>
+                  </li>
+                `;
+              }).join('')}
+            </ul>
+          ` : `
+            <ul class="instrument-list">
+              ${Object.values(DRUM_KITS).map((kit) => {
+                const isSelected = track.trackType === 'beat' && track.kitId === kit.id;
+                return `
+                  <li class="instrument-item ${isSelected ? 'selected' : ''}">
+                    <button type="button" class="kit-select-btn" data-kit-id="${kit.id}">
+                      <div class="kit-info-col">
+                        <span class="inst-name">${kit.name}</span>
+                        <span class="kit-desc-lbl">${kit.description}</span>
+                      </div>
+                      ${isSelected ? '<span class="inst-badge">Active</span>' : ''}
+                    </button>
+                    <button type="button" class="kit-audition-btn" data-audition-kit="${kit.id}" aria-label="Audition ${kit.name}">
+                      ▶ Test
+                    </button>
+                  </li>
+                `;
+              }).join('')}
+            </ul>
+          `}
         </div>
       `;
     }
@@ -179,6 +216,24 @@ export class TrackPanel {
       <ul class="track-list">
         ${tracks.map((t) => this.renderTrackRow(t)).join('')}
       </ul>
+
+      <!-- Sidechain Ducking -->
+      <div class="mixer-sync-section">
+        <div class="mixer-sync-header">
+          <span class="section-title">Kick Sidechain Ducking</span>
+          <span class="sync-val-display" id="mixer-duck-val">${state.kickDucking}%</span>
+        </div>
+        <p class="sync-hint">Gently ducks pads and strings when a kick hits (amount 0 to 40%).</p>
+        <div class="sync-slider-row">
+          <span class="sync-range-lbl">0%</span>
+          <input type="range" class="sync-slider" id="mixer-duck-slider"
+            min="0" max="40" step="5" value="${state.kickDucking}"
+            aria-label="Kick sidechain ducking" />
+          <span class="sync-range-lbl">40%</span>
+        </div>
+      </div>
+
+      <!-- Sync Calibration -->
       <div class="mixer-sync-section">
         <div class="mixer-sync-header">
           <span class="section-title">Audio & Playhead Sync</span>
@@ -199,8 +254,13 @@ export class TrackPanel {
 
   private renderTrackRow(track: Track): string {
     const isSelected = track.id === state.selectedTrackId;
-    const instMeta = INSTRUMENT_METAS.find((m) => m.id === track.instrumentId);
-    const instName = instMeta ? instMeta.name : track.instrumentId;
+    let instName = '';
+    if (track.trackType === 'beat') {
+      instName = DRUM_KITS[track.kitId]?.name || '808 Kit';
+    } else {
+      const instMeta = INSTRUMENT_METAS.find((m) => m.id === track.instrumentId);
+      instName = instMeta ? instMeta.name : track.instrumentId;
+    }
 
     return `
       <li class="track-row ${isSelected ? 'selected' : ''}" data-track-id="${track.id}">
@@ -299,7 +359,21 @@ export class TrackPanel {
       this.render();
     });
 
-    // Instrument audition buttons
+    // Instrument picker tab switches (Melodic vs Beats)
+    const pickerTabMelodic = this.panel.querySelector<HTMLButtonElement>('#picker-tab-melodic');
+    const pickerTabBeats = this.panel.querySelector<HTMLButtonElement>('#picker-tab-beats');
+
+    pickerTabMelodic?.addEventListener('click', () => {
+      this.pickerTab = 'melodic';
+      this.render();
+    });
+
+    pickerTabBeats?.addEventListener('click', () => {
+      this.pickerTab = 'beats';
+      this.render();
+    });
+
+    // Melodic audition buttons
     const auditionBtns = this.panel.querySelectorAll<HTMLButtonElement>('.inst-audition-btn');
     auditionBtns.forEach((btn) => {
       btn.addEventListener('click', (e) => {
@@ -311,7 +385,19 @@ export class TrackPanel {
       });
     });
 
-    // Instrument select buttons
+    // Beat Kit audition buttons
+    const kitAuditionBtns = this.panel.querySelectorAll<HTMLButtonElement>('.kit-audition-btn');
+    kitAuditionBtns.forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const kitId = btn.dataset.auditionKit as DrumKitId;
+        if (kitId) {
+          auditionKit(kitId);
+        }
+      });
+    });
+
+    // Melodic instrument select buttons
     const instSelectBtns = this.panel.querySelectorAll<HTMLButtonElement>('.inst-select-btn');
     instSelectBtns.forEach((btn) => {
       btn.addEventListener('click', () => {
@@ -319,8 +405,30 @@ export class TrackPanel {
         if (instId && this.activeInstrumentPickerTrackId) {
           const track = tm.getTrack(this.activeInstrumentPickerTrackId);
           if (track) {
+            track.setTrackType('melodic');
             track.setInstrument(instId);
             track.audition();
+            events.emit('track:type-change', { trackId: track.id, type: 'melodic' });
+            events.emit('track:update', track.id);
+          }
+          this.activeInstrumentPickerTrackId = null;
+          this.render();
+        }
+      });
+    });
+
+    // Beat kit select buttons
+    const kitSelectBtns = this.panel.querySelectorAll<HTMLButtonElement>('.kit-select-btn');
+    kitSelectBtns.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const kitId = btn.dataset.kitId as DrumKitId;
+        if (kitId && this.activeInstrumentPickerTrackId) {
+          const track = tm.getTrack(this.activeInstrumentPickerTrackId);
+          if (track) {
+            track.setTrackType('beat');
+            track.setKit(kitId);
+            track.audition();
+            events.emit('track:type-change', { trackId: track.id, type: 'beat' });
             events.emit('track:update', track.id);
           }
           this.activeInstrumentPickerTrackId = null;
@@ -431,6 +539,15 @@ export class TrackPanel {
       const val = parseInt(syncSlider.value, 10);
       if (syncValDisplay) syncValDisplay.textContent = `${val >= 0 ? '+' : ''}${val}ms`;
       getTransport().setSyncOffset(val);
+    });
+
+    // Kick ducking slider in Mixer
+    const duckSlider = this.panel.querySelector<HTMLInputElement>('#mixer-duck-slider');
+    const duckValDisplay = this.panel.querySelector<HTMLElement>('#mixer-duck-val');
+    duckSlider?.addEventListener('input', () => {
+      const val = parseInt(duckSlider.value, 10);
+      state.kickDucking = val;
+      if (duckValDisplay) duckValDisplay.textContent = `${val}%`;
     });
   }
 

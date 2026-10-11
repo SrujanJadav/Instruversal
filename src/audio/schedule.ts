@@ -160,6 +160,8 @@ export function generateEventsFromStrokes(
 
 import { generateFlowEventsFromStrokes } from './flowScheduler';
 import { getFlowVoicePool } from './voicePool';
+import { generateBeatEventsFromStrokes, BeatHitEvent } from './beatSchedule';
+import { triggerKickDucking } from './tracks';
 
 interface FlowPartEvent {
   type: 'attack' | 'breakpoint' | 'release' | 'loopWrap';
@@ -175,7 +177,8 @@ interface FlowPartEvent {
 }
 
 export class LoopScheduler {
-  private part: Tone.Part | null = null;
+  private melodicPart: Tone.Part | null = null;
+  private beatPart: Tone.Part | null = null;
   private rebuildTimer: number | null = null;
   private unsubs: (() => void)[] = [];
 
@@ -201,6 +204,8 @@ export class LoopScheduler {
         this.debouncedRebuild();
       }),
       events.on('glide:change', () => this.debouncedRebuild()),
+      events.on('track:type-change', () => this.debouncedRebuild()),
+      events.on('track:beat-param-change', () => this.debouncedRebuild()),
       events.on('transport:pause', () => {
         getFlowVoicePool().releaseAll(0.02);
       })
@@ -218,24 +223,110 @@ export class LoopScheduler {
   }
 
   public rebuild() {
-    const oldPart = this.part;
+    const oldMelodicPart = this.melodicPart;
+    const oldBeatPart = this.beatPart;
+    const trackManager = getTrackManager();
 
     if (state.strokes.length === 0) {
-      if (oldPart) {
-        oldPart.dispose();
-        this.part = null;
+      if (oldMelodicPart) {
+        oldMelodicPart.dispose();
+        this.melodicPart = null;
+      }
+      if (oldBeatPart) {
+        oldBeatPart.dispose();
+        this.beatPart = null;
+      }
+      getFlowVoicePool().releaseAll(0.02);
+      return;
+    }
+
+    // Partition strokes into melodic vs beat
+    const melodicStrokes: Stroke[] = [];
+    const beatStrokes: Stroke[] = [];
+
+    for (const stroke of state.strokes) {
+      const tr = trackManager.getTrack(stroke.trackId);
+      if (tr && tr.trackType === 'beat') {
+        beatStrokes.push(stroke);
+      } else {
+        melodicStrokes.push(stroke);
+      }
+    }
+
+    // 1. Rebuild Beat Part
+    if (beatStrokes.length === 0) {
+      if (oldBeatPart) {
+        oldBeatPart.dispose();
+        this.beatPart = null;
+      }
+    } else {
+      const selectedTr = trackManager.getTrack(state.selectedTrackId);
+      const beatHits = generateBeatEventsFromStrokes(beatStrokes, {
+        bpm: state.bpm,
+        bars: state.bars,
+        rate: selectedTr?.beatRate || '1/16',
+        swing: selectedTr?.swing || 0,
+        humanize: selectedTr?.humanize !== undefined ? selectedTr.humanize : 15,
+      });
+
+      if (beatHits.length === 0) {
+        if (oldBeatPart) {
+          oldBeatPart.dispose();
+          this.beatPart = null;
+        }
+      } else {
+        const newBeatPart = new Tone.Part((time, hit: BeatHitEvent) => {
+          const track = trackManager.getTrack(hit.trackId);
+          if (!track || !track.shouldPlay(trackManager.hasAnySolo())) return;
+
+          track.triggerDrum(hit.soundId, time, hit.velocity);
+
+          // Sidechain kick ducking
+          if (hit.soundId === 'kick' && state.kickDucking > 0) {
+            triggerKickDucking(state.kickDucking);
+          }
+
+          // Visual pulse at hit coordinates via Tone.Draw (no ripples for beats)
+          Tone.getDraw().schedule(() => {
+            events.emit('note:hit', {
+              strokeId: hit.strokeId,
+              trackId: hit.trackId,
+              midi: hit.laneIndex,
+              x: hit.normX,
+              y: hit.normY,
+              isBeat: true,
+            });
+          }, time);
+        }, beatHits as unknown as any[]);
+
+        newBeatPart.loop = true;
+        newBeatPart.loopStart = 0;
+        newBeatPart.loopEnd = `${state.bars}m`;
+        newBeatPart.start(0);
+
+        this.beatPart = newBeatPart;
+        if (oldBeatPart) {
+          oldBeatPart.dispose();
+        }
+      }
+    }
+
+    // 2. Rebuild Melodic Part
+    if (melodicStrokes.length === 0) {
+      if (oldMelodicPart) {
+        oldMelodicPart.dispose();
+        this.melodicPart = null;
       }
       getFlowVoicePool().releaseAll(0.02);
       return;
     }
 
     const scaleNotes = buildScaleNotes(state.rootNote, state.scaleName, 3, 6);
-    const trackManager = getTrackManager();
     const voicePool = getFlowVoicePool();
 
     if (state.playbackMode === 'flow') {
       const flowEvents = generateFlowEventsFromStrokes(
-        state.strokes,
+        melodicStrokes,
         state.bars,
         state.bpm,
         scaleNotes,
@@ -243,9 +334,9 @@ export class LoopScheduler {
       );
 
       if (flowEvents.length === 0) {
-        if (oldPart) {
-          oldPart.dispose();
-          this.part = null;
+        if (oldMelodicPart) {
+          oldMelodicPart.dispose();
+          this.melodicPart = null;
         }
         return;
       }
@@ -330,6 +421,7 @@ export class LoopScheduler {
               midi: item.midi!,
               x: item.normX!,
               y: item.normY!,
+              isBeat: false,
             });
           }, time);
         } else if (item.type === 'breakpoint') {
@@ -357,17 +449,17 @@ export class LoopScheduler {
       newPart.loopEnd = `${state.bars}m`;
       newPart.start(0);
 
-      this.part = newPart;
-      if (oldPart) {
-        oldPart.dispose();
+      this.melodicPart = newPart;
+      if (oldMelodicPart) {
+        oldMelodicPart.dispose();
       }
     } else {
       // Notes mode: stepped 16th-note grid
-      const noteEvents = generateEventsFromStrokes(state.strokes, state.bars, scaleNotes);
+      const noteEvents = generateEventsFromStrokes(melodicStrokes, state.bars, scaleNotes);
       if (noteEvents.length === 0) {
-        if (oldPart) {
-          oldPart.dispose();
-          this.part = null;
+        if (oldMelodicPart) {
+          oldMelodicPart.dispose();
+          this.melodicPart = null;
         }
         return;
       }
@@ -388,6 +480,7 @@ export class LoopScheduler {
             midi: note.midi,
             x: note.normX,
             y: note.normY,
+            isBeat: false,
           });
         }, time);
       }, noteEvents as unknown as any[]);
@@ -397,9 +490,9 @@ export class LoopScheduler {
       newPart.loopEnd = `${state.bars}m`;
       newPart.start(0);
 
-      this.part = newPart;
-      if (oldPart) {
-        oldPart.dispose();
+      this.melodicPart = newPart;
+      if (oldMelodicPart) {
+        oldMelodicPart.dispose();
       }
     }
   }
@@ -413,9 +506,13 @@ export class LoopScheduler {
       unsub();
     }
     this.unsubs = [];
-    if (this.part) {
-      this.part.dispose();
-      this.part = null;
+    if (this.melodicPart) {
+      this.melodicPart.dispose();
+      this.melodicPart = null;
+    }
+    if (this.beatPart) {
+      this.beatPart.dispose();
+      this.beatPart = null;
     }
     getFlowVoicePool().releaseAll(0.01);
   }
@@ -429,3 +526,4 @@ export function getLoopScheduler(): LoopScheduler {
   }
   return sharedScheduler;
 }
+

@@ -921,6 +921,74 @@
   border-color: var(--ink);
 }
 
+.picker-category-toggle {
+  display: flex;
+  background-color: var(--paper-deep);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 2px;
+  gap: 2px;
+}
+
+.picker-category-toggle .mode-pill-btn {
+  flex: 1;
+  text-align: center;
+  justify-content: center;
+  font-family: var(--font-ui);
+  font-size: 0.78rem;
+  font-weight: 500;
+  min-height: 32px;
+}
+
+.kit-select-btn {
+  appearance: none;
+  border: none;
+  background: transparent;
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--ink);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0;
+  flex: 1;
+  text-align: left;
+}
+
+.kit-info-col {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.kit-desc-lbl {
+  font-family: var(--font-ui);
+  font-size: 0.72rem;
+  color: var(--ink-soft);
+  line-height: 1.25;
+}
+
+.kit-audition-btn {
+  appearance: none;
+  border: 1px solid var(--line);
+  background-color: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: border-color var(--transition-fast);
+}
+
+.kit-audition-btn:hover {
+  border-color: var(--ink);
+}
+
 /* Key & Scale Tab */
 .key-picker-container {
   display: flex;
@@ -1111,6 +1179,97 @@
 }
 
 .glide-val {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--ink);
+  min-width: 32px;
+}
+
+/* Dynamic Context Container */
+.toolbar-context-container {
+  display: flex;
+  align-items: center;
+}
+
+/* Toolbar Beat Track Controls */
+.toolbar-beat-group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.segmented-chips {
+  display: flex;
+  background-color: var(--paper-deep);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 2px;
+  gap: 2px;
+}
+
+.chip-btn {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--ink-soft);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 500;
+  padding: 4px 8px;
+  min-height: 32px;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color var(--transition-fast), color var(--transition-fast);
+}
+
+.chip-btn:hover {
+  color: var(--ink);
+}
+
+.chip-btn.active {
+  background-color: var(--paper);
+  color: var(--ink);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(28, 26, 22, 0.08);
+}
+
+.toolbar-mini-slider {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 4px;
+}
+
+.mini-slider-lbl {
+  font-family: var(--font-ui);
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--ink-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.mini-slider-input {
+  appearance: none;
+  width: 50px;
+  height: 4px;
+  background-color: var(--line);
+  border-radius: 2px;
+  outline: none;
+}
+
+.mini-slider-input::-webkit-slider-thumb {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background-color: var(--ink);
+  cursor: pointer;
+  border: 1px solid var(--paper);
+}
+
+.mini-slider-val {
   font-family: var(--font-mono);
   font-size: 0.75rem;
   color: var(--ink);

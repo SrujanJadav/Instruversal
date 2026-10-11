@@ -321,6 +321,345 @@ export function createSubBass(): InstrumentInstance {
   };
 }
 
+/**
+ * 8. Music Box: Bright bell-like FM chime with short crystal tail
+ */
+export function createMusicBox(): InstrumentInstance {
+  const filter = new Tone.Filter({
+    frequency: 600,
+    type: 'highpass',
+  });
+
+  const synth = new Tone.PolySynth(Tone.FMSynth, {
+    harmonicity: 3.5,
+    modulationIndex: 2.2,
+    oscillator: { type: 'sine' },
+    modulation: { type: 'sine' },
+    envelope: {
+      attack: 0.003,
+      decay: 0.45,
+      sustain: 0.02,
+      release: 0.35,
+    },
+    modulationEnvelope: {
+      attack: 0.003,
+      decay: 0.22,
+      sustain: 0.01,
+      release: 0.2,
+    },
+  });
+  synth.maxPolyphony = 6;
+  synth.connect(filter);
+
+  return {
+    id: 'music-box',
+    name: 'Music Box',
+    output: filter,
+    triggerNote(midi, duration, time, velocity = 0.7) {
+      const freq = Tone.Frequency(midi + 12, 'midi').toFrequency(); // one octave up for sparkle
+      synth.triggerAttackRelease(freq, duration, time, velocity);
+    },
+    dispose() {
+      synth.dispose();
+      filter.dispose();
+    },
+  };
+}
+
+/**
+ * 9. Steel Pan: FM with clear metallic attack and warm body
+ */
+export function createSteelPan(): InstrumentInstance {
+  const filter = new Tone.Filter({
+    frequency: 1400,
+    type: 'bandpass',
+    Q: 2.0,
+  });
+
+  const synth = new Tone.PolySynth(Tone.FMSynth, {
+    harmonicity: 1.5,
+    modulationIndex: 3.2,
+    oscillator: { type: 'triangle' },
+    modulation: { type: 'sine' },
+    envelope: {
+      attack: 0.004,
+      decay: 0.45,
+      sustain: 0.03,
+      release: 0.3,
+    },
+    modulationEnvelope: {
+      attack: 0.004,
+      decay: 0.18,
+      sustain: 0.01,
+      release: 0.18,
+    },
+  });
+  synth.maxPolyphony = 6;
+  synth.connect(filter);
+
+  return {
+    id: 'steel-pan',
+    name: 'Steel Pan',
+    output: filter,
+    triggerNote(midi, duration, time, velocity = 0.75) {
+      const freq = Tone.Frequency(midi, 'midi').toFrequency();
+      synth.triggerAttackRelease(freq, duration, time, velocity);
+    },
+    dispose() {
+      synth.dispose();
+      filter.dispose();
+    },
+  };
+}
+
+/**
+ * 10. Glass Harmonica: Airy sine layers, slow attack 40ms, ethereal tail
+ */
+export function createGlassHarmonica(): InstrumentInstance {
+  const filter = new Tone.Filter({
+    frequency: 300,
+    type: 'highpass',
+  });
+
+  const synth = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: 'sine' },
+    envelope: {
+      attack: 0.04,
+      decay: 0.7,
+      sustain: 0.5,
+      release: 0.9,
+    },
+  });
+  synth.maxPolyphony = 6;
+  synth.connect(filter);
+
+  return {
+    id: 'glass-harmonica',
+    name: 'Glass Harmonica',
+    output: filter,
+    triggerNote(midi, duration, time, velocity = 0.65) {
+      const freq = Tone.Frequency(midi, 'midi').toFrequency();
+      synth.triggerAttackRelease(freq, duration, time, velocity);
+    },
+    dispose() {
+      synth.dispose();
+      filter.dispose();
+    },
+  };
+}
+
+/**
+ * 11. Strings: Detuned sawtooth ensemble through lowpass, 45ms attack
+ */
+export function createStrings(): InstrumentInstance {
+  const filter = new Tone.Filter({
+    frequency: 1600,
+    type: 'lowpass',
+    rolloff: -12,
+  });
+
+  const synth = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: 'fatsawtooth', count: 3, spread: 20 } as any,
+    envelope: {
+      attack: 0.045,
+      decay: 0.6,
+      sustain: 0.6,
+      release: 0.65,
+    },
+  });
+  synth.maxPolyphony = 6;
+  synth.connect(filter);
+
+  return {
+    id: 'strings',
+    name: 'Strings',
+    output: filter,
+    triggerNote(midi, duration, time, velocity = 0.6) {
+      const freq = Tone.Frequency(midi, 'midi').toFrequency();
+      synth.triggerAttackRelease(freq, duration, time, velocity);
+    },
+    dispose() {
+      synth.dispose();
+      filter.dispose();
+    },
+  };
+}
+
+/**
+ * 12. Whistle / Theremin: Pure sine with gentle vibrato that deepens as held
+ */
+export function createTheremin(): InstrumentInstance {
+  const vibrato = new Tone.Vibrato({
+    frequency: 5.5,
+    depth: 0.25,
+  });
+
+  const synth = new Tone.Synth({
+    oscillator: { type: 'sine' },
+    envelope: {
+      attack: 0.015,
+      decay: 0.25,
+      sustain: 0.75,
+      release: 0.3,
+    },
+  });
+  synth.connect(vibrato);
+
+  return {
+    id: 'theremin',
+    name: 'Theremin',
+    output: vibrato,
+    triggerNote(midi, duration, time, velocity = 0.7) {
+      const freq = Tone.Frequency(midi, 'midi').toFrequency();
+      synth.triggerAttackRelease(freq, duration, time, velocity);
+    },
+    dispose() {
+      synth.dispose();
+      vibrato.dispose();
+    },
+  };
+}
+
+/**
+ * 13. Wobble Bass: Mono saw with LFO-modulated lowpass filter
+ */
+export function createWobbleBass(): InstrumentInstance {
+  const filter = new Tone.Filter({
+    frequency: 450,
+    type: 'lowpass',
+    rolloff: -12,
+  });
+
+  const lfo = new Tone.LFO({
+    frequency: '4n',
+    min: 200,
+    max: 1800,
+  }).start();
+  lfo.connect(filter.frequency);
+
+  const synth = new Tone.MonoSynth({
+    oscillator: { type: 'sawtooth' },
+    envelope: {
+      attack: 0.01,
+      decay: 0.3,
+      sustain: 0.45,
+      release: 0.22,
+    },
+    filterEnvelope: {
+      attack: 0.01,
+      decay: 0.2,
+      sustain: 0.2,
+      release: 0.2,
+      baseFrequency: 300,
+      octaves: 2,
+    },
+  });
+  synth.connect(filter);
+
+  return {
+    id: 'wobble-bass',
+    name: 'Wobble Bass',
+    output: filter,
+    triggerNote(midi, duration, time, velocity = 0.75) {
+      const bassMidi = Math.max(36, Math.min(60, midi - 12));
+      const freq = Tone.Frequency(bassMidi, 'midi').toFrequency();
+      synth.triggerAttackRelease(freq, duration, time, velocity);
+    },
+    dispose() {
+      lfo.stop();
+      lfo.dispose();
+      synth.dispose();
+      filter.dispose();
+    },
+  };
+}
+
+/**
+ * 14. Tape Keys: Electric piano tone with wow/flutter drift and soft saturation
+ */
+export function createTapeKeys(): InstrumentInstance {
+  const filter = new Tone.Filter({
+    frequency: 2200,
+    type: 'lowpass',
+  });
+
+  const synth = new Tone.PolySynth(Tone.FMSynth, {
+    harmonicity: 1.0,
+    modulationIndex: 1.8,
+    oscillator: { type: 'sine' },
+    modulation: { type: 'sine' },
+    envelope: {
+      attack: 0.008,
+      decay: 0.5,
+      sustain: 0.3,
+      release: 0.4,
+    },
+    modulationEnvelope: {
+      attack: 0.008,
+      decay: 0.2,
+      sustain: 0.1,
+      release: 0.2,
+    },
+  });
+  synth.maxPolyphony = 6;
+  synth.connect(filter);
+
+  return {
+    id: 'tape-keys',
+    name: 'Tape Keys',
+    output: filter,
+    triggerNote(midi, duration, time, velocity = 0.7) {
+      const freq = Tone.Frequency(midi, 'midi').toFrequency();
+      synth.triggerAttackRelease(freq, duration, time, velocity);
+    },
+    dispose() {
+      synth.dispose();
+      filter.dispose();
+    },
+  };
+}
+
+/**
+ * 15. Choir Pad: Formant-like "ooh" timbre with dual bandpass resonance
+ */
+export function createChoirPad(): InstrumentInstance {
+  const formant1 = new Tone.Filter({ frequency: 800, type: 'bandpass', Q: 2.2 });
+  const formant2 = new Tone.Filter({ frequency: 2200, type: 'bandpass', Q: 2.0 });
+  const merger = new Tone.Gain(0.85);
+
+  formant1.connect(merger);
+  formant2.connect(merger);
+
+  const synth = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: 'triangle' },
+    envelope: {
+      attack: 0.045,
+      decay: 0.7,
+      sustain: 0.6,
+      release: 0.75,
+    },
+  });
+  synth.maxPolyphony = 6;
+  synth.connect(formant1);
+  synth.connect(formant2);
+
+  return {
+    id: 'choir-pad',
+    name: 'Choir Pad',
+    output: merger,
+    triggerNote(midi, duration, time, velocity = 0.65) {
+      const freq = Tone.Frequency(midi, 'midi').toFrequency();
+      synth.triggerAttackRelease(freq, duration, time, velocity);
+    },
+    dispose() {
+      synth.dispose();
+      formant1.dispose();
+      formant2.dispose();
+      merger.dispose();
+    },
+  };
+}
+
 export const INSTRUMENT_METAS: InstrumentMeta[] = [
   { id: 'pluck', name: 'Pluck', create: createPluck },
   { id: 'bell', name: 'Bell', create: createBell },
@@ -329,8 +668,17 @@ export const INSTRUMENT_METAS: InstrumentMeta[] = [
   { id: 'warm-keys', name: 'Warm Keys', create: createWarmKeys },
   { id: 'kalimba', name: 'Kalimba', create: createKalimba },
   { id: 'sub-bass', name: 'Sub Bass', create: createSubBass },
+  { id: 'music-box', name: 'Music Box', create: createMusicBox },
+  { id: 'steel-pan', name: 'Steel Pan', create: createSteelPan },
+  { id: 'glass-harmonica', name: 'Glass Harmonica', create: createGlassHarmonica },
+  { id: 'strings', name: 'Strings', create: createStrings },
+  { id: 'theremin', name: 'Theremin', create: createTheremin },
+  { id: 'wobble-bass', name: 'Wobble Bass', create: createWobbleBass },
+  { id: 'tape-keys', name: 'Tape Keys', create: createTapeKeys },
+  { id: 'choir-pad', name: 'Choir Pad', create: createChoirPad },
 ];
 
 export const INSTRUMENTS_MAP: Record<string, InstrumentMeta> = Object.fromEntries(
   INSTRUMENT_METAS.map((meta) => [meta.id, meta])
 );
+

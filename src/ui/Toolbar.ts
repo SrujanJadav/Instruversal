@@ -1,7 +1,9 @@
 import { state, events, undo, redo, canUndo, canRedo, clearStrokes, ToolMode } from '../state';
 import { getTransport } from '../audio/transport';
-import { DEFAULT_TRACK_CONFIGS, getTrackManager } from '../audio/tracks';
+import { DEFAULT_TRACK_CONFIGS, getTrackManager, Track } from '../audio/tracks';
 import { INSTRUMENTS_MAP } from '../audio/instruments';
+import { DRUM_KITS, DrumKitId } from '../audio/drums';
+import { BeatRate } from '../audio/beatSchedule';
 
 // 1.5px stroke custom inline SVGs (strictly matching design system)
 const ICONS = {
@@ -44,6 +46,10 @@ export class Toolbar {
     const tm = getTrackManager();
     const track = tm.getTrack(state.selectedTrackId);
     if (!track) return 'Pluck';
+    if (track.trackType === 'beat') {
+      const kit = DRUM_KITS[track.kitId];
+      return kit ? kit.name : '808 Kit';
+    }
     const meta = INSTRUMENTS_MAP[track.instrumentId];
     return meta ? meta.name : track.instrumentId;
   }
@@ -80,23 +86,8 @@ export class Toolbar {
 
             <div class="toolbar-divider" aria-hidden="true"></div>
 
-            <!-- 3. Playback Mode: Flow vs Notes + Glide -->
-            <div class="toolbar-mode-group">
-              <div class="toolbar-mode-toggle" role="group" aria-label="Playback mode">
-                <button type="button" class="mode-pill-btn ${state.playbackMode === 'flow' ? 'active' : ''}" id="tb-mode-flow" aria-label="Continuous flow mode" tabindex="0">
-                  Flow
-                </button>
-                <button type="button" class="mode-pill-btn ${state.playbackMode === 'notes' ? 'active' : ''}" id="tb-mode-notes" aria-label="Stepped notes mode" tabindex="0">
-                  Notes
-                </button>
-              </div>
-
-              <div class="toolbar-glide-ctrl ${state.playbackMode === 'flow' ? '' : 'hidden'}" id="tb-glide-ctrl" title="Pitch glide">
-                <span class="glide-lbl">Glide</span>
-                <input type="range" class="glide-slider" id="tb-glide-slider" min="0" max="100" value="${state.glide}" aria-label="Pitch glide amount" tabindex="0" />
-                <span class="glide-val" id="tb-glide-val">${state.glide}%</span>
-              </div>
-            </div>
+            <!-- 3. Context Controls: Flow/Notes + Glide (Melodic) OR Kit + Rate + Swing + Human (Beat) -->
+            <div class="toolbar-context-container" id="tb-context-container"></div>
 
             <div class="toolbar-divider" aria-hidden="true"></div>
 
@@ -297,39 +288,8 @@ export class Toolbar {
       bpmVal.textContent = String(transport.getBpm());
     });
 
-    // Playback mode (Flow vs Notes)
-    const flowBtn = this.element.querySelector<HTMLButtonElement>('#tb-mode-flow')!;
-    const notesBtn = this.element.querySelector<HTMLButtonElement>('#tb-mode-notes')!;
-    const glideCtrl = this.element.querySelector<HTMLElement>('#tb-glide-ctrl')!;
-    const glideSlider = this.element.querySelector<HTMLInputElement>('#tb-glide-slider')!;
-    const glideVal = this.element.querySelector<HTMLElement>('#tb-glide-val')!;
-
-    flowBtn.addEventListener('click', () => {
-      if (this.hasDragged) return;
-      state.playbackMode = 'flow';
-      flowBtn.classList.add('active');
-      notesBtn.classList.remove('active');
-      glideCtrl.classList.remove('hidden');
-      events.emit('playback-mode:change', 'flow');
-      this.updateFadeIndicators();
-    });
-
-    notesBtn.addEventListener('click', () => {
-      if (this.hasDragged) return;
-      state.playbackMode = 'notes';
-      notesBtn.classList.add('active');
-      flowBtn.classList.remove('active');
-      glideCtrl.classList.add('hidden');
-      events.emit('playback-mode:change', 'notes');
-      this.updateFadeIndicators();
-    });
-
-    glideSlider.addEventListener('input', () => {
-      const val = parseInt(glideSlider.value, 10);
-      state.glide = val;
-      glideVal.textContent = `${val}%`;
-      events.emit('glide:change', val);
-    });
+    // 3. Render context controls (Flow/Notes + Glide or Drum Kit + Rate + Swing + Human)
+    this.renderContextControls();
 
     // Segmented tool buttons (Pencil / Eraser side-by-side)
     const drawBtn = this.element.querySelector<HTMLButtonElement>('#tb-tool-draw')!;
@@ -480,6 +440,158 @@ export class Toolbar {
     this.updateFadeIndicators();
   }
 
+  private renderContextControls() {
+    const container = this.element.querySelector<HTMLElement>('#tb-context-container');
+    if (!container) return;
+
+    const tm = getTrackManager();
+    const track = tm.getTrack(state.selectedTrackId);
+    const isBeat = track?.trackType === 'beat';
+
+    if (isBeat && track) {
+      container.innerHTML = `
+        <div class="toolbar-beat-group" role="group" aria-label="Beat pattern controls">
+          <!-- Kit chips -->
+          <div class="segmented-chips kit-chips" role="group" aria-label="Drum kit">
+            <button type="button" class="chip-btn ${track.kitId === '808' ? 'active' : ''}" data-kit="808" title="808 Kit" tabindex="0">808</button>
+            <button type="button" class="chip-btn ${track.kitId === 'lofi' ? 'active' : ''}" data-kit="lofi" title="Lo-fi Kit" tabindex="0">Lo-fi</button>
+            <button type="button" class="chip-btn ${track.kitId === 'acoustic' ? 'active' : ''}" data-kit="acoustic" title="Acoustic Kit" tabindex="0">Acoustic</button>
+            <button type="button" class="chip-btn ${track.kitId === 'electro' ? 'active' : ''}" data-kit="electro" title="Electro Kit" tabindex="0">Electro</button>
+          </div>
+
+          <!-- Rate chips -->
+          <div class="segmented-chips rate-chips" role="group" aria-label="Repeat rate">
+            <button type="button" class="chip-btn ${track.beatRate === '1/4' ? 'active' : ''}" data-rate="1/4" title="1/4 Note" tabindex="0">1/4</button>
+            <button type="button" class="chip-btn ${track.beatRate === '1/8' ? 'active' : ''}" data-rate="1/8" title="1/8 Note" tabindex="0">1/8</button>
+            <button type="button" class="chip-btn ${track.beatRate === '1/8T' ? 'active' : ''}" data-rate="1/8T" title="1/8 Triplet" tabindex="0">1/8T</button>
+            <button type="button" class="chip-btn ${track.beatRate === '1/16' ? 'active' : ''}" data-rate="1/16" title="1/16 Note" tabindex="0">1/16</button>
+            <button type="button" class="chip-btn ${track.beatRate === '1/32' ? 'active' : ''}" data-rate="1/32" title="1/32 Note" tabindex="0">1/32</button>
+          </div>
+
+          <!-- Swing slider -->
+          <div class="toolbar-mini-slider" title="Swing timing (0-60%)">
+            <span class="mini-slider-lbl">Swing</span>
+            <input type="range" class="mini-slider-input" id="tb-swing-slider" min="0" max="60" step="5" value="${track.swing}" aria-label="Swing percentage" tabindex="0" />
+            <span class="mini-slider-val" id="tb-swing-val">${track.swing}%</span>
+          </div>
+
+          <!-- Humanize slider -->
+          <div class="toolbar-mini-slider" title="Humanize jitter (0-100%)">
+            <span class="mini-slider-lbl">Human</span>
+            <input type="range" class="mini-slider-input" id="tb-human-slider" min="0" max="100" step="5" value="${track.humanize}" aria-label="Humanize percentage" tabindex="0" />
+            <span class="mini-slider-val" id="tb-human-val">${track.humanize}%</span>
+          </div>
+        </div>
+      `;
+      this.bindBeatControls(container, track);
+    } else {
+      container.innerHTML = `
+        <div class="toolbar-mode-group">
+          <div class="toolbar-mode-toggle" role="group" aria-label="Playback mode">
+            <button type="button" class="mode-pill-btn ${state.playbackMode === 'flow' ? 'active' : ''}" id="tb-mode-flow" aria-label="Continuous flow mode" tabindex="0">
+              Flow
+            </button>
+            <button type="button" class="mode-pill-btn ${state.playbackMode === 'notes' ? 'active' : ''}" id="tb-mode-notes" aria-label="Stepped notes mode" tabindex="0">
+              Notes
+            </button>
+          </div>
+
+          <div class="toolbar-glide-ctrl ${state.playbackMode === 'flow' ? '' : 'hidden'}" id="tb-glide-ctrl" title="Pitch glide">
+            <span class="glide-lbl">Glide</span>
+            <input type="range" class="glide-slider" id="tb-glide-slider" min="0" max="100" value="${state.glide}" aria-label="Pitch glide amount" tabindex="0" />
+            <span class="glide-val" id="tb-glide-val">${state.glide}%</span>
+          </div>
+        </div>
+      `;
+      this.bindMelodicControls(container);
+    }
+
+    this.updateFadeIndicators();
+  }
+
+  private bindMelodicControls(container: HTMLElement) {
+    const flowBtn = container.querySelector<HTMLButtonElement>('#tb-mode-flow');
+    const notesBtn = container.querySelector<HTMLButtonElement>('#tb-mode-notes');
+    const glideCtrl = container.querySelector<HTMLElement>('#tb-glide-ctrl');
+    const glideSlider = container.querySelector<HTMLInputElement>('#tb-glide-slider');
+    const glideVal = container.querySelector<HTMLElement>('#tb-glide-val');
+
+    flowBtn?.addEventListener('click', () => {
+      if (this.hasDragged) return;
+      state.playbackMode = 'flow';
+      flowBtn.classList.add('active');
+      notesBtn?.classList.remove('active');
+      glideCtrl?.classList.remove('hidden');
+      events.emit('playback-mode:change', 'flow');
+      this.updateFadeIndicators();
+    });
+
+    notesBtn?.addEventListener('click', () => {
+      if (this.hasDragged) return;
+      state.playbackMode = 'notes';
+      notesBtn.classList.add('active');
+      flowBtn?.classList.remove('active');
+      glideCtrl?.classList.add('hidden');
+      events.emit('playback-mode:change', 'notes');
+      this.updateFadeIndicators();
+    });
+
+    glideSlider?.addEventListener('input', () => {
+      const val = parseInt(glideSlider.value, 10);
+      state.glide = val;
+      if (glideVal) glideVal.textContent = `${val}%`;
+      events.emit('glide:change', val);
+    });
+  }
+
+  private bindBeatControls(container: HTMLElement, track: Track) {
+    const kitBtns = container.querySelectorAll<HTMLButtonElement>('.kit-chips .chip-btn');
+    kitBtns.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        if (this.hasDragged) return;
+        const kitId = btn.dataset.kit as DrumKitId;
+        if (!kitId) return;
+        track.setKit(kitId);
+        track.audition();
+        kitBtns.forEach((b) => b.classList.toggle('active', b.dataset.kit === kitId));
+        this.updateInstrumentButton();
+        events.emit('track:beat-param-change', { trackId: track.id, kitId });
+        events.emit('track:update', track.id);
+      });
+    });
+
+    const rateBtns = container.querySelectorAll<HTMLButtonElement>('.rate-chips .chip-btn');
+    rateBtns.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        if (this.hasDragged) return;
+        const rate = btn.dataset.rate as BeatRate;
+        if (!rate) return;
+        track.beatRate = rate;
+        rateBtns.forEach((b) => b.classList.toggle('active', b.dataset.rate === rate));
+        events.emit('track:beat-param-change', { trackId: track.id, rate });
+        events.emit('track:update', track.id);
+      });
+    });
+
+    const swingSlider = container.querySelector<HTMLInputElement>('#tb-swing-slider');
+    const swingVal = container.querySelector<HTMLElement>('#tb-swing-val');
+    swingSlider?.addEventListener('input', () => {
+      const val = parseInt(swingSlider.value, 10);
+      track.swing = val;
+      if (swingVal) swingVal.textContent = `${val}%`;
+      events.emit('track:beat-param-change', { trackId: track.id, swing: val });
+    });
+
+    const humanSlider = container.querySelector<HTMLInputElement>('#tb-human-slider');
+    const humanVal = container.querySelector<HTMLElement>('#tb-human-val');
+    humanSlider?.addEventListener('input', () => {
+      const val = parseInt(humanSlider.value, 10);
+      track.humanize = val;
+      if (humanVal) humanVal.textContent = `${val}%`;
+      events.emit('track:beat-param-change', { trackId: track.id, humanize: val });
+    });
+  }
+
   private setupListeners() {
     this.unsubs.push(
       events.on('transport:play', () => this.updatePlayState(true)),
@@ -498,9 +610,21 @@ export class Toolbar {
         const dotBtns = this.element.querySelectorAll<HTMLButtonElement>('.palette-dot-btn');
         dotBtns.forEach((b) => b.classList.toggle('active', b.dataset.trackId === trackId));
         this.updateInstrumentButton();
+        this.renderContextControls();
+      }),
+      events.on('track:type-change', () => {
+        this.updateInstrumentButton();
+        this.renderContextControls();
       }),
       events.on('track:update', () => {
         this.updateInstrumentButton();
+      }),
+      events.on('playback-mode:change', () => {
+        const tm = getTrackManager();
+        const tr = tm.getTrack(state.selectedTrackId);
+        if (tr?.trackType !== 'beat') {
+          this.renderContextControls();
+        }
       })
     );
   }

@@ -16,6 +16,7 @@ export type Stroke = {
 
 export type ToolMode = 'draw' | 'eraser';
 export type PlaybackMode = 'flow' | 'notes';
+export type TrackType = 'melodic' | 'beat';
 
 export interface FxConfig {
   reverb: { amount: number; size: number; bypassed: boolean };
@@ -60,7 +61,10 @@ export type EventMap = {
     midi: number;
     x: number;
     y: number;
+    isBeat?: boolean;
   };
+  'track:type-change': { trackId: string; type: TrackType };
+  'track:beat-param-change': { trackId: string; kitId?: string; rate?: string; swing?: number; humanize?: number };
   'stroke:added': Stroke;
   'strokes:updated': Stroke[];
 };
@@ -109,6 +113,7 @@ export interface AppState {
   glide: number; // 0 to 100
   showHitNotes: boolean;
   syncOffsetMs: number; // user-calibrated latency offset in ms, stored in localStorage
+  kickDucking: number; // 0 to 40 (%)
   fx: FxConfig;
   strokes: Stroke[];
 }
@@ -143,6 +148,7 @@ export const state: AppState = {
   playbackMode: 'flow',
   glide: 25,
   syncOffsetMs: loadSyncOffset(),
+  kickDucking: 0,
   showHitNotes: true,
   fx: { ...DEFAULT_FX_CONFIG },
   strokes: [],

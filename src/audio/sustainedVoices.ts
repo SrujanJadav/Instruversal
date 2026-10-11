@@ -160,6 +160,193 @@ export function createSustainedVoice(
       break;
     }
 
+    case 'music-box': {
+      filterNode = new Tone.Filter({
+        frequency: 550,
+        type: 'highpass',
+      });
+      synthNode = new Tone.FMSynth({
+        harmonicity: 3.5,
+        modulationIndex: 2.0,
+        oscillator: { type: 'sine' },
+        modulation: { type: 'sine' },
+        envelope: {
+          attack: 0.015,
+          decay: 0.1,
+          sustain: 1.0,
+          release: 0.3,
+        },
+        modulationEnvelope: {
+          attack: 0.015,
+          decay: 0.15,
+          sustain: 0.6,
+          release: 0.25,
+        },
+      });
+      synthNode.connect(filterNode);
+      filterNode.connect(voiceGain);
+      break;
+    }
+
+    case 'steel-pan': {
+      filterNode = new Tone.Filter({
+        frequency: 1400,
+        type: 'bandpass',
+        Q: 1.8,
+      });
+      synthNode = new Tone.FMSynth({
+        harmonicity: 1.5,
+        modulationIndex: 2.8,
+        oscillator: { type: 'triangle' },
+        modulation: { type: 'sine' },
+        envelope: {
+          attack: 0.015,
+          decay: 0.1,
+          sustain: 1.0,
+          release: 0.28,
+        },
+        modulationEnvelope: {
+          attack: 0.015,
+          decay: 0.15,
+          sustain: 0.5,
+          release: 0.2,
+        },
+      });
+      synthNode.connect(filterNode);
+      filterNode.connect(voiceGain);
+      break;
+    }
+
+    case 'glass-harmonica': {
+      filterNode = new Tone.Filter({
+        frequency: 300,
+        type: 'highpass',
+      });
+      synthNode = new Tone.Synth({
+        oscillator: { type: 'sine' },
+        envelope: {
+          attack: 0.025,
+          decay: 0.1,
+          sustain: 1.0,
+          release: 0.45,
+        },
+      });
+      synthNode.connect(filterNode);
+      filterNode.connect(voiceGain);
+      break;
+    }
+
+    case 'strings': {
+      filterNode = new Tone.Filter({
+        frequency: 1600,
+        type: 'lowpass',
+        rolloff: -12,
+      });
+      synthNode = new Tone.Synth({
+        oscillator: { type: 'sawtooth' },
+        envelope: {
+          attack: 0.025,
+          decay: 0.1,
+          sustain: 1.0,
+          release: 0.4,
+        },
+      });
+      synthNode.connect(filterNode);
+      filterNode.connect(voiceGain);
+      break;
+    }
+
+    case 'theremin': {
+      synthNode = new Tone.Synth({
+        oscillator: { type: 'sine' },
+        envelope: {
+          attack: 0.015,
+          decay: 0.1,
+          sustain: 1.0,
+          release: 0.3,
+        },
+      });
+      synthNode.connect(voiceGain);
+      break;
+    }
+
+    case 'wobble-bass': {
+      filterNode = new Tone.Filter({
+        frequency: 450,
+        type: 'lowpass',
+        rolloff: -12,
+      });
+      const wobbleSynth = new Tone.MonoSynth({
+        oscillator: { type: 'sawtooth' },
+        envelope: {
+          attack: 0.015,
+          decay: 0.1,
+          sustain: 1.0,
+          release: 0.22,
+        },
+        filterEnvelope: {
+          attack: 0.015,
+          decay: 0.1,
+          sustain: 0.7,
+          release: 0.2,
+          baseFrequency: 250,
+          octaves: 1.8,
+        },
+      });
+      wobbleSynth.connect(filterNode);
+      filterNode.connect(voiceGain);
+      synthNode = wobbleSynth;
+      break;
+    }
+
+    case 'tape-keys': {
+      filterNode = new Tone.Filter({
+        frequency: 2200,
+        type: 'lowpass',
+      });
+      synthNode = new Tone.FMSynth({
+        harmonicity: 1.0,
+        modulationIndex: 1.6,
+        oscillator: { type: 'sine' },
+        modulation: { type: 'sine' },
+        envelope: {
+          attack: 0.015,
+          decay: 0.1,
+          sustain: 1.0,
+          release: 0.3,
+        },
+        modulationEnvelope: {
+          attack: 0.015,
+          decay: 0.12,
+          sustain: 0.6,
+          release: 0.2,
+        },
+      });
+      synthNode.connect(filterNode);
+      filterNode.connect(voiceGain);
+      break;
+    }
+
+    case 'choir-pad': {
+      filterNode = new Tone.Filter({
+        frequency: 1100,
+        type: 'bandpass',
+        Q: 1.5,
+      });
+      synthNode = new Tone.Synth({
+        oscillator: { type: 'triangle' },
+        envelope: {
+          attack: 0.025,
+          decay: 0.1,
+          sustain: 1.0,
+          release: 0.4,
+        },
+      });
+      synthNode.connect(filterNode);
+      filterNode.connect(voiceGain);
+      break;
+    }
+
     case 'sub-bass':
     default: {
       const subSynth = new Tone.MonoSynth({

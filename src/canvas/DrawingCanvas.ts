@@ -7,6 +7,7 @@ import {
 } from '../audio/scales';
 import { getTrackManager } from '../audio/tracks';
 import { getTransport } from '../audio/transport';
+import { DRUM_LANES } from '../audio/drums';
 
 interface HitEffect {
   x: number;
@@ -15,6 +16,7 @@ interface HitEffect {
   noteName: string;
   startTime: number;
   duration: number;
+  isBeat?: boolean;
 }
 
 function distToSegmentSquared(
@@ -90,6 +92,7 @@ export class DrawingCanvas {
 
   // Live pitch preview & readout
   private lastPreviewMidi: number | null = null;
+  private lastPreviewLane: number = -1;
   private lastPreviewTime: number = 0;
   private activeNoteDisplay: { name: string; x: number; y: number } | null = null;
 
@@ -154,6 +157,7 @@ export class DrawingCanvas {
   private setupAppListeners() {
     this.unsubs.push(
       events.on('track:select', () => this.markStaticDirty()),
+      events.on('track:type-change', () => this.markStaticDirty()),
       events.on('scale:change', () => this.markStaticDirty()),
       events.on('tool:change', () => this.updateCursor()),
       events.on('strokes:updated', () => this.markStaticDirty()),
@@ -162,14 +166,17 @@ export class DrawingCanvas {
       events.on('transport:pause', () => this.redraw()),
       events.on('note:hit', (hit) => {
         const color = this.getTrackColor(hit.trackId);
-        const noteName = midiToNoteName(hit.midi);
+        const noteName = hit.isBeat
+          ? (DRUM_LANES[hit.midi]?.shortLabel || 'BD')
+          : midiToNoteName(hit.midi);
         this.hitEffects.push({
           x: hit.x,
           y: hit.y,
           color,
           noteName,
           startTime: performance.now(),
-          duration: 400,
+          duration: hit.isBeat ? 170 : 400,
+          isBeat: hit.isBeat,
         });
         if (hit.strokeId) {
           this.strokeHighlights.set(hit.strokeId, performance.now() + 200);
@@ -254,6 +261,27 @@ export class DrawingCanvas {
   }
 
   private triggerLivePitch(normX: number, normY: number) {
+    const tm = getTrackManager();
+    const track = tm.getTrack(state.selectedTrackId);
+
+    // If currently drawing on a beat track: live preview drum sound
+    if (track && track.trackType === 'beat') {
+      const laneIndex = Math.max(0, Math.min(7, Math.floor(normY * 8)));
+      const meta = DRUM_LANES[laneIndex];
+      this.activeNoteDisplay = { name: meta.shortLabel, x: normX, y: normY };
+
+      if (!state.audioStarted) return;
+      const now = performance.now();
+      if (laneIndex !== this.lastPreviewLane || now - this.lastPreviewTime > 120) {
+        try {
+          track.triggerDrum(meta.id, undefined, 0.75);
+          this.lastPreviewLane = laneIndex;
+          this.lastPreviewTime = now;
+        } catch {}
+      }
+      return;
+    }
+
     const scaleNotes = buildScaleNotes(state.rootNote, state.scaleName, 3, 6);
     const midi = yToMidi(normY, scaleNotes);
     const noteName = midiToNoteName(midi);
@@ -265,7 +293,7 @@ export class DrawingCanvas {
     const now = performance.now();
     if (midi !== this.lastPreviewMidi || now - this.lastPreviewTime > 110) {
       try {
-        getTrackManager().triggerNoteOnTrack(
+        tm.triggerNoteOnTrack(
           state.selectedTrackId,
           midi,
           '16n',
@@ -504,6 +532,14 @@ export class DrawingCanvas {
   }
 
   private drawBackgroundGuides(ctx: CanvasRenderingContext2D) {
+    const tm = getTrackManager();
+    const track = tm.getTrack(state.selectedTrackId);
+    if (track && track.trackType === 'beat') {
+      this.drawDrumLanes(ctx);
+      this.drawBeatMarkers(ctx);
+      return;
+    }
+
     const scaleNotes = buildScaleNotes(state.rootNote, state.scaleName, 3, 6);
     const noteCount = scaleNotes.length;
 
@@ -533,7 +569,10 @@ export class DrawingCanvas {
       }
     }
 
-    // Vertical beat markers (8 beats in a 2-bar loop)
+    this.drawBeatMarkers(ctx);
+  }
+
+  private drawBeatMarkers(ctx: CanvasRenderingContext2D) {
     const totalBeats = 8;
     for (let i = 1; i < totalBeats; i++) {
       const x = Math.round((i / totalBeats) * this.width);
@@ -544,6 +583,34 @@ export class DrawingCanvas {
       ctx.moveTo(x + 0.5, 0);
       ctx.lineTo(x + 0.5, this.height);
       ctx.stroke();
+    }
+  }
+
+  private drawDrumLanes(ctx: CanvasRenderingContext2D) {
+    const laneHeight = this.height / 8;
+    for (let i = 0; i < 8; i++) {
+      const meta = DRUM_LANES[i];
+      const yTop = i * laneHeight;
+      if (i % 2 === 1) {
+        ctx.fillStyle = "rgba(28, 26, 22, 0.025)";
+        ctx.fillRect(0, yTop, this.width, laneHeight);
+      }
+      ctx.beginPath();
+      ctx.lineWidth = 0.8;
+      ctx.strokeStyle = this.lineSubtleColor;
+      ctx.moveTo(0, Math.round(yTop) + 0.5);
+      ctx.lineTo(this.width, Math.round(yTop) + 0.5);
+      ctx.stroke();
+      ctx.save();
+      ctx.font = '600 10px "DM Mono", monospace';
+      ctx.fillStyle = "#5B554A";
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      ctx.fillText(meta.shortLabel, 10, yTop + laneHeight / 2);
+      ctx.font = '500 11px "Instrument Sans", sans-serif';
+      ctx.fillStyle = "rgba(28, 26, 22, 0.45)";
+      ctx.fillText(meta.name, 36, yTop + laneHeight / 2);
+      ctx.restore();
     }
   }
 
@@ -757,7 +824,15 @@ export class DrawingCanvas {
 
       ctx.save();
 
-      if (prefersReducedMotion) {
+      if (r.isBeat) {
+        // Step 16-B7: Solid pulse in track colour, no expanding ripple rings
+        const pulseRadius = 5 + (1 - progress) * 2.5;
+        ctx.beginPath();
+        ctx.fillStyle = r.color;
+        ctx.globalAlpha = alpha * 0.95;
+        ctx.arc(px, py, pulseRadius, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (prefersReducedMotion) {
         // Reduced motion: simple opacity flash (no expanding ring)
         ctx.beginPath();
         ctx.fillStyle = r.color;
@@ -775,8 +850,8 @@ export class DrawingCanvas {
         ctx.stroke();
       }
 
-      // Small floating note readout near hit (e.g. "G4") fading over ~300ms
-      if (state.showHitNotes && elapsed < 320) {
+      // Floating note readout for melodic hits
+      if (!r.isBeat && state.showHitNotes && elapsed < 320) {
         const noteAlpha = Math.max(0, 1 - elapsed / 320);
         ctx.font = '500 10px "DM Mono", monospace';
         ctx.fillStyle = '#1C1A16';

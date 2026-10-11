@@ -1,12 +1,20 @@
 import * as Tone from 'tone';
 import { InstrumentInstance, INSTRUMENTS_MAP } from './instruments';
+import { DrumKitInstance, DrumKitId, DrumSoundId } from './drums';
+import { BeatRate } from './beatSchedule';
+import { TrackType } from '../state';
 
 export interface TrackConfig {
   id: string;
   name: string;
   colorVar: string;
   colorHex: string;
+  trackType?: TrackType;
   instrumentId: string;
+  kitId?: DrumKitId;
+  beatRate?: BeatRate;
+  swing?: number; // 0 to 60 (%)
+  humanize?: number; // 0 to 100 (%)
   muted: boolean;
   solo: boolean;
   volume: number; // 0 to 1
@@ -24,20 +32,31 @@ export class Track {
   public name: string;
   public colorVar: string;
   public colorHex: string;
+  public trackType: TrackType;
   public instrumentId: string;
+  public kitId: DrumKitId;
+  public beatRate: BeatRate;
+  public swing: number;
+  public humanize: number;
   public muted: boolean;
   public solo: boolean;
   public volume: number;
 
   public channel: Tone.Gain;
   private instrument: InstrumentInstance | null = null;
+  private drumKit: DrumKitInstance | null = null;
 
   constructor(config: TrackConfig, masterInput: Tone.ToneAudioNode) {
     this.id = config.id;
     this.name = config.name;
     this.colorVar = config.colorVar;
     this.colorHex = config.colorHex;
+    this.trackType = config.trackType || 'melodic';
     this.instrumentId = config.instrumentId;
+    this.kitId = config.kitId || '808';
+    this.beatRate = config.beatRate || '1/16';
+    this.swing = config.swing !== undefined ? config.swing : 0;
+    this.humanize = config.humanize !== undefined ? config.humanize : 15;
     this.muted = config.muted;
     this.solo = config.solo;
     this.volume = config.volume;
@@ -45,11 +64,52 @@ export class Track {
     this.channel = new Tone.Gain(this.calcGainValue());
     this.channel.connect(masterInput);
 
-    this.setInstrument(this.instrumentId);
+    if (this.trackType === 'beat') {
+      this.initDrumKit();
+    } else {
+      this.setInstrument(this.instrumentId);
+    }
   }
 
   private calcGainValue(): number {
     return Math.max(0, Math.min(1, this.volume));
+  }
+
+  private initDrumKit() {
+    if (this.drumKit) {
+      this.drumKit.dispose();
+      this.drumKit = null;
+    }
+    this.drumKit = new DrumKitInstance(this.kitId);
+    this.drumKit.output.connect(this.channel);
+  }
+
+  public setTrackType(type: TrackType) {
+    if (this.trackType === type) return;
+    this.trackType = type;
+
+    if (type === 'beat') {
+      if (this.instrument) {
+        this.instrument.dispose();
+        this.instrument = null;
+      }
+      this.initDrumKit();
+    } else {
+      if (this.drumKit) {
+        this.drumKit.dispose();
+        this.drumKit = null;
+      }
+      this.setInstrument(this.instrumentId);
+    }
+  }
+
+  public setKit(kitId: DrumKitId) {
+    this.kitId = kitId;
+    if (this.drumKit) {
+      this.drumKit.setKit(kitId);
+    } else {
+      this.initDrumKit();
+    }
   }
 
   public setInstrument(instrumentId: string) {
@@ -92,24 +152,44 @@ export class Track {
     time?: Tone.Unit.Time | number,
     velocity: number = 0.75
   ) {
+    if (this.trackType === 'beat') return;
     if (!this.instrument) return;
     this.instrument.triggerNote(midi, duration, time, velocity);
   }
 
+  public triggerDrum(soundId: DrumSoundId, time?: number, velocity: number = 0.8) {
+    if (this.trackType !== 'beat') return;
+    if (!this.drumKit) return;
+    this.drumKit.trigger(soundId, time, velocity);
+  }
+
   public audition() {
-    if (!this.instrument) return;
     const now = Tone.now();
-    // Short 3-note melodic motif
-    const notes = [60, 64, 67]; // C4, E4, G4
-    notes.forEach((note, idx) => {
-      this.instrument?.triggerNote(note, '16n', now + idx * 0.08, 0.75);
-    });
+    if (this.trackType === 'beat') {
+      if (!this.drumKit) return;
+      // Quick drum groove audition: kick on 0, hat on 0.08, snare on 0.16, hat on 0.24
+      this.drumKit.trigger('kick', now, 0.85);
+      this.drumKit.trigger('closed-hat', now + 0.08, 0.65);
+      this.drumKit.trigger('snare', now + 0.16, 0.8);
+      this.drumKit.trigger('closed-hat', now + 0.24, 0.65);
+    } else {
+      if (!this.instrument) return;
+      // Short 3-note melodic motif
+      const notes = [60, 64, 67]; // C4, E4, G4
+      notes.forEach((note, idx) => {
+        this.instrument?.triggerNote(note, '16n', now + idx * 0.08, 0.75);
+      });
+    }
   }
 
   public dispose() {
     if (this.instrument) {
       this.instrument.dispose();
       this.instrument = null;
+    }
+    if (this.drumKit) {
+      this.drumKit.dispose();
+      this.drumKit = null;
     }
     this.channel.dispose();
   }
@@ -148,6 +228,7 @@ export const DEFAULT_TRACK_CONFIGS: TrackConfig[] = [
     name: 'Vermilion',
     colorVar: '--vermilion',
     colorHex: '#D2432A',
+    trackType: 'melodic',
     instrumentId: 'pluck',
     muted: false,
     solo: false,
@@ -158,6 +239,7 @@ export const DEFAULT_TRACK_CONFIGS: TrackConfig[] = [
     name: 'Indigo',
     colorVar: '--indigo',
     colorHex: '#2E3F8F',
+    trackType: 'melodic',
     instrumentId: 'bell',
     muted: false,
     solo: false,
@@ -168,6 +250,7 @@ export const DEFAULT_TRACK_CONFIGS: TrackConfig[] = [
     name: 'Ochre',
     colorVar: '--ochre',
     colorHex: '#D49A2A',
+    trackType: 'melodic',
     instrumentId: 'marimba',
     muted: false,
     solo: false,
@@ -178,6 +261,7 @@ export const DEFAULT_TRACK_CONFIGS: TrackConfig[] = [
     name: 'Sage',
     colorVar: '--sage',
     colorHex: '#3F7A63',
+    trackType: 'melodic',
     instrumentId: 'soft-pad',
     muted: false,
     solo: false,
@@ -188,6 +272,7 @@ export const DEFAULT_TRACK_CONFIGS: TrackConfig[] = [
     name: 'Plum',
     colorVar: '--plum',
     colorHex: '#7A3A66',
+    trackType: 'melodic',
     instrumentId: 'warm-keys',
     muted: false,
     solo: false,
@@ -198,6 +283,7 @@ export const DEFAULT_TRACK_CONFIGS: TrackConfig[] = [
     name: 'Slate',
     colorVar: '--slate',
     colorHex: '#4A5560',
+    trackType: 'melodic',
     instrumentId: 'kalimba',
     muted: false,
     solo: false,
@@ -245,6 +331,19 @@ export class TrackManager {
     }
   }
 
+  public triggerDrumOnTrack(
+    trackId: string,
+    soundId: DrumSoundId,
+    time?: number,
+    velocity: number = 0.8
+  ) {
+    const track = this.tracks.get(trackId);
+    if (!track) return;
+    if (track.shouldPlay(this.hasAnySolo())) {
+      track.triggerDrum(soundId, time, velocity);
+    }
+  }
+
   public dispose() {
     for (const track of this.tracks.values()) {
       track.dispose();
@@ -263,6 +362,33 @@ export function getTrackManager(): TrackManager {
   return sharedTrackManager;
 }
 
+/**
+ * Sidechain ducking on pad and strings when kick hits
+ */
+export function triggerKickDucking(duckingPercent: number) {
+  if (duckingPercent <= 0) return;
+  const tm = getTrackManager();
+  const padTracks = tm
+    .getAllTracks()
+    .filter(
+      (t) =>
+        t.trackType === 'melodic' &&
+        (t.instrumentId === 'soft-pad' ||
+          t.instrumentId === 'strings' ||
+          t.instrumentId === 'choir-pad')
+    );
+
+  const duckFactor = 1 - (duckingPercent / 100) * 0.4; // 0 to 40% reduction
+  const now = Tone.now();
+
+  for (const track of padTracks) {
+    const normalGain = track.volume;
+    track.channel.gain.cancelScheduledValues(now);
+    track.channel.gain.setValueAtTime(normalGain * duckFactor, now);
+    track.channel.gain.rampTo(normalGain, 0.12, now + 0.04);
+  }
+}
+
 export function auditionInstrument(instrumentId: string) {
   const meta = INSTRUMENTS_MAP[instrumentId];
   if (!meta) return;
@@ -279,3 +405,18 @@ export function auditionInstrument(instrumentId: string) {
   }, 1200);
 }
 
+export function auditionKit(kitId: DrumKitId) {
+  const tm = getTrackManager();
+  const drumKit = new DrumKitInstance(kitId);
+  drumKit.output.connect(tm.effectsRack.masterGain);
+  const now = Tone.now();
+
+  drumKit.trigger('kick', now, 0.85);
+  drumKit.trigger('closed-hat', now + 0.08, 0.65);
+  drumKit.trigger('snare', now + 0.16, 0.8);
+  drumKit.trigger('closed-hat', now + 0.24, 0.65);
+
+  window.setTimeout(() => {
+    drumKit.dispose();
+  }, 1200);
+}
