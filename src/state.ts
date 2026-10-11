@@ -15,6 +15,27 @@ export type Stroke = {
 };
 
 export type ToolMode = 'draw' | 'eraser';
+export type PlaybackMode = 'flow' | 'notes';
+
+export interface FxConfig {
+  reverb: { amount: number; size: number; bypassed: boolean };
+  delay: { amount: number; time: string; bypassed: boolean };
+  chorus: { amount: number; depth: number; bypassed: boolean };
+  phaser: { amount: number; speed: number; bypassed: boolean };
+  tremolo: { amount: number; rate: string; bypassed: boolean };
+  autoFilter: { amount: number; speed: string; bypassed: boolean };
+  drive: { amount: number; tone: number; bypassed: boolean };
+}
+
+export const DEFAULT_FX_CONFIG: FxConfig = {
+  reverb: { amount: 15, size: 2.2, bypassed: false },
+  delay: { amount: 0, time: '8n', bypassed: true },
+  chorus: { amount: 0, depth: 0.5, bypassed: true },
+  phaser: { amount: 0, speed: 0.5, bypassed: true },
+  tremolo: { amount: 0, rate: '8n', bypassed: true },
+  autoFilter: { amount: 0, speed: '2m', bypassed: true },
+  drive: { amount: 0, tone: 4000, bypassed: true },
+};
 
 export type EventMap = {
   'audio:started': void;
@@ -24,6 +45,9 @@ export type EventMap = {
   'scale:change': { rootNote: number; scaleName: ScaleName };
   'track:select': string;
   'tool:change': ToolMode;
+  'playback-mode:change': PlaybackMode;
+  'glide:change': number;
+  'fx:change': FxConfig;
   'history:change': { canUndo: boolean; canRedo: boolean };
   'note:hit': {
     strokeId?: string;
@@ -76,7 +100,10 @@ export interface AppState {
   rootNote: number;
   scaleName: ScaleName;
   activeTool: ToolMode;
+  playbackMode: PlaybackMode;
+  glide: number; // 0 to 100
   showHitNotes: boolean;
+  fx: FxConfig;
   strokes: Stroke[];
 }
 
@@ -89,7 +116,10 @@ export const state: AppState = {
   rootNote: 0, // C
   scaleName: 'major pentatonic',
   activeTool: 'draw',
+  playbackMode: 'flow',
+  glide: 25,
   showHitNotes: true,
+  fx: { ...DEFAULT_FX_CONFIG },
   strokes: [],
 };
 

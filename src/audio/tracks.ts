@@ -205,14 +205,16 @@ export const DEFAULT_TRACK_CONFIGS: TrackConfig[] = [
   },
 ];
 
+import { MasterEffectsRack, getMasterEffectsRack } from './effects';
+
 export class TrackManager {
-  public masterChain: MasterAudioChain;
+  public effectsRack: MasterEffectsRack;
   public tracks: Map<string, Track> = new Map();
 
   constructor() {
-    this.masterChain = new MasterAudioChain();
+    this.effectsRack = getMasterEffectsRack();
     for (const config of DEFAULT_TRACK_CONFIGS) {
-      const track = new Track(config, this.masterChain.masterGain);
+      const track = new Track(config, this.effectsRack.masterGain);
       this.tracks.set(track.id, track);
     }
   }
@@ -248,7 +250,7 @@ export class TrackManager {
       track.dispose();
     }
     this.tracks.clear();
-    this.masterChain.dispose();
+    this.effectsRack.dispose();
   }
 }
 
@@ -266,7 +268,7 @@ export function auditionInstrument(instrumentId: string) {
   if (!meta) return;
   const tm = getTrackManager();
   const inst = meta.create();
-  inst.output.connect(tm.masterChain.masterGain);
+  inst.output.connect(tm.effectsRack.masterGain);
   const now = Tone.now();
   const notes = [60, 64, 67];
   notes.forEach((note, idx) => {

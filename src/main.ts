@@ -10,6 +10,7 @@ import { getTrackManager } from './audio/tracks';
 import { getLoopScheduler } from './audio/schedule';
 import { Toolbar } from './ui/Toolbar';
 import { TrackPanel } from './ui/TrackPanel';
+import { FxPanel } from './ui/FxPanel';
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 
@@ -26,6 +27,9 @@ app.innerHTML = `
     <header class="app-header">
       <h2 class="header-title">${CONFIG.appName}</h2>
       <div class="header-actions">
+        <button type="button" class="header-btn" id="header-fx-btn" aria-label="Open effects rack">
+          Effects
+        </button>
         <button type="button" class="header-btn" id="header-mixer-btn" aria-label="Open track mixer and key panel">
           Mixer · Key
         </button>
@@ -44,10 +48,12 @@ const gateScreen = document.querySelector<HTMLElement>('#gate-screen')!;
 const mainView = document.querySelector<HTMLElement>('#main-view')!;
 const headerStatus = document.querySelector<HTMLElement>('#header-status')!;
 const mixerBtn = document.querySelector<HTMLButtonElement>('#header-mixer-btn')!;
+const fxBtn = document.querySelector<HTMLButtonElement>('#header-fx-btn')!;
 
 let drawingCanvas: DrawingCanvas | null = null;
 let toolbar: Toolbar | null = null;
 let trackPanel: TrackPanel | null = null;
+let fxPanel: FxPanel | null = null;
 
 function updateHeaderStatus() {
   const track = getTrackManager().getTrack(state.selectedTrackId);
@@ -97,6 +103,10 @@ async function handleStart() {
       if (!trackPanel) {
         trackPanel = new TrackPanel(app);
       }
+
+      if (!fxPanel) {
+        fxPanel = new FxPanel(app);
+      }
     }, 220);
   } catch (err) {
     console.error('Audio initialization error:', err);
@@ -110,6 +120,12 @@ startBtn.addEventListener('click', handleStart);
 mixerBtn.addEventListener('click', () => {
   if (trackPanel) {
     trackPanel.toggle();
+  }
+});
+
+fxBtn.addEventListener('click', () => {
+  if (fxPanel) {
+    fxPanel.toggle();
   }
 });
 

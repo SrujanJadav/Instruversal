@@ -58,6 +58,26 @@ export class Toolbar {
 
         <div class="toolbar-divider"></div>
 
+        <!-- Playback Mode: Flow vs Notes -->
+        <div class="toolbar-mode-group">
+          <div class="toolbar-mode-toggle" role="group" aria-label="Playback mode">
+            <button type="button" class="mode-pill-btn ${state.playbackMode === 'flow' ? 'active' : ''}" id="tb-mode-flow" aria-label="Continuous flow mode">
+              Flow
+            </button>
+            <button type="button" class="mode-pill-btn ${state.playbackMode === 'notes' ? 'active' : ''}" id="tb-mode-notes" aria-label="Stepped notes mode">
+              Notes
+            </button>
+          </div>
+
+          <div class="toolbar-glide-ctrl ${state.playbackMode === 'flow' ? '' : 'hidden'}" id="tb-glide-ctrl" title="Pitch glide">
+            <span class="glide-lbl">Glide</span>
+            <input type="range" class="glide-slider" id="tb-glide-slider" min="0" max="100" value="${state.glide}" aria-label="Pitch glide amount" />
+            <span class="glide-val" id="tb-glide-val">${state.glide}%</span>
+          </div>
+        </div>
+
+        <div class="toolbar-divider"></div>
+
         <!-- Tool Selection: Draw vs Eraser -->
         <div class="toolbar-tools" role="group" aria-label="Drawing tools">
           <button type="button" class="toolbar-btn tool-btn ${state.activeTool === 'draw' ? 'active' : ''}" id="tb-tool-draw" aria-label="Brush tool">
@@ -132,6 +152,36 @@ export class Toolbar {
       const nextBpm = transport.getBpm() + 5;
       transport.setBpm(nextBpm);
       bpmVal.textContent = String(transport.getBpm());
+    });
+
+    // Playback mode (Flow vs Notes)
+    const flowBtn = this.element.querySelector<HTMLButtonElement>('#tb-mode-flow')!;
+    const notesBtn = this.element.querySelector<HTMLButtonElement>('#tb-mode-notes')!;
+    const glideCtrl = this.element.querySelector<HTMLElement>('#tb-glide-ctrl')!;
+    const glideSlider = this.element.querySelector<HTMLInputElement>('#tb-glide-slider')!;
+    const glideVal = this.element.querySelector<HTMLElement>('#tb-glide-val')!;
+
+    flowBtn.addEventListener('click', () => {
+      state.playbackMode = 'flow';
+      flowBtn.classList.add('active');
+      notesBtn.classList.remove('active');
+      glideCtrl.classList.remove('hidden');
+      events.emit('playback-mode:change', 'flow');
+    });
+
+    notesBtn.addEventListener('click', () => {
+      state.playbackMode = 'notes';
+      notesBtn.classList.add('active');
+      flowBtn.classList.remove('active');
+      glideCtrl.classList.add('hidden');
+      events.emit('playback-mode:change', 'notes');
+    });
+
+    glideSlider.addEventListener('input', () => {
+      const val = parseInt(glideSlider.value, 10);
+      state.glide = val;
+      glideVal.textContent = `${val}%`;
+      events.emit('glide:change', val);
     });
 
     // Tool toggle

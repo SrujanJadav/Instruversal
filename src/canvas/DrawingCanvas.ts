@@ -484,10 +484,15 @@ export class DrawingCanvas {
     // 4. Dynamic layer: playhead and soft trailing band
     this.drawPlayhead();
 
-    // 5. Dynamic layer: hit ripples and fading note readouts
+    // 5. Dynamic layer: in flow mode, calm dot riding along sounding stroke
+    if (state.playbackMode === 'flow') {
+      this.drawFlowPlayheadDots();
+    }
+
+    // 6. Dynamic layer: hit ripples and fading note readouts
     this.drawHitEffects();
 
-    // 6. Floating note badge under finger/mouse when drawing
+    // 7. Floating note badge under finger/mouse when drawing
     if (this.activeNoteDisplay) {
       this.drawNoteBadge(this.activeNoteDisplay);
     }
@@ -656,6 +661,83 @@ export class DrawingCanvas {
     ctx.moveTo(px + 0.5, 0);
     ctx.lineTo(px + 0.5, this.height);
     ctx.stroke();
+  }
+
+  private drawFlowPlayheadDots() {
+    if (!state.isPlaying || state.playbackMode !== 'flow') return;
+    const progress = getTransport().getProgress();
+    const ctx = this.ctx;
+    const now = performance.now();
+
+    for (const stroke of state.strokes) {
+      const pts = stroke.points;
+      if (pts.length === 0) continue;
+
+      let minX = Infinity;
+      let maxX = -Infinity;
+      for (const p of pts) {
+        if (p.x < minX) minX = p.x;
+        if (p.x > maxX) maxX = p.x;
+      }
+
+      const isNearVertical = (maxX - minX) < 0.03;
+      const effectiveMinX = isNearVertical ? Math.max(0, minX - 0.015) : minX;
+      const effectiveMaxX = isNearVertical ? Math.min(1, maxX + 0.015) : maxX;
+
+      if (progress < effectiveMinX || progress > effectiveMaxX) continue;
+
+      let interpY: number | null = null;
+      if (pts.length === 1 || isNearVertical) {
+        interpY = pts[0].y;
+      } else {
+        for (let k = 0; k < pts.length - 1; k++) {
+          const p1 = pts[k];
+          const p2 = pts[k + 1];
+          const segMinX = Math.min(p1.x, p2.x);
+          const segMaxX = Math.max(p1.x, p2.x);
+          if (progress >= segMinX && progress <= segMaxX) {
+            const dx = p2.x - p1.x;
+            const t = Math.abs(dx) > 0.00001 ? (progress - p1.x) / dx : 0.5;
+            interpY = p1.y + t * (p2.y - p1.y);
+            break;
+          }
+        }
+        if (interpY === null) {
+          let closestDist = Infinity;
+          for (const p of pts) {
+            const d = Math.abs(p.x - progress);
+            if (d < closestDist) {
+              closestDist = d;
+              interpY = p.y;
+            }
+          }
+        }
+      }
+
+      if (interpY === null) continue;
+
+      const px = progress * this.width;
+      const py = interpY * this.height;
+      const color = this.getTrackColor(stroke.trackId);
+
+      const pulse = Math.sin(now * 0.007) * 0.6;
+      const radius = 4.8 + pulse;
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.fillStyle = color;
+      ctx.arc(px, py, radius, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1;
+      ctx.globalAlpha = 0.45 + pulse * 0.15;
+      ctx.arc(px, py, radius + 2.5, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.restore();
+    }
   }
 
   private drawHitEffects() {

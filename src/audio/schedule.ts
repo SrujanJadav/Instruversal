@@ -158,6 +158,22 @@ export function generateEventsFromStrokes(
   return finalEvents;
 }
 
+import { generateFlowEventsFromStrokes } from './flowScheduler';
+import { getFlowVoicePool } from './voicePool';
+
+interface FlowPartEvent {
+  type: 'attack' | 'breakpoint' | 'release' | 'loopWrap';
+  time: number;
+  strokeId: string;
+  trackId: string;
+  freq?: number;
+  midi?: number;
+  slideSeconds?: number;
+  velocity?: number;
+  normX?: number;
+  normY?: number;
+}
+
 export class LoopScheduler {
   private part: Tone.Part | null = null;
   private rebuildTimer: number | null = null;
@@ -171,9 +187,23 @@ export class LoopScheduler {
   private setupListeners() {
     this.unsubs.push(
       events.on('stroke:added', () => this.debouncedRebuild()),
-      events.on('strokes:updated', () => this.debouncedRebuild()),
-      events.on('scale:change', () => this.debouncedRebuild()),
-      events.on('bpm:change', () => this.debouncedRebuild())
+      events.on('strokes:updated', () => {
+        getFlowVoicePool().releaseAll(0.02);
+        this.debouncedRebuild();
+      }),
+      events.on('scale:change', () => {
+        getFlowVoicePool().releaseAll(0.02);
+        this.debouncedRebuild();
+      }),
+      events.on('bpm:change', () => this.debouncedRebuild()),
+      events.on('playback-mode:change', () => {
+        getFlowVoicePool().releaseAll(0.02);
+        this.debouncedRebuild();
+      }),
+      events.on('glide:change', () => this.debouncedRebuild()),
+      events.on('transport:pause', () => {
+        getFlowVoicePool().releaseAll(0.02);
+      })
     );
   }
 
@@ -193,41 +223,162 @@ export class LoopScheduler {
       this.part = null;
     }
 
-    const scaleNotes = buildScaleNotes(state.rootNote, state.scaleName, 3, 6);
-    const noteEvents = generateEventsFromStrokes(state.strokes, state.bars, scaleNotes);
-
-    if (noteEvents.length === 0) {
+    if (state.strokes.length === 0) {
+      getFlowVoicePool().releaseAll(0.02);
       return;
     }
 
+    const scaleNotes = buildScaleNotes(state.rootNote, state.scaleName, 3, 6);
     const trackManager = getTrackManager();
+    const voicePool = getFlowVoicePool();
 
-    this.part = new Tone.Part((time, note: NoteEvent) => {
-      // 1. Trigger audio note on track
-      trackManager.triggerNoteOnTrack(
-        note.trackId,
-        note.midi,
-        note.duration,
-        time,
-        note.velocity
+    if (state.playbackMode === 'flow') {
+      const flowEvents = generateFlowEventsFromStrokes(
+        state.strokes,
+        state.bars,
+        state.bpm,
+        scaleNotes,
+        state.glide
       );
 
-      // 2. Synchronize visual ripple and stroke highlight through Tone.Draw
-      Tone.getDraw().schedule(() => {
-        events.emit('note:hit', {
-          strokeId: note.strokeId,
-          trackId: note.trackId,
-          midi: note.midi,
-          x: note.normX,
-          y: note.normY,
-        });
-      }, time);
-    }, noteEvents as unknown as any[]);
+      if (flowEvents.length === 0) return;
 
-    this.part.loop = true;
-    this.part.loopStart = 0;
-    this.part.loopEnd = `${state.bars}m`;
-    this.part.start(0);
+      const loopDuration = state.bars * 4 * (60 / state.bpm);
+      const partEvents: FlowPartEvent[] = [];
+
+      for (const ev of flowEvents) {
+        // 1. Single attack at stroke start
+        partEvents.push({
+          type: 'attack',
+          time: ev.startTime,
+          strokeId: ev.strokeId,
+          trackId: ev.trackId,
+          freq: ev.initialFreq,
+          midi: ev.initialMidi,
+          velocity: ev.velocity,
+          normX: ev.startX,
+          normY: ev.startY,
+        });
+
+        // 2. Pitch changes without retriggering
+        for (const bp of ev.breakpoints) {
+          partEvents.push({
+            type: 'breakpoint',
+            time: bp.timeSeconds,
+            strokeId: ev.strokeId,
+            trackId: ev.trackId,
+            freq: bp.freq,
+            midi: bp.midi,
+            slideSeconds: bp.slideSeconds,
+            normX: bp.normX,
+            normY: bp.normY,
+          });
+        }
+
+        // 3. Single release at stroke end
+        partEvents.push({
+          type: 'release',
+          time: ev.endTime,
+          strokeId: ev.strokeId,
+          trackId: ev.trackId,
+        });
+      }
+
+      // Loop wrap safety: ensure all voices released at loop end
+      partEvents.push({
+        type: 'loopWrap',
+        time: Math.max(0, loopDuration - 0.005),
+        strokeId: '',
+        trackId: '',
+      });
+
+      this.part = new Tone.Part((time, item: FlowPartEvent) => {
+        if (item.type === 'loopWrap') {
+          voicePool.releaseAll(0.01);
+          return;
+        }
+
+        const track = trackManager.getTrack(item.trackId);
+        if (!track || !track.shouldPlay(trackManager.hasAnySolo())) {
+          if (item.type === 'release') {
+            voicePool.markStrokeEnded(item.strokeId);
+          }
+          return;
+        }
+
+        if (item.type === 'attack') {
+          const voice = voicePool.acquireVoice(
+            item.strokeId,
+            item.trackId,
+            track.instrumentId,
+            track.channel
+          );
+          voice.triggerAttack(item.freq!, time, item.velocity ?? 0.8);
+
+          // Flow mode: spawn ONE ripple at stroke start
+          Tone.getDraw().schedule(() => {
+            events.emit('note:hit', {
+              strokeId: item.strokeId,
+              trackId: item.trackId,
+              midi: item.midi!,
+              x: item.normX!,
+              y: item.normY!,
+            });
+          }, time);
+        } else if (item.type === 'breakpoint') {
+          const voice = voicePool.acquireVoice(
+            item.strokeId,
+            item.trackId,
+            track.instrumentId,
+            track.channel
+          );
+          voice.setNote(item.freq!, time, item.slideSeconds);
+        } else if (item.type === 'release') {
+          const voice = voicePool.acquireVoice(
+            item.strokeId,
+            item.trackId,
+            track.instrumentId,
+            track.channel
+          );
+          voice.triggerRelease(time);
+          voicePool.markStrokeEnded(item.strokeId);
+        }
+      }, partEvents as unknown as any[]);
+
+      this.part.loop = true;
+      this.part.loopStart = 0;
+      this.part.loopEnd = `${state.bars}m`;
+      this.part.start(0);
+    } else {
+      // Notes mode: stepped 16th-note grid
+      const noteEvents = generateEventsFromStrokes(state.strokes, state.bars, scaleNotes);
+      if (noteEvents.length === 0) return;
+
+      this.part = new Tone.Part((time, note: NoteEvent) => {
+        trackManager.triggerNoteOnTrack(
+          note.trackId,
+          note.midi,
+          note.duration,
+          time,
+          note.velocity
+        );
+
+        Tone.getDraw().schedule(() => {
+          events.emit('note:hit', {
+            strokeId: note.strokeId,
+            trackId: note.trackId,
+            midi: note.midi,
+            x: note.normX,
+            y: note.normY,
+          });
+        }, time);
+      }, noteEvents as unknown as any[]);
+
+      this.part.loop = true;
+      this.part.loopStart = 0;
+      this.part.loopEnd = `${state.bars}m`;
+      this.part.start(0);
+    }
   }
 
   public dispose() {
@@ -243,6 +394,7 @@ export class LoopScheduler {
       this.part.dispose();
       this.part = null;
     }
+    getFlowVoicePool().releaseAll(0.01);
   }
 }
 
