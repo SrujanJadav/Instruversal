@@ -274,58 +274,62 @@ export class DrumKitInstance {
     const at = time !== undefined ? time : Tone.now();
     const preset = DRUM_KITS[this.kitId];
 
-    switch (soundId) {
-      case 'kick': {
-        this.kickSynth.triggerAttackRelease(preset.kickPitch, '8n', at, velocity);
-        break;
-      }
+    try {
+      switch (soundId) {
+        case 'kick': {
+          this.kickSynth.triggerAttackRelease(preset.kickPitch, '8n', at, velocity);
+          break;
+        }
 
-      case 'tom': {
-        this.tomSynth.triggerAttackRelease(preset.tomPitch, '8n', at, velocity);
-        break;
-      }
+        case 'tom': {
+          this.tomSynth.triggerAttackRelease(preset.tomPitch, '8n', at, velocity);
+          break;
+        }
 
-      case 'snare': {
-        this.snareNoise.triggerAttackRelease('16n', at, velocity * 0.9);
-        this.snareBody.triggerAttackRelease(preset.snarePitch, '16n', at, velocity * 0.7);
-        break;
-      }
+        case 'snare': {
+          this.snareNoise.triggerAttackRelease('16n', at, velocity * 0.9);
+          this.snareBody.triggerAttackRelease(preset.snarePitch, '16n', at, velocity * 0.7);
+          break;
+        }
 
-      case 'clap': {
-        // Quick 3-pulse flammed burst
-        this.clapNoise.triggerAttackRelease('32n', at, velocity * 0.5);
-        this.clapNoise.triggerAttackRelease('32n', at + 0.012, velocity * 0.7);
-        this.clapNoise.triggerAttackRelease('16n', at + 0.024, velocity);
-        break;
-      }
+        case 'clap': {
+          // Quick 3-pulse flammed burst
+          this.clapNoise.triggerAttackRelease('32n', at, velocity * 0.5);
+          this.clapNoise.triggerAttackRelease('32n', at + 0.012, velocity * 0.7);
+          this.clapNoise.triggerAttackRelease('16n', at + 0.024, velocity);
+          break;
+        }
 
-      case 'closed-hat': {
-        // Choke open hat if ringing
-        this.openHatGain.gain.cancelScheduledValues(at);
-        this.openHatGain.gain.setValueAtTime(0, at);
-        this.openHatGain.gain.setValueAtTime(1.0, at + 0.05);
+        case 'closed-hat': {
+          // Choke open hat if ringing
+          this.openHatGain.gain.cancelScheduledValues(at);
+          this.openHatGain.gain.setValueAtTime(0, at);
+          this.openHatGain.gain.setValueAtTime(1.0, at + 0.05);
 
-        this.closedHat.triggerAttackRelease(200, '32n', at, velocity * 0.75);
-        break;
-      }
+          this.closedHat.triggerAttackRelease(200, '32n', at, velocity * 0.75);
+          break;
+        }
 
-      case 'open-hat': {
-        this.openHatGain.gain.setValueAtTime(1.0, at);
-        this.openHat.triggerAttackRelease(200, '8n', at, velocity * 0.75);
-        break;
-      }
+        case 'open-hat': {
+          this.openHatGain.gain.setValueAtTime(1.0, at);
+          this.openHat.triggerAttackRelease(200, '8n', at, velocity * 0.75);
+          break;
+        }
 
-      case 'shaker': {
-        this.shakerNoise.triggerAttackRelease('16n', at, velocity * 0.7);
-        break;
-      }
+        case 'shaker': {
+          this.shakerNoise.triggerAttackRelease('16n', at, velocity * 0.7);
+          break;
+        }
 
-      case 'cowbell': {
-        this.cowbellGain.gain.cancelScheduledValues(at);
-        this.cowbellGain.gain.setValueAtTime(velocity * 0.45, at);
-        this.cowbellGain.gain.linearRampToValueAtTime(0, at + 0.25);
-        break;
+        case 'cowbell': {
+          this.cowbellGain.gain.cancelScheduledValues(at);
+          this.cowbellGain.gain.setValueAtTime(velocity * 0.45, at);
+          this.cowbellGain.gain.linearRampToValueAtTime(0, at + 0.25);
+          break;
+        }
       }
+    } catch {
+      // Tone.js requires monotonically strictly increasing start times; catch rapid duplicate hits
     }
   }
 
