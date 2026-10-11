@@ -150,30 +150,35 @@
   min-height: 0;
 }
 
-/* Toolbar: Scrollable dock on mobile & desktop */
+/* Toolbar: Full access dock on desktop & swipe on mobile */
 .instruversal-toolbar {
   flex-shrink: 0;
   display: flex;
   justify-content: center;
   padding-bottom: max(var(--space-2), env(safe-area-inset-bottom, 8px));
   padding-top: var(--space-1);
+  padding-left: var(--space-2);
+  padding-right: var(--space-2);
   width: 100%;
-  max-width: 960px;
+  max-width: 100%;
   margin: 0 auto;
   position: relative;
 }
 
 .dock-wrapper {
   position: relative;
-  width: 100%;
+  width: max-content;
+  max-width: 100%;
   display: flex;
   align-items: center;
-  max-width: 100%;
+  margin: 0 auto;
 }
 
 .dock-scroll-container {
   overflow-x: auto;
   overflow-y: hidden;
+  scrollbar-width: none; /* Firefox: hide scrollbar */
+  -ms-overflow-style: none; /* IE/Edge: hide scrollbar */
   scroll-snap-type: x proximity;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-x: contain;
@@ -182,25 +187,16 @@
   background-color: var(--paper-deep);
   border: 1px solid var(--line);
   box-shadow: 0 1px 3px rgba(28, 26, 22, 0.05);
-  scrollbar-width: thin;
-  scrollbar-color: var(--ink-soft) var(--line);
   user-select: none;
-  width: 100%;
+  width: max-content;
+  max-width: 100%;
 }
 
-/* Custom 3px scrollbar matching Instruversal design */
+/* Hide scrollbar on Chrome, Safari, Edge */
 .dock-scroll-container::-webkit-scrollbar {
-  height: 3px;
-}
-
-.dock-scroll-container::-webkit-scrollbar-track {
-  background: var(--line);
-  border-radius: 2px;
-}
-
-.dock-scroll-container::-webkit-scrollbar-thumb {
-  background: var(--ink-soft);
-  border-radius: 2px;
+  display: none;
+  height: 0;
+  width: 0;
 }
 
 /* Edge fade masks */
@@ -466,9 +462,9 @@
   appearance: none;
   border: none;
   background: transparent;
-  width: 36px;
-  height: 40px;
-  min-width: 36px;
+  width: 30px;
+  height: 38px;
+  min-width: 30px;
   display: flex;
   align-items: center;
   justify-content: center;
