@@ -34,12 +34,16 @@ import { handleAuthRedirect, onAuthStateChange, getCurrentUser } from './auth/au
 import { getAccountSheet } from './ui/AccountSheet';
 import { getMigrationSheet } from './ui/MigrationSheet';
 import { generateUuid } from './library/manager';
+import { registerServiceWorker } from './pwa/registerSw';
 
 // Initialize color theme system
 initTheme();
 
 // Handle incoming PKCE auth redirects (?code=...)
 handleAuthRedirect();
+
+// Register PWA offline service worker
+registerServiceWorker();
 
 // Check if visiting via a share link
 const hasShareLink = typeof window !== 'undefined' && window.location.hash.startsWith('#project=');

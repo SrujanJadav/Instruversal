@@ -2569,6 +2569,103 @@ canvas.instruversal-canvas {
   }
 }
 
+/* PWA Service Worker Update Toast */
+.sw-update-toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 8px 14px 8px 16px;
+  background-color: var(--paper-deep);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 4px 16px rgba(28, 26, 22, 0.12);
+  font-family: var(--font-ui);
+  font-size: 0.88rem;
+  opacity: 0;
+  transform: translateY(12px);
+  transition: opacity 200ms ease-out, transform 200ms ease-out;
+  pointer-events: none;
+}
+
+.sw-update-toast.visible {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.sw-update-text {
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.sw-update-reload-btn {
+  appearance: none;
+  background-color: var(--ink);
+  color: var(--paper);
+  border: 1px solid var(--ink);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-ui);
+  font-size: 0.82rem;
+  font-weight: 500;
+  padding: 6px 14px;
+  min-height: 36px;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: opacity var(--transition-fast);
+}
+
+.sw-update-reload-btn:hover {
+  opacity: 0.88;
+}
+
+.sw-update-reload-btn:active {
+  opacity: 0.75;
+}
+
+.sw-update-reload-btn:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.sw-update-dismiss-btn {
+  appearance: none;
+  background: transparent;
+  border: none;
+  color: var(--ink-soft);
+  font-size: 1rem;
+  padding: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  min-width: 28px;
+  min-height: 28px;
+}
+
+.sw-update-dismiss-btn:hover {
+  color: var(--ink);
+}
+
+.sw-update-dismiss-btn:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+@media (max-width: 600px) {
+  .sw-update-toast {
+    left: 16px;
+    right: 16px;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 72px);
+    justify-content: space-between;
+  }
+}
+
 
 
 
