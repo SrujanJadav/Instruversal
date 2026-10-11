@@ -1,10 +1,25 @@
 import { CONFIG } from './config';
 
+export type Pt = {
+  x: number; // Normalized 0..1
+  y: number; // Normalized 0..1
+  t: number; // ms since stroke start
+};
+
+export type Stroke = {
+  id: string;
+  trackId: string;
+  points: Pt[];
+  width: number;
+};
+
 export type EventMap = {
   'audio:started': void;
   'transport:play': void;
   'transport:pause': void;
   'bpm:change': number;
+  'stroke:added': Stroke;
+  'strokes:updated': Stroke[];
 };
 
 type EventKey = keyof EventMap;
@@ -33,7 +48,7 @@ class TinyEmitter {
   emit<K extends EventKey>(event: K, data: EventMap[K]): void {
     const set = this.listeners.get(event);
     if (set) {
-      set.forEach((fn) => fn(data));
+      set.forEach((fn: AnyHandler) => fn(data));
     }
   }
 }
@@ -43,6 +58,8 @@ export interface AppState {
   isPlaying: boolean;
   bpm: number;
   bars: number;
+  selectedTrackId: string;
+  strokes: Stroke[];
 }
 
 export const state: AppState = {
@@ -50,6 +67,8 @@ export const state: AppState = {
   isPlaying: false,
   bpm: CONFIG.defaultBpm,
   bars: CONFIG.defaultBars,
+  selectedTrackId: 'track-1',
+  strokes: [],
 };
 
 export const events = new TinyEmitter();

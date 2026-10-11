@@ -33,6 +33,10 @@ const gateScreen = document.querySelector<HTMLElement>('#gate-screen')!;
 const mainView = document.querySelector<HTMLElement>('#main-view')!;
 const headerStatus = document.querySelector<HTMLElement>('#header-status')!;
 
+import { DrawingCanvas } from './canvas/DrawingCanvas';
+
+let drawingCanvas: DrawingCanvas | null = null;
+
 async function handleStart() {
   startBtn.disabled = true;
   startBtn.textContent = 'Starting…';
@@ -57,14 +61,23 @@ async function handleStart() {
       testSynth.dispose();
     }, 1500);
 
-    // Smoothly transition from gate to main placeholder view
+    // Smoothly transition from gate to main view
     gateScreen.classList.add('hidden');
     window.setTimeout(() => {
       gateScreen.style.display = 'none';
       mainView.style.display = 'flex';
       mainView.removeAttribute('aria-hidden');
+
       if (headerStatus) {
-        headerStatus.textContent = `AUDIO RUNNING (${Tone.context.state.toUpperCase()})`;
+        headerStatus.textContent = `READY TO DRAW (${Tone.context.state.toUpperCase()})`;
+      }
+
+      // Initialize drawing engine
+      const canvasContainer = document.querySelector<HTMLElement>('#canvas-container');
+      if (canvasContainer && !drawingCanvas) {
+        canvasContainer.innerHTML = '';
+        canvasContainer.className = 'canvas-container';
+        drawingCanvas = new DrawingCanvas(canvasContainer);
       }
     }, 220);
   } catch (err) {

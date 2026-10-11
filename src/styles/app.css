@@ -104,16 +104,17 @@
   letter-spacing: 0.02em;
 }
 
-.canvas-placeholder-container {
+.canvas-placeholder-container,
+.canvas-container {
   flex: 1;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  background-color: var(--paper-deep);
+  position: relative;
+  background-color: var(--paper);
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
-  position: relative;
   overflow: hidden;
+  touch-action: none;
+  -webkit-touch-callout: none;
 }
 
 .placeholder-note {
