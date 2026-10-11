@@ -321,6 +321,29 @@ export class BeatFlowVoicePool {
     }
   }
 
+  public releaseStrokeVoice(strokeId: string, fadeSec: number = 0.03) {
+    const voice = this.activeVoices.get(strokeId);
+    if (voice) {
+      voice.fadeAndRelease(fadeSec);
+      window.setTimeout(() => {
+        voice.dispose();
+        this.activeVoices.delete(strokeId);
+      }, Math.round(fadeSec * 1000) + 15);
+    }
+  }
+
+  public releaseStrokesNotIn(activeStrokeIds: Set<string>, fadeSec: number = 0.03) {
+    for (const [strokeId, voice] of this.activeVoices.entries()) {
+      if (!activeStrokeIds.has(strokeId)) {
+        voice.fadeAndRelease(fadeSec);
+        window.setTimeout(() => {
+          voice.dispose();
+          this.activeVoices.delete(strokeId);
+        }, Math.round(fadeSec * 1000) + 15);
+      }
+    }
+  }
+
   public releaseAll(fadeSec: number = 0.02) {
     for (const voice of this.activeVoices.values()) {
       voice.fadeAndRelease(fadeSec);

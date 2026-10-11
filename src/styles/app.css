@@ -1448,6 +1448,76 @@
   min-width: 32px;
 }
 
+/* Eraser Options Group */
+.toolbar-eraser-options {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  animation: fadeIn 150ms ease-out;
+}
+
+.toolbar-eraser-options.hidden {
+  display: none !important;
+}
+
+.eraser-size-slider .mini-slider-input {
+  width: 58px;
+}
+
+.eraser-mode-chips {
+  margin: 0 2px;
+}
+
+.eraser-track-only-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  user-select: none;
+  padding: 0 4px;
+}
+
+.eraser-track-checkbox {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--ink-soft);
+  border-radius: 3px;
+  background-color: var(--paper);
+  display: grid;
+  place-content: center;
+  cursor: pointer;
+  margin: 0;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.eraser-track-checkbox:checked {
+  background-color: var(--ink);
+  border-color: var(--ink);
+}
+
+.eraser-track-checkbox:checked::before {
+  content: "";
+  width: 6px;
+  height: 3.5px;
+  border-left: 1.5px solid var(--paper);
+  border-bottom: 1.5px solid var(--paper);
+  transform: rotate(-45deg) translate(0.5px, -0.5px);
+}
+
+.eraser-track-only-text {
+  font-family: var(--font-ui);
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+
+.eraser-track-only-label:hover .eraser-track-only-text {
+  color: var(--ink);
+}
+
 /* ==========================================================================
    Effects Rack (FxPanel)
    ========================================================================== */

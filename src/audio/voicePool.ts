@@ -111,6 +111,32 @@ export class FlowVoicePool {
   }
 
   /**
+   * Release voice belonging to a specific stroke that was cut or removed with a smooth 30ms fade.
+   */
+  public releaseStrokeVoice(strokeId: string, fadeSeconds: number = 0.03) {
+    for (const item of this.pool) {
+      if (item.strokeId === strokeId && item.inUse) {
+        item.voice.fadeAndRelease(fadeSeconds);
+        item.inUse = false;
+        item.strokeId = null;
+      }
+    }
+  }
+
+  /**
+   * Release any currently sounding voices belonging to strokes that no longer exist.
+   */
+  public releaseStrokesNotIn(activeStrokeIds: Set<string>, fadeSeconds: number = 0.03) {
+    for (const item of this.pool) {
+      if (item.strokeId && !activeStrokeIds.has(item.strokeId) && item.inUse) {
+        item.voice.fadeAndRelease(fadeSeconds);
+        item.inUse = false;
+        item.strokeId = null;
+      }
+    }
+  }
+
+  /**
    * Release all currently sounding voices with a short fade to prevent any clicks or hanging notes.
    */
   public releaseAll(fadeSeconds: number = 0.03) {

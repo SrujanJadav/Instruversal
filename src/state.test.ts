@@ -1,5 +1,15 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { state, pushHistorySnapshot, undo, redo, clearStrokes, canUndo, canRedo, Stroke } from './state';
+import {
+  state,
+  pushHistorySnapshot,
+  recordDeltaHistory,
+  undo,
+  redo,
+  clearStrokes,
+  canUndo,
+  canRedo,
+  Stroke,
+} from './state';
 
 describe('State & History stack', () => {
   beforeEach(() => {
@@ -52,4 +62,45 @@ describe('State & History stack', () => {
     expect(state.strokes[0].id).toBe('a');
     expect(state.strokes[1].id).toBe('b');
   });
+
+  it('supports recordDeltaHistory restoring original stroke IDs and order on undo and redo', () => {
+    const s1: Stroke = { id: 's1', trackId: 'track-1', points: [{ x: 0.1, y: 0.1, t: 0 }], width: 3 };
+    const s2: Stroke = { id: 's2', trackId: 'track-1', points: [{ x: 0.3, y: 0.3, t: 0 }], width: 3 };
+    const s3: Stroke = { id: 's3', trackId: 'track-2', points: [{ x: 0.5, y: 0.5, t: 0 }], width: 3 };
+
+    state.strokes = [s1, s2, s3];
+
+    // Simulate s2 cut into frag2A and frag2B
+    const frag2A: Stroke = { id: 'f2a', trackId: 'track-1', points: [{ x: 0.25, y: 0.3, t: 0 }], width: 3 };
+    const frag2B: Stroke = { id: 'f2b', trackId: 'track-1', points: [{ x: 0.35, y: 0.3, t: 0 }], width: 3 };
+
+    // Replaced s2 at index 1 with frag2A and frag2B
+    state.strokes = [s1, frag2A, frag2B, s3];
+    recordDeltaHistory(
+      [{ index: 1, stroke: s2 }],
+      [
+        { index: 1, stroke: frag2A },
+        { index: 2, stroke: frag2B },
+      ]
+    );
+
+    expect(state.strokes.length).toBe(4);
+    expect(canUndo()).toBe(true);
+
+    // Undo: restores original s2 at index 1 with exact id 's2'
+    undo();
+    expect(state.strokes.length).toBe(3);
+    expect(state.strokes[0].id).toBe('s1');
+    expect(state.strokes[1].id).toBe('s2');
+    expect(state.strokes[2].id).toBe('s3');
+
+    // Redo: replaces s2 with frag2A and frag2B
+    redo();
+    expect(state.strokes.length).toBe(4);
+    expect(state.strokes[0].id).toBe('s1');
+    expect(state.strokes[1].id).toBe('f2a');
+    expect(state.strokes[2].id).toBe('f2b');
+    expect(state.strokes[3].id).toBe('s3');
+  });
 });
+

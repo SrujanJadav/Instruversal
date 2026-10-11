@@ -206,8 +206,9 @@ export class LoopScheduler {
     this.unsubs.push(
       events.on('stroke:added', () => this.debouncedRebuild()),
       events.on('strokes:updated', () => {
-        getFlowVoicePool().releaseAll(0.02);
-        getBeatFlowVoicePool().releaseAll(0.02);
+        const activeIds = new Set(state.strokes.map((s) => s.id));
+        getFlowVoicePool().releaseStrokesNotIn(activeIds, 0.03);
+        getBeatFlowVoicePool().releaseStrokesNotIn(activeIds, 0.03);
         this.debouncedRebuild();
       }),
       events.on('scale:change', () => {

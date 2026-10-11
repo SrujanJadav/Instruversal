@@ -7,6 +7,9 @@ import {
   canRedo,
   clearStrokes,
   ToolMode,
+  saveEraserSize,
+  saveEraserMode,
+  saveEraserTrackOnly,
   BeatFlowStyle,
   BeatRollVoice,
   BeatSweepCharacter,
@@ -107,6 +110,25 @@ export class Toolbar {
               <button type="button" class="tool-seg-btn ${state.activeTool === 'eraser' ? 'active' : ''}" id="tb-tool-eraser" aria-label="Eraser tool" tabindex="0">
                 ${ICONS.eraser}
               </button>
+            </div>
+
+            <!-- Eraser Options: appears only when eraser is active -->
+            <div class="toolbar-eraser-options ${state.activeTool === 'eraser' ? '' : 'hidden'}" id="tb-eraser-options" role="group" aria-label="Eraser options">
+              <div class="toolbar-mini-slider eraser-size-slider" title="Eraser radius (${state.eraserRadius}px)">
+                <span class="mini-slider-lbl">Size</span>
+                <input type="range" class="mini-slider-input" id="tb-eraser-size" min="6" max="40" step="1" value="${state.eraserRadius}" aria-label="Eraser radius" tabindex="0" />
+                <span class="mini-slider-val" id="tb-eraser-size-val">${state.eraserRadius}px</span>
+              </div>
+
+              <div class="segmented-chips eraser-mode-chips" role="group" aria-label="Eraser mode">
+                <button type="button" class="chip-btn ${state.eraserMode === 'part' ? 'active' : ''}" id="tb-eraser-mode-part" data-mode="part" title="Partial erase (split strokes)" tabindex="0">Part</button>
+                <button type="button" class="chip-btn ${state.eraserMode === 'stroke' ? 'active' : ''}" id="tb-eraser-mode-stroke" data-mode="stroke" title="Whole stroke delete" tabindex="0">Stroke</button>
+              </div>
+
+              <label class="eraser-track-only-label" title="Only erase strokes of selected track">
+                <input type="checkbox" id="tb-eraser-track-only" class="eraser-track-checkbox" ${state.eraserSelectedTrackOnly ? 'checked' : ''} tabindex="0" />
+                <span class="eraser-track-only-text">This colour only</span>
+              </label>
             </div>
 
             <div class="toolbar-divider" aria-hidden="true"></div>
@@ -326,6 +348,48 @@ export class Toolbar {
       this.setTool('eraser');
     });
 
+    // Eraser options controls
+    const eraserSizeInput = this.element.querySelector<HTMLInputElement>('#tb-eraser-size');
+    const eraserSizeVal = this.element.querySelector<HTMLElement>('#tb-eraser-size-val');
+    const eraserModePart = this.element.querySelector<HTMLButtonElement>('#tb-eraser-mode-part');
+    const eraserModeStroke = this.element.querySelector<HTMLButtonElement>('#tb-eraser-mode-stroke');
+    const eraserTrackOnly = this.element.querySelector<HTMLInputElement>('#tb-eraser-track-only');
+
+    eraserSizeInput?.addEventListener('input', () => {
+      const val = parseInt(eraserSizeInput.value, 10);
+      state.eraserRadius = val;
+      saveEraserSize(val);
+      if (eraserSizeVal) eraserSizeVal.textContent = `${val}px`;
+      events.emit('eraser:radius-change', val);
+    });
+
+    eraserModePart?.addEventListener('click', () => {
+      if (this.hasDragged) return;
+      triggerHaptic(6);
+      state.eraserMode = 'part';
+      saveEraserMode('part');
+      eraserModePart.classList.add('active');
+      eraserModeStroke?.classList.remove('active');
+      events.emit('eraser:mode-change', 'part');
+    });
+
+    eraserModeStroke?.addEventListener('click', () => {
+      if (this.hasDragged) return;
+      triggerHaptic(6);
+      state.eraserMode = 'stroke';
+      saveEraserMode('stroke');
+      eraserModeStroke.classList.add('active');
+      eraserModePart?.classList.remove('active');
+      events.emit('eraser:mode-change', 'stroke');
+    });
+
+    eraserTrackOnly?.addEventListener('change', () => {
+      const checked = eraserTrackOnly.checked;
+      state.eraserSelectedTrackOnly = checked;
+      saveEraserTrackOnly(checked);
+      events.emit('eraser:track-only-change', checked);
+    });
+
     // Track Palette dots
     const dotBtns = this.element.querySelectorAll<HTMLButtonElement>('.palette-dot-btn');
     dotBtns.forEach((btn) => {
@@ -405,11 +469,14 @@ export class Toolbar {
     state.activeTool = tool;
     const drawBtn = this.element.querySelector('#tb-tool-draw');
     const eraserBtn = this.element.querySelector('#tb-tool-eraser');
+    const eraserOpts = this.element.querySelector('#tb-eraser-options');
 
     drawBtn?.classList.toggle('active', tool === 'draw');
     eraserBtn?.classList.toggle('active', tool === 'eraser');
+    eraserOpts?.classList.toggle('hidden', tool !== 'eraser');
 
     events.emit('tool:change', tool);
+    this.updateFadeIndicators();
   }
 
   private showClearConfirmation(wrapper: HTMLElement) {
@@ -773,6 +840,31 @@ export class Toolbar {
         if (tr?.trackType !== 'beat') {
           this.renderContextControls();
         }
+      }),
+      events.on('tool:change', (tool) => {
+        const drawBtn = this.element.querySelector('#tb-tool-draw');
+        const eraserBtn = this.element.querySelector('#tb-tool-eraser');
+        const eraserOpts = this.element.querySelector('#tb-eraser-options');
+        drawBtn?.classList.toggle('active', tool === 'draw');
+        eraserBtn?.classList.toggle('active', tool === 'eraser');
+        eraserOpts?.classList.toggle('hidden', tool !== 'eraser');
+        this.updateFadeIndicators();
+      }),
+      events.on('eraser:radius-change', (val) => {
+        const input = this.element.querySelector<HTMLInputElement>('#tb-eraser-size');
+        const display = this.element.querySelector<HTMLElement>('#tb-eraser-size-val');
+        if (input && parseInt(input.value, 10) !== val) input.value = String(val);
+        if (display) display.textContent = `${val}px`;
+      }),
+      events.on('eraser:mode-change', (mode) => {
+        const partBtn = this.element.querySelector('#tb-eraser-mode-part');
+        const strokeBtn = this.element.querySelector('#tb-eraser-mode-stroke');
+        partBtn?.classList.toggle('active', mode === 'part');
+        strokeBtn?.classList.toggle('active', mode === 'stroke');
+      }),
+      events.on('eraser:track-only-change', (trackOnly) => {
+        const check = this.element.querySelector<HTMLInputElement>('#tb-eraser-track-only');
+        if (check) check.checked = trackOnly;
       })
     );
   }
@@ -821,9 +913,9 @@ export class Toolbar {
       return;
     }
 
-    // E: Eraser tool
+    // E: Eraser tool toggle
     if (e.key.toLowerCase() === 'e' && !e.ctrlKey && !e.metaKey) {
-      this.setTool('eraser');
+      this.setTool(state.activeTool === 'eraser' ? 'draw' : 'eraser');
       return;
     }
 

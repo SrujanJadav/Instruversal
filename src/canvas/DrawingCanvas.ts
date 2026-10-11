@@ -1,4 +1,11 @@
-import { Stroke, state, events, pushHistorySnapshot } from '../state';
+import {
+  Stroke,
+  state,
+  events,
+  pushHistorySnapshot,
+  recordDeltaHistory,
+  HistoryDeltaItem,
+} from '../state';
 import {
   buildScaleNotes,
   yToMidi,
@@ -9,6 +16,9 @@ import { getTrackManager } from '../audio/tracks';
 import { getTransport } from '../audio/transport';
 import { DRUM_LANES } from '../audio/drums';
 import { getThemeTokens, getTrackThemeColor, getTheme } from '../ui/theme';
+import { eraseStrokes, Capsule, Point2D } from './eraser';
+import { getFlowVoicePool } from '../audio/voicePool';
+import { getBeatFlowVoicePool } from '../audio/beatFlowVoices';
 
 interface HitEffect {
   x: number;
@@ -18,51 +28,6 @@ interface HitEffect {
   startTime: number;
   duration: number;
   isBeat?: boolean;
-}
-
-function distToSegmentSquared(
-  px: number,
-  py: number,
-  x1: number,
-  y1: number,
-  x2: number,
-  y2: number
-): number {
-  const l2 = (x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1);
-  if (l2 === 0) return (px - x1) * (px - x1) + (py - y1) * (py - y1);
-  let t = ((px - x1) * (x2 - x1) + (py - y1) * (y2 - y1)) / l2;
-  t = Math.max(0, Math.min(1, t));
-  const projX = x1 + t * (x2 - x1);
-  const projY = y1 + t * (y2 - y1);
-  return (px - projX) * (px - projX) + (py - projY) * (py - projY);
-}
-
-function strokeHitTest(
-  stroke: Stroke,
-  px: number,
-  py: number,
-  tolerancePx: number,
-  width: number,
-  height: number
-): boolean {
-  const tolSq = tolerancePx * tolerancePx;
-  const pts = stroke.points;
-  if (pts.length === 0) return false;
-  if (pts.length === 1) {
-    const sx = pts[0].x * width;
-    const sy = pts[0].y * height;
-    return (px - sx) * (px - sx) + (py - sy) * (py - sy) <= tolSq;
-  }
-  for (let i = 0; i < pts.length - 1; i++) {
-    const x1 = pts[i].x * width;
-    const y1 = pts[i].y * height;
-    const x2 = pts[i + 1].x * width;
-    const y2 = pts[i + 1].y * height;
-    if (distToSegmentSquared(px, py, x1, y1, x2, y2) <= tolSq) {
-      return true;
-    }
-  }
-  return false;
 }
 
 export class DrawingCanvas {
@@ -87,9 +52,15 @@ export class DrawingCanvas {
   private lastPointTime: number = 0;
   private lastPointPos: { x: number; y: number } | null = null;
 
-  // Eraser state
-  private eraserDidRemove: boolean = false;
-  private eraserPos: { x: number; y: number } | null = null;
+  // Partial eraser state
+  private isAltHeld: boolean = false;
+  private eraserDragActive: boolean = false;
+  private lastEraserPos: Point2D | null = null;
+  private eraserPos: Point2D | null = null;
+  private affectedOriginalsInDrag: Map<string, HistoryDeltaItem> = new Map();
+  private createdFragmentIdsInDrag: Set<string> = new Set();
+  private audioRebuildThrottleTimer: number | null = null;
+  private lastAudioRebuildTime: number = 0;
 
   // Live pitch preview & readout
   private lastPreviewMidi: number | null = null;
@@ -172,6 +143,8 @@ export class DrawingCanvas {
       events.on('track:beat-param-change', () => this.markStaticDirty()),
       events.on('scale:change', () => this.markStaticDirty()),
       events.on('tool:change', () => this.updateCursor()),
+      events.on('eraser:radius-change', () => this.redraw()),
+      events.on('eraser:mode-change', () => this.redraw()),
       events.on('strokes:updated', () => this.markStaticDirty()),
       events.on('stroke:added', () => this.markStaticDirty()),
       events.on('transport:play', () => this.startAnimation()),
@@ -198,13 +171,17 @@ export class DrawingCanvas {
     );
   }
 
+  private get isEraserActive(): boolean {
+    return state.activeTool === 'eraser' || this.isAltHeld;
+  }
+
   private markStaticDirty() {
     this.staticLayerDirty = true;
     this.redraw();
   }
 
   private updateCursor() {
-    this.canvas.style.cursor = state.activeTool === 'eraser' ? 'crosshair' : 'default';
+    this.canvas.style.cursor = this.isEraserActive ? 'none' : 'default';
     this.redraw();
   }
 
@@ -264,8 +241,45 @@ export class DrawingCanvas {
     this.canvas.addEventListener('pointermove', this.onPointerMove);
     this.canvas.addEventListener('pointerup', this.onPointerUp);
     this.canvas.addEventListener('pointercancel', this.onPointerCancel);
+    this.canvas.addEventListener('pointerleave', this.onPointerLeave);
     this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+    window.addEventListener('keydown', this.onKeyDown);
+    window.addEventListener('keyup', this.onKeyUp);
+    window.addEventListener('blur', this.onWindowBlur);
   }
+
+  private onKeyDown = (e: KeyboardEvent) => {
+    if (e.key === 'Alt') {
+      if (!this.isAltHeld) {
+        this.isAltHeld = true;
+        this.updateCursor();
+      }
+    }
+  };
+
+  private onKeyUp = (e: KeyboardEvent) => {
+    if (e.key === 'Alt') {
+      if (this.isAltHeld) {
+        this.isAltHeld = false;
+        this.updateCursor();
+      }
+    }
+  };
+
+  private onWindowBlur = () => {
+    if (this.isAltHeld) {
+      this.isAltHeld = false;
+      this.updateCursor();
+    }
+  };
+
+  private onPointerLeave = () => {
+    if (this.activePointerId === null) {
+      this.eraserPos = null;
+      this.redraw();
+    }
+  };
 
   private getTrackColor(trackId: string): string {
     return getTrackThemeColor(trackId);
@@ -319,21 +333,63 @@ export class DrawingCanvas {
     }
   }
 
-  private eraseAt(rawX: number, rawY: number) {
-    const tolerance = 14;
-    const initialCount = state.strokes.length;
-    const remaining = state.strokes.filter(
-      (s) => !strokeHitTest(s, rawX, rawY, tolerance, this.width, this.height)
+  private performCapsuleErase(capsule: Capsule) {
+    const res = eraseStrokes(
+      state.strokes,
+      capsule,
+      this.width,
+      this.height,
+      {
+        mode: state.eraserMode,
+        filterTrack: state.eraserSelectedTrackOnly,
+        selectedTrackId: state.selectedTrackId,
+      }
     );
 
-    if (remaining.length !== initialCount) {
-      if (!this.eraserDidRemove) {
-        pushHistorySnapshot();
-        this.eraserDidRemove = true;
+    if (res.modified) {
+      // Record affected originals before any cuts in this drag
+      for (const orig of res.affectedOriginals) {
+        if (
+          !this.affectedOriginalsInDrag.has(orig.stroke.id) &&
+          !this.createdFragmentIdsInDrag.has(orig.stroke.id)
+        ) {
+          this.affectedOriginalsInDrag.set(orig.stroke.id, orig);
+        }
       }
-      state.strokes = remaining;
-      events.emit('strokes:updated', state.strokes);
+
+      // Add resulting fragments to our tracker
+      for (const frag of res.resultingFragments) {
+        this.createdFragmentIdsInDrag.add(frag.id);
+      }
+
+      // Release flow voices belonging to removed/cut strokes with 30ms fade
+      for (const removedId of res.removedStrokeIds) {
+        getFlowVoicePool().releaseStrokeVoice(removedId, 0.03);
+        getBeatFlowVoicePool().releaseStrokeVoice(removedId, 0.03);
+      }
+
+      state.strokes = res.newStrokes;
       this.markStaticDirty();
+      this.scheduleThrottledAudioRebuild();
+    }
+  }
+
+  private scheduleThrottledAudioRebuild() {
+    const now = performance.now();
+    if (now - this.lastAudioRebuildTime >= 150) {
+      this.lastAudioRebuildTime = now;
+      if (this.audioRebuildThrottleTimer !== null) {
+        window.clearTimeout(this.audioRebuildThrottleTimer);
+        this.audioRebuildThrottleTimer = null;
+      }
+      events.emit('strokes:updated', state.strokes);
+    } else if (this.audioRebuildThrottleTimer === null) {
+      const delay = Math.max(15, 150 - (now - this.lastAudioRebuildTime));
+      this.audioRebuildThrottleTimer = window.setTimeout(() => {
+        this.audioRebuildThrottleTimer = null;
+        this.lastAudioRebuildTime = performance.now();
+        events.emit('strokes:updated', state.strokes);
+      }, delay);
     }
   }
 
@@ -348,10 +404,21 @@ export class DrawingCanvas {
     const rawX = e.clientX - rect.left;
     const rawY = e.clientY - rect.top;
 
-    if (state.activeTool === 'eraser') {
-      this.eraserDidRemove = false;
+    const isErasing = this.isEraserActive || e.altKey;
+
+    if (isErasing) {
+      this.eraserDragActive = true;
+      this.lastEraserPos = { x: rawX, y: rawY };
       this.eraserPos = { x: rawX, y: rawY };
-      this.eraseAt(rawX, rawY);
+      this.affectedOriginalsInDrag.clear();
+      this.createdFragmentIdsInDrag.clear();
+
+      const capsule: Capsule = {
+        p0: { x: rawX, y: rawY },
+        p1: { x: rawX, y: rawY },
+        radius: state.eraserRadius,
+      };
+      this.performCapsuleErase(capsule);
       this.startAnimation();
       return;
     }
@@ -379,15 +446,31 @@ export class DrawingCanvas {
   };
 
   private onPointerMove = (e: PointerEvent) => {
-    if (e.pointerId !== this.activePointerId) return;
-
     const rect = this.canvas.getBoundingClientRect();
     const rawX = e.clientX - rect.left;
     const rawY = e.clientY - rect.top;
 
-    if (state.activeTool === 'eraser') {
+    // Passive hover tracking for desktop eraser ring cursor when not actively dragging
+    if (this.isEraserActive && !this.eraserDragActive && this.activePointerId === null && e.pointerType !== 'touch') {
       this.eraserPos = { x: rawX, y: rawY };
-      this.eraseAt(rawX, rawY);
+      this.redraw();
+      return;
+    }
+
+    if (e.pointerId !== this.activePointerId) return;
+
+    if (this.eraserDragActive) {
+      const curPos: Point2D = { x: rawX, y: rawY };
+      this.eraserPos = curPos;
+
+      const prevPos = this.lastEraserPos || curPos;
+      const capsule: Capsule = {
+        p0: prevPos,
+        p1: curPos,
+        radius: state.eraserRadius,
+      };
+      this.lastEraserPos = curPos;
+      this.performCapsuleErase(capsule);
       this.startAnimation();
       return;
     }
@@ -441,6 +524,40 @@ export class DrawingCanvas {
     this.activePointerId = null;
     this.activeNoteDisplay = null;
     this.lastPreviewMidi = null;
+
+    if (this.eraserDragActive) {
+      this.eraserDragActive = false;
+      this.lastEraserPos = null;
+      if (e.pointerType === 'touch') {
+        this.eraserPos = null;
+      }
+
+      // Final audio schedule rebuild once on pointerup
+      if (this.audioRebuildThrottleTimer !== null) {
+        window.clearTimeout(this.audioRebuildThrottleTimer);
+        this.audioRebuildThrottleTimer = null;
+      }
+      this.lastAudioRebuildTime = performance.now();
+      events.emit('strokes:updated', state.strokes);
+
+      // Record single undo step for the entire eraser drag
+      if (this.affectedOriginalsInDrag.size > 0) {
+        const before = Array.from(this.affectedOriginalsInDrag.values());
+        const after: HistoryDeltaItem[] = [];
+        for (let i = 0; i < state.strokes.length; i++) {
+          const s = state.strokes[i];
+          if (this.createdFragmentIdsInDrag.has(s.id)) {
+            after.push({ index: i, stroke: s });
+          }
+        }
+        recordDeltaHistory(before, after);
+      }
+      this.affectedOriginalsInDrag.clear();
+      this.createdFragmentIdsInDrag.clear();
+      this.markStaticDirty();
+      return;
+    }
+
     this.eraserPos = null;
 
     if (this.currentStroke && this.currentStroke.points.length > 0) {
@@ -463,6 +580,36 @@ export class DrawingCanvas {
       this.activePointerId = null;
       this.activeNoteDisplay = null;
       this.lastPreviewMidi = null;
+
+      if (this.eraserDragActive) {
+        this.eraserDragActive = false;
+        this.lastEraserPos = null;
+        this.eraserPos = null;
+
+        if (this.audioRebuildThrottleTimer !== null) {
+          window.clearTimeout(this.audioRebuildThrottleTimer);
+          this.audioRebuildThrottleTimer = null;
+        }
+        this.lastAudioRebuildTime = performance.now();
+        events.emit('strokes:updated', state.strokes);
+
+        if (this.affectedOriginalsInDrag.size > 0) {
+          const before = Array.from(this.affectedOriginalsInDrag.values());
+          const after: HistoryDeltaItem[] = [];
+          for (let i = 0; i < state.strokes.length; i++) {
+            const s = state.strokes[i];
+            if (this.createdFragmentIdsInDrag.has(s.id)) {
+              after.push({ index: i, stroke: s });
+            }
+          }
+          recordDeltaHistory(before, after);
+        }
+        this.affectedOriginalsInDrag.clear();
+        this.createdFragmentIdsInDrag.clear();
+        this.markStaticDirty();
+        return;
+      }
+
       this.eraserPos = null;
 
       // Palm rejection: If user was drawing and OS cancelled, save if valid stroke
@@ -968,12 +1115,14 @@ export class DrawingCanvas {
 
   private drawEraserRing(x: number, y: number) {
     const ctx = this.ctx;
-    const isDark = getTheme() === 'dark';
+    const tokens = getThemeTokens();
+    const radius = state.eraserRadius;
     ctx.save();
     ctx.beginPath();
-    ctx.strokeStyle = isDark ? 'rgba(237, 229, 211, 0.45)' : 'rgba(28, 26, 22, 0.4)';
-    ctx.lineWidth = 1.5;
-    ctx.arc(x, y, 14, 0, Math.PI * 2);
+    ctx.strokeStyle = tokens.inkSoft;
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 3]);
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
     ctx.stroke();
     ctx.restore();
   }
@@ -1023,6 +1172,10 @@ export class DrawingCanvas {
       cancelAnimationFrame(this.animFrameId);
       this.animFrameId = null;
     }
+    if (this.audioRebuildThrottleTimer !== null) {
+      window.clearTimeout(this.audioRebuildThrottleTimer);
+      this.audioRebuildThrottleTimer = null;
+    }
     for (const unsub of this.unsubs) {
       unsub();
     }
@@ -1030,10 +1183,14 @@ export class DrawingCanvas {
     this.resizeObserver.disconnect();
     window.removeEventListener('resize', this.onWindowResize);
     window.removeEventListener('orientationchange', this.onWindowResize);
+    window.removeEventListener('keydown', this.onKeyDown);
+    window.removeEventListener('keyup', this.onKeyUp);
+    window.removeEventListener('blur', this.onWindowBlur);
     this.canvas.removeEventListener('pointerdown', this.onPointerDown);
     this.canvas.removeEventListener('pointermove', this.onPointerMove);
     this.canvas.removeEventListener('pointerup', this.onPointerUp);
     this.canvas.removeEventListener('pointercancel', this.onPointerCancel);
+    this.canvas.removeEventListener('pointerleave', this.onPointerLeave);
     this.canvas.remove();
   }
 }
