@@ -1,6 +1,7 @@
 import './styles/tokens.css';
 import './styles/base.css';
 import './styles/app.css';
+import './styles/theme-toggle.css';
 
 // MUST be first before any Tone.js module instantiates nodes
 import { initLowLatencyContext, logAudioLatencyInfo } from './audio/context';
@@ -19,6 +20,11 @@ import { SyncSettingsPill } from './ui/SyncSettingsPill';
 import { loadSavedProject, initProjectAutosave } from './audio/projectState';
 import { initAudioLifecycle } from './audio/lifecycle';
 import { showFirstRunHintOverlay } from './ui/hintOverlay';
+import { initTheme } from './ui/theme';
+import { ThemeToggle } from './ui/ThemeToggle';
+
+// Initialize color theme system
+initTheme();
 
 // Restore any saved project from share link or localStorage
 loadSavedProject();
@@ -28,6 +34,7 @@ const app = document.querySelector<HTMLDivElement>('#app')!;
 
 app.innerHTML = `
   <section class="gate-screen" id="gate-screen">
+    <div class="gate-theme-wrapper" id="gate-theme-container"></div>
     <h1 class="app-title">${CONFIG.appName}</h1>
     <p class="app-subtitle">Draw strokes to compose. Notes loop in time.</p>
     <button class="start-btn" id="start-btn" type="button" aria-label="Start audio and enter Instruversal">
@@ -40,13 +47,16 @@ app.innerHTML = `
       <h2 class="header-title">${CONFIG.appName}</h2>
       <div class="header-actions">
         <button type="button" class="header-btn" id="header-help-btn" aria-label="How Instruversal works">
-          How it works
+          <span class="hdr-text-long">How it works</span>
+          <span class="hdr-text-short">Help</span>
         </button>
         <button type="button" class="header-btn" id="header-fx-btn" aria-label="Open effects rack">
-          Effects
+          <span class="hdr-text-long">Effects</span>
+          <span class="hdr-text-short">FX</span>
         </button>
         <button type="button" class="header-btn" id="header-mixer-btn" aria-label="Open track mixer and key panel">
-          Mixer · Key
+          <span class="hdr-text-long">Mixer · Key</span>
+          <span class="hdr-text-short">Mixer</span>
         </button>
         <span class="header-status" id="header-status">AUDIO READY</span>
       </div>
@@ -64,6 +74,13 @@ const mainView = document.querySelector<HTMLElement>('#main-view')!;
 const headerStatus = document.querySelector<HTMLElement>('#header-status')!;
 const mixerBtn = document.querySelector<HTMLButtonElement>('#header-mixer-btn')!;
 const fxBtn = document.querySelector<HTMLButtonElement>('#header-fx-btn')!;
+
+// Mount gate screen theme toggle
+const gateThemeContainer = document.querySelector<HTMLElement>('#gate-theme-container');
+if (gateThemeContainer) {
+  const gateToggle = new ThemeToggle();
+  gateThemeContainer.appendChild(gateToggle.element);
+}
 
 let drawingCanvas: DrawingCanvas | null = null;
 let toolbar: Toolbar | null = null;
@@ -133,10 +150,12 @@ async function handleStart() {
         fxPanel = new FxPanel(app);
       }
 
-      // Sync settings pill
+      // Sync settings pill & Theme toggle
       const headerActionsEl = document.querySelector<HTMLElement>('.header-actions');
       if (headerActionsEl) {
         new SyncSettingsPill(headerActionsEl);
+        const headerThemeToggle = new ThemeToggle();
+        headerActionsEl.insertBefore(headerThemeToggle.element, headerActionsEl.firstChild);
       }
 
       // Initialize audio interruptions, wake lock & lifecycle

@@ -81,6 +81,7 @@ export type EventMap = {
   };
   'stroke:added': Stroke;
   'strokes:updated': Stroke[];
+  'theme:change': 'light' | 'dark';
 };
 
 type EventKey = keyof EventMap;

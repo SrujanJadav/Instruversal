@@ -28,6 +28,13 @@
   pointer-events: none;
 }
 
+.gate-theme-wrapper {
+  position: absolute;
+  top: var(--space-4);
+  right: var(--space-4);
+  z-index: 20;
+}
+
 .app-title {
   font-family: var(--font-display);
   font-size: clamp(2.2rem, 5vw, 3.5rem);
@@ -60,12 +67,12 @@
   min-width: 140px;
   border-radius: var(--radius-md);
   cursor: pointer;
-  transition: background-color var(--transition-fast), transform var(--transition-fast);
+  transition: background-color var(--transition-fast), transform var(--transition-fast), opacity var(--transition-fast);
   touch-action: manipulation;
 }
 
 .start-btn:hover {
-  background-color: #2b2823;
+  opacity: 0.92;
 }
 
 .start-btn:active {
@@ -89,7 +96,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 0 var(--space-1);
-  height: 32px;
+  height: 36px;
   flex-shrink: 0;
   flex-wrap: nowrap;
   overflow: hidden;
@@ -127,12 +134,20 @@
   align-items: center;
   gap: 4px;
   white-space: nowrap;
-  transition: background-color var(--transition-fast), border-color var(--transition-fast);
+  transition: background-color var(--transition-fast), border-color var(--transition-fast), filter var(--transition-fast);
 }
 
 .header-btn:hover {
-  background-color: #e2d7c0;
   border-color: var(--ink-soft);
+  filter: brightness(0.96);
+}
+
+.hdr-text-long {
+  display: inline;
+}
+
+.hdr-text-short {
+  display: none;
 }
 
 .header-status {
@@ -146,7 +161,7 @@
 @media (max-width: 600px) {
   .app-header {
     height: 36px;
-    padding: 0 2px;
+    padding: 0 4px;
     gap: 4px;
   }
   .header-title {
@@ -156,11 +171,38 @@
     gap: 4px;
   }
   .header-btn {
-    padding: 4px 7px;
+    padding: 4px 6px;
     font-size: 0.72rem;
   }
   .header-status {
     display: none;
+  }
+}
+
+@media (max-width: 520px) {
+  .hdr-text-long {
+    display: none;
+  }
+  .hdr-text-short {
+    display: inline;
+  }
+}
+
+@media (max-width: 380px) {
+  .app-header {
+    padding: 0 2px;
+    gap: 2px;
+  }
+  .header-title {
+    font-size: 0.95rem;
+  }
+  .header-actions {
+    gap: 2px;
+  }
+  .header-btn {
+    padding: 3px 5px;
+    font-size: 0.68rem;
+    min-height: 28px;
   }
 }
 
@@ -311,7 +353,7 @@
 }
 
 .toolbar-btn:hover:not(:disabled) {
-  background-color: rgba(28, 26, 22, 0.06);
+  background-color: var(--line);
 }
 
 .toolbar-btn:active:not(:disabled) {
@@ -331,12 +373,12 @@
 }
 
 .toolbar-btn-play:hover:not(:disabled) {
-  background-color: #2b2823;
+  opacity: 0.92;
   color: var(--paper);
 }
 
 .toolbar-btn-play.playing {
-  background-color: #26241f;
+  opacity: 0.88;
   color: var(--paper);
 }
 
@@ -581,11 +623,11 @@
 
 .confirm-yes {
   background-color: var(--vermilion);
-  color: #fff;
+  color: var(--paper);
 }
 
 .confirm-yes:hover {
-  background-color: #b83620;
+  filter: brightness(0.9);
 }
 
 .confirm-no {
@@ -595,14 +637,14 @@
 }
 
 .confirm-no:hover {
-  background-color: rgba(28, 26, 22, 0.06);
+  background-color: var(--line);
 }
 
 /* Panel Backdrop */
 .panel-backdrop {
   position: fixed;
   inset: 0;
-  background-color: rgba(28, 26, 22, 0.3);
+  background-color: var(--backdrop, rgba(28, 26, 22, 0.35));
   z-index: 50;
   transition: opacity var(--transition-normal);
   opacity: 1;
@@ -845,13 +887,13 @@
 .mute-btn.active {
   background-color: var(--vermilion);
   border-color: var(--vermilion);
-  color: #fff;
+  color: var(--paper);
 }
 
 .solo-btn.active {
   background-color: var(--ochre);
   border-color: var(--ochre);
-  color: var(--ink);
+  color: #1C1A16;
 }
 
 .track-vol-slider {
@@ -1413,7 +1455,7 @@
 .fx-backdrop {
   position: fixed;
   inset: 0;
-  background-color: rgba(28, 26, 22, 0.25);
+  background-color: var(--backdrop, rgba(28, 26, 22, 0.25));
   backdrop-filter: blur(1px);
   z-index: 90;
   opacity: 0;
@@ -2090,7 +2132,47 @@
 }
 
 .hint-dismiss-btn:hover {
-  background-color: #2b2823;
+  opacity: 0.92;
+}
+
+/* ==========================================================================
+   Smooth Theme Transitions (Canvas explicitly exempted)
+   ========================================================================== */
+html.theme-transitioning,
+html.theme-transitioning body,
+html.theme-transitioning #app,
+html.theme-transitioning header,
+html.theme-transitioning footer,
+html.theme-transitioning section,
+html.theme-transitioning button,
+html.theme-transitioning input,
+html.theme-transitioning select,
+html.theme-transitioning .main-view,
+html.theme-transitioning .canvas-container,
+html.theme-transitioning .instruversal-toolbar,
+html.theme-transitioning .track-panel,
+html.theme-transitioning .fx-panel,
+html.theme-transitioning .sync-popup,
+html.theme-transitioning .hint-overlay-card,
+html.theme-transitioning .theme-switch__container {
+  transition: background-color 250ms ease-out,
+              color 250ms ease-out,
+              border-color 250ms ease-out,
+              box-shadow 250ms ease-out,
+              fill 250ms ease-out !important;
+}
+
+/* Explicitly exempt canvas and offscreen canvas from any CSS transitions */
+html.theme-transitioning canvas,
+canvas.instruversal-canvas {
+  transition: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.theme-transitioning,
+  html.theme-transitioning * {
+    transition: none !important;
+  }
 }
 
 

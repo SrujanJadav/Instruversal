@@ -3,8 +3,21 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#F3ECDD" />
+    <meta name="theme-color" content="#F3ECDD" id="meta-theme-color" />
     <title>Instruversal — Draw to Music</title>
+    <script>
+      (function () {
+        try {
+          var saved = localStorage.getItem('instruversal:theme');
+          var theme = saved || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          document.documentElement.setAttribute('data-theme', theme);
+          var metaTheme = document.getElementById('meta-theme-color');
+          if (metaTheme) {
+            metaTheme.setAttribute('content', theme === 'dark' ? '#1A1814' : '#F3ECDD');
+          }
+        } catch (e) {}
+      })();
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link

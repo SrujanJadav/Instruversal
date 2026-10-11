@@ -1,4 +1,5 @@
-:root {
+:root,
+html[data-theme="light"] {
   /* Surface & Ink */
   --paper: #F3ECDD;
   --paper-deep: #E9DFCB;
@@ -13,6 +14,10 @@
   --sage: #3F7A63;
   --plum: #7A3A66;
   --slate: #4A5560;
+
+  /* Paper grain overlay tokens */
+  --grain-opacity: 0.035;
+  --grain-blend: normal;
 
   /* Typography */
   --font-display: 'Fraunces', serif;
@@ -35,4 +40,31 @@
   /* Transitions */
   --transition-fast: 150ms ease-out;
   --transition-normal: 220ms ease-out;
+
+  /* Modal Backdrop */
+  --backdrop: rgba(28, 26, 22, 0.35);
+}
+
+html[data-theme="dark"] {
+  /* Surface & Ink (inked night, not pure black) */
+  --paper: #1A1814;
+  --paper-deep: #23201A;
+  --ink: #EDE5D3;
+  --ink-soft: #A39B88;
+  --line: rgba(237, 229, 211, 0.14);
+
+  /* Track pigments brightened slightly for dark surface contrast */
+  --vermilion: #E5573D;
+  --indigo: #7F92E0;
+  --ochre: #E0AC3F;
+  --sage: #5FA386;
+  --plum: #A8609A;
+  --slate: #8593A3;
+
+  /* Paper grain overlay tokens for dark */
+  --grain-opacity: 0.02;
+  --grain-blend: soft-light;
+
+  /* Modal Backdrop */
+  --backdrop: rgba(0, 0, 0, 0.55);
 }

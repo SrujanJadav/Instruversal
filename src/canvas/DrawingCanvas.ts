@@ -8,6 +8,7 @@ import {
 import { getTrackManager } from '../audio/tracks';
 import { getTransport } from '../audio/transport';
 import { DRUM_LANES } from '../audio/drums';
+import { getThemeTokens, getTrackThemeColor, getTheme } from '../ui/theme';
 
 interface HitEffect {
   x: number;
@@ -106,10 +107,16 @@ export class DrawingCanvas {
   // Event cleanup
   private unsubs: (() => void)[] = [];
 
-  // Line styling
-  private readonly lineColor = 'rgba(28, 26, 22, 0.16)';
-  private readonly lineRootColor = 'rgba(28, 26, 22, 0.28)';
-  private readonly lineSubtleColor = 'rgba(28, 26, 22, 0.08)';
+  // Dynamic theme-aware line styling
+  private get lineColor(): string {
+    return getThemeTokens().line;
+  }
+  private get lineRootColor(): string {
+    return getThemeTokens().lineRoot;
+  }
+  private get lineSubtleColor(): string {
+    return getThemeTokens().lineSubtle;
+  }
 
   constructor(container: HTMLElement) {
     this.container = container;
@@ -155,6 +162,10 @@ export class DrawingCanvas {
   }
 
   private setupAppListeners() {
+    const onThemeChange = () => this.markStaticDirty();
+    window.addEventListener('themechange', onThemeChange);
+    this.unsubs.push(() => window.removeEventListener('themechange', onThemeChange));
+
     this.unsubs.push(
       events.on('track:select', () => this.markStaticDirty()),
       events.on('track:type-change', () => this.markStaticDirty()),
@@ -257,8 +268,7 @@ export class DrawingCanvas {
   }
 
   private getTrackColor(trackId: string): string {
-    const track = getTrackManager().getTrack(trackId);
-    return track ? track.colorHex : '#D2432A';
+    return getTrackThemeColor(trackId);
   }
 
   private triggerLivePitch(normX: number, normY: number) {
@@ -570,7 +580,7 @@ export class DrawingCanvas {
       if (isRoot) {
         ctx.save();
         ctx.font = '500 10px "DM Mono", monospace';
-        ctx.fillStyle = '#5B554A';
+        ctx.fillStyle = getThemeTokens().inkSoft;
         ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
         const label = midiToNoteName(midi);
@@ -601,13 +611,15 @@ export class DrawingCanvas {
     const selTrack = tm.getTrack(state.selectedTrackId);
     const isFlow = selTrack?.beatMode === 'flow';
     const flowStyle = selTrack?.beatFlowStyle || 'glide';
+    const isDark = getTheme() === 'dark';
+    const tokens = getThemeTokens();
 
     const laneHeight = this.height / 8;
     for (let i = 0; i < 8; i++) {
       const meta = DRUM_LANES[i];
       const yTop = i * laneHeight;
       if (i % 2 === 1) {
-        ctx.fillStyle = "rgba(28, 26, 22, 0.025)";
+        ctx.fillStyle = isDark ? "rgba(237, 229, 211, 0.035)" : "rgba(28, 26, 22, 0.025)";
         ctx.fillRect(0, yTop, this.width, laneHeight);
       }
       ctx.beginPath();
@@ -619,7 +631,9 @@ export class DrawingCanvas {
 
       ctx.save();
       ctx.font = '600 10px "DM Mono", monospace';
-      ctx.fillStyle = isFlow ? "rgba(91, 85, 74, 0.18)" : "#5B554A";
+      ctx.fillStyle = isFlow
+        ? (isDark ? "rgba(163, 155, 136, 0.22)" : "rgba(91, 85, 74, 0.18)")
+        : tokens.inkSoft;
       ctx.textAlign = "left";
       ctx.textBaseline = "middle";
       ctx.fillText(meta.shortLabel, 10, yTop + laneHeight / 2);
@@ -627,7 +641,9 @@ export class DrawingCanvas {
       // On narrow screens (<600px), only show 2-letter code to keep lanes readable
       if (this.width >= 600) {
         ctx.font = '500 11px "Instrument Sans", sans-serif';
-        ctx.fillStyle = isFlow ? "rgba(28, 26, 22, 0.12)" : "rgba(28, 26, 22, 0.45)";
+        ctx.fillStyle = isFlow
+          ? (isDark ? "rgba(237, 229, 211, 0.14)" : "rgba(28, 26, 22, 0.12)")
+          : (isDark ? "rgba(237, 229, 211, 0.55)" : "rgba(28, 26, 22, 0.45)");
         ctx.fillText(meta.name, 36, yTop + laneHeight / 2);
       }
       ctx.restore();
@@ -641,8 +657,8 @@ export class DrawingCanvas {
       const botDesc = flowStyle === 'glide' ? '▼ Low (C1)' : flowStyle === 'roll' ? '▼ 1/8 Rate' : '▼ 400 Hz';
 
       // Left axis pill indicator
-      ctx.fillStyle = 'rgba(233, 223, 203, 0.9)';
-      ctx.strokeStyle = 'rgba(28, 26, 22, 0.2)';
+      ctx.fillStyle = isDark ? 'rgba(35, 32, 26, 0.92)' : 'rgba(233, 223, 203, 0.9)';
+      ctx.strokeStyle = tokens.line;
       ctx.lineWidth = 1;
 
       // Small top hint badge
@@ -651,29 +667,29 @@ export class DrawingCanvas {
       ctx.fill();
       ctx.stroke();
       ctx.font = '600 9.5px "DM Mono", monospace';
-      ctx.fillStyle = '#1C1A16';
+      ctx.fillStyle = tokens.ink;
       ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';
       ctx.fillText(topDesc, 14, 18);
 
       // Center axis title tag
-      ctx.fillStyle = 'rgba(28, 26, 22, 0.08)';
+      ctx.fillStyle = isDark ? 'rgba(237, 229, 211, 0.08)' : 'rgba(28, 26, 22, 0.08)';
       ctx.beginPath();
       ctx.roundRect(8, this.height / 2 - 12, 104, 24, 4);
       ctx.fill();
       ctx.stroke();
       ctx.font = '600 10px "DM Mono", monospace';
-      ctx.fillStyle = '#1C1A16';
+      ctx.fillStyle = tokens.ink;
       ctx.fillText(`Axis: ${axisName}`, 14, this.height / 2);
 
       // Small bottom hint badge
-      ctx.fillStyle = 'rgba(233, 223, 203, 0.9)';
+      ctx.fillStyle = isDark ? 'rgba(35, 32, 26, 0.92)' : 'rgba(233, 223, 203, 0.9)';
       ctx.beginPath();
       ctx.roundRect(8, this.height - 28, 86, 20, 4);
       ctx.fill();
       ctx.stroke();
       ctx.font = '600 9.5px "DM Mono", monospace';
-      ctx.fillStyle = '#1C1A16';
+      ctx.fillStyle = tokens.ink;
       ctx.fillText(botDesc, 14, this.height - 18);
 
       ctx.restore();
@@ -683,16 +699,18 @@ export class DrawingCanvas {
   private drawEmptyState(ctx: CanvasRenderingContext2D) {
     const cx = this.width / 2;
     const cy = this.height / 2;
+    const tokens = getThemeTokens();
+    const isDark = getTheme() === 'dark';
 
     ctx.save();
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.font = '400 15px "Fraunces", serif';
-    ctx.fillStyle = '#5B554A';
+    ctx.fillStyle = tokens.inkSoft;
     ctx.fillText('Draw something. Anything.', cx, cy - 8);
 
     // Hand-drawn style ink squiggle arrow
-    ctx.strokeStyle = 'rgba(28, 26, 22, 0.28)';
+    ctx.strokeStyle = isDark ? 'rgba(237, 229, 211, 0.32)' : 'rgba(28, 26, 22, 0.28)';
     ctx.lineWidth = 1.5;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
@@ -777,19 +795,27 @@ export class DrawingCanvas {
     const progress = getTransport().getProgress();
     const px = progress * this.width;
     const ctx = this.ctx;
+    const tokens = getThemeTokens();
+    const isDark = getTheme() === 'dark';
 
     // Faint fading band behind playhead (3% to 8% width)
     const trailWidth = Math.max(16, Math.min(36, this.width * 0.05));
     const grad = ctx.createLinearGradient(px - trailWidth, 0, px, 0);
-    grad.addColorStop(0, 'rgba(28, 26, 22, 0)');
-    grad.addColorStop(0.7, 'rgba(28, 26, 22, 0.03)');
-    grad.addColorStop(1, 'rgba(28, 26, 22, 0.08)');
+    if (isDark) {
+      grad.addColorStop(0, 'rgba(237, 229, 211, 0)');
+      grad.addColorStop(0.7, 'rgba(237, 229, 211, 0.04)');
+      grad.addColorStop(1, 'rgba(237, 229, 211, 0.10)');
+    } else {
+      grad.addColorStop(0, 'rgba(28, 26, 22, 0)');
+      grad.addColorStop(0.7, 'rgba(28, 26, 22, 0.03)');
+      grad.addColorStop(1, 'rgba(28, 26, 22, 0.08)');
+    }
     ctx.fillStyle = grad;
     ctx.fillRect(px - trailWidth, 0, trailWidth, this.height);
 
     // Crisp ink line
     ctx.beginPath();
-    ctx.strokeStyle = '#1C1A16';
+    ctx.strokeStyle = tokens.ink;
     ctx.lineWidth = 1.5;
     ctx.moveTo(px + 0.5, 0);
     ctx.lineTo(px + 0.5, this.height);
@@ -926,9 +952,10 @@ export class DrawingCanvas {
 
       // Floating note readout for melodic hits
       if (!r.isBeat && state.showHitNotes && elapsed < 320) {
+        const tokens = getThemeTokens();
         const noteAlpha = Math.max(0, 1 - elapsed / 320);
         ctx.font = '500 10px "DM Mono", monospace';
-        ctx.fillStyle = '#1C1A16';
+        ctx.fillStyle = tokens.ink;
         ctx.globalAlpha = noteAlpha * 0.9;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'bottom';
@@ -941,9 +968,10 @@ export class DrawingCanvas {
 
   private drawEraserRing(x: number, y: number) {
     const ctx = this.ctx;
+    const isDark = getTheme() === 'dark';
     ctx.save();
     ctx.beginPath();
-    ctx.strokeStyle = 'rgba(28, 26, 22, 0.4)';
+    ctx.strokeStyle = isDark ? 'rgba(237, 229, 211, 0.45)' : 'rgba(28, 26, 22, 0.4)';
     ctx.lineWidth = 1.5;
     ctx.arc(x, y, 14, 0, Math.PI * 2);
     ctx.stroke();
@@ -960,9 +988,10 @@ export class DrawingCanvas {
     const badgeX = Math.min(px + 14, this.width - badgeW - 8);
     const badgeY = Math.max(py - 26, 8);
 
+    const tokens = getThemeTokens();
     ctx.save();
-    ctx.fillStyle = '#F3ECDD';
-    ctx.strokeStyle = 'rgba(28, 26, 22, 0.22)';
+    ctx.fillStyle = tokens.paperDeep;
+    ctx.strokeStyle = tokens.line;
     ctx.lineWidth = 1;
 
     const r = 4;
@@ -981,7 +1010,7 @@ export class DrawingCanvas {
     ctx.stroke();
 
     ctx.font = '500 11px "DM Mono", monospace';
-    ctx.fillStyle = '#1C1A16';
+    ctx.fillStyle = tokens.ink;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(display.name, badgeX + badgeW / 2, badgeY + badgeH / 2 + 0.5);

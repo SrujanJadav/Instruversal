@@ -116,7 +116,7 @@ export class Toolbar {
               ${DEFAULT_TRACK_CONFIGS.map(
                 (t) => `
                 <button type="button" class="palette-dot-btn ${t.id === state.selectedTrackId ? 'active' : ''}" data-track-id="${t.id}" aria-label="Select ${t.name}" tabindex="0">
-                  <span class="palette-dot" style="background-color: ${t.colorHex}"></span>
+                  <span class="palette-dot" style="background-color: var(${t.colorVar});"></span>
                 </button>
               `
               ).join('')}

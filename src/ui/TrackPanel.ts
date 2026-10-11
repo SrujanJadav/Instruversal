@@ -8,6 +8,7 @@ import { getTransport } from '../audio/transport';
 import { getPreviewEngine, getAuditionEnabled, setAuditionEnabled } from '../audio/preview';
 import { triggerHaptic } from './haptics';
 import { getLightMode, setLightMode } from '../audio/lifecycle';
+import { getTrackThemeColor } from './theme';
 
 const ROOT_NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
@@ -158,6 +159,14 @@ export class TrackPanel {
         this.openInstrumentPicker(trackId);
       })
     );
+
+    const onThemeChange = () => {
+      if (this.isOpen()) {
+        this.render();
+      }
+    };
+    window.addEventListener('themechange', onThemeChange);
+    this.unsubs.push(() => window.removeEventListener('themechange', onThemeChange));
   }
 
   private render() {
@@ -201,7 +210,7 @@ export class TrackPanel {
               ← Back to tracks
             </button>
             <span class="picker-title">
-              <span class="palette-dot-small" style="background-color: ${track.colorHex}"></span>
+              <span class="palette-dot-small" style="background-color: var(${track.colorVar})"></span>
               ${track.name} Voice
             </span>
           </div>
@@ -311,7 +320,7 @@ export class TrackPanel {
     return `
       <li class="track-row ${isSelected ? 'selected' : ''}" data-track-id="${track.id}">
         <button type="button" class="track-select-lead" data-select-id="${track.id}" aria-label="Select ${track.name} track for drawing">
-          <span class="track-dot-indicator" style="background-color: ${track.colorHex}"></span>
+          <span class="track-dot-indicator" style="background-color: var(${track.colorVar})"></span>
           <span class="track-name-lbl">${track.name}</span>
         </button>
 
@@ -413,9 +422,7 @@ export class TrackPanel {
     const noteEls = this.panel.querySelectorAll<HTMLElement>('.scale-strip-note');
     if (noteEls.length === 0) return;
 
-    const tm = getTrackManager();
-    const selTrack = tm.getTrack(state.selectedTrackId);
-    const trackColor = selTrack?.colorHex || '#1C1A16';
+    const trackColor = getTrackThemeColor(state.selectedTrackId);
 
     noteEls.forEach((el) => {
       el.classList.remove('active', 'chord-active');
@@ -436,7 +443,7 @@ export class TrackPanel {
           el.classList.add('chord-active');
           el.style.backgroundColor = trackColor;
           el.style.borderColor = trackColor;
-          el.style.color = '#F3ECDD';
+          el.style.color = 'var(--paper)';
         }
       });
     } else if (typeof step === 'number') {
@@ -445,7 +452,7 @@ export class TrackPanel {
         el.classList.add('active');
         el.style.backgroundColor = trackColor;
         el.style.borderColor = trackColor;
-        el.style.color = '#F3ECDD';
+        el.style.color = 'var(--paper)';
       }
     }
   }
