@@ -1,0 +1,123 @@
+#app {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  background-color: var(--paper);
+}
+
+/* Audio Gate / Welcome Screen */
+.gate-screen {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-5);
+  text-align: center;
+  z-index: 10;
+  background-color: var(--paper);
+  transition: opacity var(--transition-normal), visibility var(--transition-normal);
+}
+
+.gate-screen.hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.app-title {
+  font-family: var(--font-display);
+  font-size: clamp(2.2rem, 5vw, 3.5rem);
+  font-weight: 500;
+  color: var(--ink);
+  letter-spacing: -0.02em;
+  margin-bottom: var(--space-2);
+}
+
+.app-subtitle {
+  font-family: var(--font-ui);
+  font-size: 1rem;
+  color: var(--ink-soft);
+  max-width: 320px;
+  line-height: 1.4;
+  margin-bottom: var(--space-5);
+}
+
+.start-btn {
+  appearance: none;
+  border: 1px solid var(--ink);
+  background-color: var(--ink);
+  color: var(--paper);
+  font-family: var(--font-ui);
+  font-size: 0.95rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  padding: 12px 28px;
+  min-height: 44px;
+  min-width: 140px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background-color var(--transition-fast), transform var(--transition-fast);
+  touch-action: manipulation;
+}
+
+.start-btn:hover {
+  background-color: #2b2823;
+}
+
+.start-btn:active {
+  transform: scale(0.98);
+}
+
+/* Main Area (Placeholder for Canvas) */
+.main-view {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-3);
+  gap: var(--space-2);
+  height: 100%;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--space-2);
+  height: 36px;
+}
+
+.header-title {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.header-status {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+  letter-spacing: 0.02em;
+}
+
+.canvas-placeholder-container {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--paper-deep);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  position: relative;
+  overflow: hidden;
+}
+
+.placeholder-note {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+}
