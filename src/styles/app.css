@@ -842,3 +842,26 @@
   color: var(--paper);
   border-color: var(--ink);
 }
+
+.panel-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 6px 0;
+}
+
+.panel-checkbox {
+  accent-color: var(--ink);
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.checkbox-label {
+  font-family: var(--font-ui);
+  font-size: 0.82rem;
+  color: var(--ink);
+  user-select: none;
+}
+

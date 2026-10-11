@@ -8,10 +8,11 @@ import {
 import { getTrackManager } from '../audio/tracks';
 import { getTransport } from '../audio/transport';
 
-interface HitRipple {
+interface HitEffect {
   x: number;
   y: number;
   color: string;
+  noteName: string;
   startTime: number;
   duration: number;
 }
@@ -65,6 +66,12 @@ export class DrawingCanvas {
   private container: HTMLElement;
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
+
+  // Offscreen canvas for cached static layers (guides + committed strokes)
+  private offscreenCanvas: HTMLCanvasElement;
+  private offscreenCtx: CanvasRenderingContext2D;
+  private staticLayerDirty: boolean = true;
+
   private resizeObserver: ResizeObserver;
 
   private width: number = 0;
@@ -86,8 +93,8 @@ export class DrawingCanvas {
   private lastPreviewTime: number = 0;
   private activeNoteDisplay: { name: string; x: number; y: number } | null = null;
 
-  // Hit ripples & stroke highlight
-  private hitRipples: HitRipple[] = [];
+  // Hit effects & stroke highlight
+  private hitEffects: HitEffect[] = [];
   private strokeHighlights: Map<string, number> = new Map();
 
   // Animation frame loop
@@ -104,6 +111,7 @@ export class DrawingCanvas {
   constructor(container: HTMLElement) {
     this.container = container;
 
+    // Main visible canvas
     this.canvas = document.createElement('canvas');
     this.canvas.className = 'instruversal-canvas';
     this.canvas.style.width = '100%';
@@ -116,6 +124,14 @@ export class DrawingCanvas {
       throw new Error('Could not acquire 2D canvas context');
     }
     this.ctx = context;
+
+    // Static offscreen buffer
+    this.offscreenCanvas = document.createElement('canvas');
+    const offContext = this.offscreenCanvas.getContext('2d');
+    if (!offContext) {
+      throw new Error('Could not acquire offscreen 2D canvas context');
+    }
+    this.offscreenCtx = offContext;
 
     this.container.appendChild(this.canvas);
 
@@ -137,17 +153,21 @@ export class DrawingCanvas {
 
   private setupAppListeners() {
     this.unsubs.push(
-      events.on('track:select', () => this.redraw()),
+      events.on('track:select', () => this.markStaticDirty()),
+      events.on('scale:change', () => this.markStaticDirty()),
       events.on('tool:change', () => this.updateCursor()),
-      events.on('strokes:updated', () => this.redraw()),
+      events.on('strokes:updated', () => this.markStaticDirty()),
+      events.on('stroke:added', () => this.markStaticDirty()),
       events.on('transport:play', () => this.startAnimation()),
       events.on('transport:pause', () => this.redraw()),
       events.on('note:hit', (hit) => {
         const color = this.getTrackColor(hit.trackId);
-        this.hitRipples.push({
+        const noteName = midiToNoteName(hit.midi);
+        this.hitEffects.push({
           x: hit.x,
           y: hit.y,
           color,
+          noteName,
           startTime: performance.now(),
           duration: 400,
         });
@@ -157,6 +177,11 @@ export class DrawingCanvas {
         this.startAnimation();
       })
     );
+  }
+
+  private markStaticDirty() {
+    this.staticLayerDirty = true;
+    this.redraw();
   }
 
   private updateCursor() {
@@ -173,11 +198,12 @@ export class DrawingCanvas {
   private renderLoop = () => {
     this.redraw();
 
-    const hasActiveRipples = this.hitRipples.length > 0;
+    const hasActiveHits = this.hitEffects.length > 0;
     const isDrawing = this.currentStroke !== null;
     const isErasing = this.eraserPos !== null;
+    const isPlaying = state.isPlaying;
 
-    if (state.isPlaying || hasActiveRipples || isDrawing || isErasing) {
+    if (isPlaying || hasActiveHits || isDrawing || isErasing) {
       this.animFrameId = requestAnimationFrame(this.renderLoop);
     } else {
       this.animFrameId = null;
@@ -197,17 +223,21 @@ export class DrawingCanvas {
     this.height = rect.height;
 
     // Physical pixel dimensions
-    this.canvas.width = Math.round(this.width * this.dpr);
-    this.canvas.height = Math.round(this.height * this.dpr);
+    const physW = Math.round(this.width * this.dpr);
+    const physH = Math.round(this.height * this.dpr);
 
-    // CSS layout dimensions
+    this.canvas.width = physW;
+    this.canvas.height = physH;
     this.canvas.style.width = `${this.width}px`;
     this.canvas.style.height = `${this.height}px`;
-
-    // Scale drawing context so normalized coordinates scale seamlessly
     this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
 
-    this.redraw();
+    // Offscreen buffer dimensions
+    this.offscreenCanvas.width = physW;
+    this.offscreenCanvas.height = physH;
+    this.offscreenCtx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+
+    this.markStaticDirty();
   }
 
   private setupEvents() {
@@ -215,8 +245,6 @@ export class DrawingCanvas {
     this.canvas.addEventListener('pointermove', this.onPointerMove);
     this.canvas.addEventListener('pointerup', this.onPointerUp);
     this.canvas.addEventListener('pointercancel', this.onPointerCancel);
-
-    // Prevent context menu on long-press (mobile)
     this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
   }
 
@@ -235,7 +263,6 @@ export class DrawingCanvas {
     if (!state.audioStarted) return;
 
     const now = performance.now();
-    // Throttle preview note: trigger if pitch changed or if > 110ms elapsed
     if (midi !== this.lastPreviewMidi || now - this.lastPreviewTime > 110) {
       try {
         getTrackManager().triggerNoteOnTrack(
@@ -248,13 +275,13 @@ export class DrawingCanvas {
         this.lastPreviewMidi = midi;
         this.lastPreviewTime = now;
       } catch {
-        // Safe guard against suspended audio
+        // Safe guard
       }
     }
   }
 
   private eraseAt(rawX: number, rawY: number) {
-    const tolerance = 14; // pixels
+    const tolerance = 14;
     const initialCount = state.strokes.length;
     const remaining = state.strokes.filter(
       (s) => !strokeHitTest(s, rawX, rawY, tolerance, this.width, this.height)
@@ -267,13 +294,13 @@ export class DrawingCanvas {
       }
       state.strokes = remaining;
       events.emit('strokes:updated', state.strokes);
+      this.markStaticDirty();
     }
   }
 
   private onPointerDown = (e: PointerEvent) => {
-    // Ignore secondary pointers to prevent multi-touch interference
     if (this.activePointerId !== null) return;
-    if (e.button !== 0) return; // Main button only
+    if (e.button !== 0) return;
 
     this.activePointerId = e.pointerId;
     this.canvas.setPointerCapture(e.pointerId);
@@ -297,7 +324,6 @@ export class DrawingCanvas {
     this.lastPointTime = this.strokeStartTime;
     this.lastPointPos = { x: normX, y: normY };
 
-    // Initial line width (modulated slightly by pointer pressure when available)
     const baseWidth = e.pressure && e.pressure > 0 
       ? Math.max(2.5, Math.min(6, 2 + e.pressure * 4))
       : 3.5;
@@ -337,7 +363,6 @@ export class DrawingCanvas {
       return;
     }
 
-    // Distance thinning: only add points if moved at least ~3 screen pixels
     const dxPx = (normX - this.lastPointPos.x) * this.width;
     const dyPx = (normY - this.lastPointPos.y) * this.height;
     const distSq = dxPx * dxPx + dyPx * dyPx;
@@ -348,15 +373,12 @@ export class DrawingCanvas {
 
     const now = performance.now();
     const dt = Math.max(1, now - this.lastPointTime);
-
-    // Speed in px/ms
     const speed = Math.sqrt(distSq) / dt;
 
     if (e.pressure && e.pressure > 0) {
       const targetWidth = Math.max(2.2, Math.min(5.8, 2 + e.pressure * 3.8));
       this.currentStroke.width = this.currentStroke.width * 0.7 + targetWidth * 0.3;
     } else {
-      // Natural speed variation: faster stroke is slightly tapered
       const targetWidth = Math.max(2.4, Math.min(4.8, 4.4 - Math.min(speed, 2) * 0.9));
       this.currentStroke.width = this.currentStroke.width * 0.8 + targetWidth * 0.2;
     }
@@ -391,7 +413,7 @@ export class DrawingCanvas {
 
     this.currentStroke = null;
     this.lastPointPos = null;
-    this.redraw();
+    this.markStaticDirty();
   };
 
   private onPointerCancel = (e: PointerEvent) => {
@@ -405,50 +427,82 @@ export class DrawingCanvas {
       this.eraserPos = null;
       this.currentStroke = null;
       this.lastPointPos = null;
-      this.redraw();
+      this.markStaticDirty();
     }
   };
+
+  /**
+   * Updates cached static offscreen canvas (guides, beat markers, committed strokes, and empty state).
+   */
+  private renderStaticLayer() {
+    if (this.width <= 0 || this.height <= 0) return;
+
+    const ctx = this.offscreenCtx;
+    ctx.clearRect(0, 0, this.width, this.height);
+
+    // 1. Background pitch guides & beat markers
+    this.drawBackgroundGuides(ctx);
+
+    // 2. Empty state prompt if canvas has no strokes
+    if (state.strokes.length === 0) {
+      this.drawEmptyState(ctx);
+    } else {
+      // 3. Draw all committed strokes
+      for (const stroke of state.strokes) {
+        this.drawStroke(ctx, stroke, false);
+      }
+    }
+
+    this.staticLayerDirty = false;
+  }
 
   public redraw() {
     if (this.width <= 0 || this.height <= 0) return;
 
+    // Refresh static buffer if strokes, scales, or sizes changed
+    if (this.staticLayerDirty) {
+      this.renderStaticLayer();
+    }
+
+    // 1. Blit cached static buffer onto visible canvas in 1 ultra-fast draw call
     this.ctx.clearRect(0, 0, this.width, this.height);
+    this.ctx.drawImage(this.offscreenCanvas, 0, 0, this.width, this.height);
 
-    this.drawBackgroundGuides();
-
-    // Draw committed strokes in their track's pigment
-    for (const stroke of state.strokes) {
-      this.drawStroke(stroke);
-    }
-
-    // Draw currently active stroke in current track's pigment
+    // 2. Dynamic layer: live stroke being drawn right now
     if (this.currentStroke) {
-      this.drawStroke(this.currentStroke);
+      this.drawStroke(this.ctx, this.currentStroke, false);
     }
 
-    // Draw playhead and soft trail
+    // 3. Dynamic layer: stroke brightening highlights
+    const now = performance.now();
+    for (const stroke of state.strokes) {
+      if (this.strokeHighlights.has(stroke.id) && now < (this.strokeHighlights.get(stroke.id) || 0)) {
+        this.drawStroke(this.ctx, stroke, true);
+      }
+    }
+
+    // 4. Dynamic layer: playhead and soft trailing band
     this.drawPlayhead();
 
-    // Draw hit ripples
-    this.drawHitRipples();
+    // 5. Dynamic layer: hit ripples and fading note readouts
+    this.drawHitEffects();
 
-    // Draw active floating note badge
+    // 6. Floating note badge under finger/mouse when drawing
     if (this.activeNoteDisplay) {
       this.drawNoteBadge(this.activeNoteDisplay);
     }
 
-    // Draw eraser cursor circle
+    // 7. Eraser indicator cursor ring
     if (state.activeTool === 'eraser' && this.eraserPos) {
       this.drawEraserRing(this.eraserPos.x, this.eraserPos.y);
     }
   }
 
-  private drawBackgroundGuides() {
-    const ctx = this.ctx;
+  private drawBackgroundGuides(ctx: CanvasRenderingContext2D) {
     const scaleNotes = buildScaleNotes(state.rootNote, state.scaleName, 3, 6);
-
-    // Horizontal pitch guide lines at each scale note
     const noteCount = scaleNotes.length;
+
+    // Pitch guide lines
     for (let i = 0; i < noteCount; i++) {
       const midi = scaleNotes[i];
       const yNorm = 1 - i / (noteCount - 1);
@@ -462,7 +516,6 @@ export class DrawingCanvas {
       ctx.lineTo(this.width, y + 0.5);
       ctx.stroke();
 
-      // Show tiny DM Mono note label on the left edge for root notes only
       if (isRoot) {
         ctx.save();
         ctx.font = '500 10px "DM Mono", monospace';
@@ -475,7 +528,7 @@ export class DrawingCanvas {
       }
     }
 
-    // Vertical beat markers (8 beats in a 2-bar 4/4 loop)
+    // Vertical beat markers (8 beats in a 2-bar loop)
     const totalBeats = 8;
     for (let i = 1; i < totalBeats; i++) {
       const x = Math.round((i / totalBeats) * this.width);
@@ -489,29 +542,62 @@ export class DrawingCanvas {
     }
   }
 
-  private drawStroke(stroke: Stroke) {
-    const pts = stroke.points;
-    if (pts.length === 0) return;
+  private drawEmptyState(ctx: CanvasRenderingContext2D) {
+    const cx = this.width / 2;
+    const cy = this.height / 2;
 
-    const now = performance.now();
-    const isHighlighted = this.strokeHighlights.has(stroke.id) && now < (this.strokeHighlights.get(stroke.id) || 0);
-
-    const strokeColor = this.getTrackColor(stroke.trackId);
-    const ctx = this.ctx;
     ctx.save();
-    ctx.strokeStyle = strokeColor;
-    ctx.fillStyle = strokeColor;
-    ctx.lineWidth = isHighlighted ? stroke.width * 1.25 : stroke.width;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = '400 15px "Fraunces", serif';
+    ctx.fillStyle = '#5B554A';
+    ctx.fillText('Draw something. Anything.', cx, cy - 8);
+
+    // Hand-drawn style ink squiggle arrow
+    ctx.strokeStyle = 'rgba(28, 26, 22, 0.28)';
+    ctx.lineWidth = 1.5;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
+    const arrowY = cy + 18;
+    ctx.beginPath();
+    ctx.moveTo(cx - 36, arrowY);
+    ctx.quadraticCurveTo(cx - 4, arrowY + 12, cx + 28, arrowY + 3);
+    ctx.stroke();
+
+    // Arrowhead
+    ctx.beginPath();
+    ctx.moveTo(cx + 20, arrowY - 2);
+    ctx.lineTo(cx + 29, arrowY + 3);
+    ctx.lineTo(cx + 22, arrowY + 10);
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
+  private drawStroke(ctx: CanvasRenderingContext2D, stroke: Stroke, isHighlightOverlay: boolean) {
+    const pts = stroke.points;
+    if (pts.length === 0) return;
+
+    const strokeColor = this.getTrackColor(stroke.trackId);
+    ctx.save();
+    ctx.strokeStyle = strokeColor;
+    ctx.fillStyle = strokeColor;
+    ctx.lineWidth = isHighlightOverlay ? stroke.width * 1.25 : stroke.width;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    if (isHighlightOverlay) {
+      ctx.shadowColor = strokeColor;
+      ctx.shadowBlur = 6;
+    }
+
     if (pts.length === 1) {
-      // Single tap: draw a clean circular ink dot
       const pt = pts[0];
       const px = pt.x * this.width;
       const py = pt.y * this.height;
       ctx.beginPath();
-      ctx.arc(px, py, Math.max(2, (stroke.width * (isHighlighted ? 1.3 : 1)) * 0.7), 0, Math.PI * 2);
+      ctx.arc(px, py, Math.max(2, (stroke.width * (isHighlightOverlay ? 1.3 : 1)) * 0.7), 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
       return;
@@ -526,7 +612,6 @@ export class DrawingCanvas {
       return;
     }
 
-    // Smooth vector curve using quadratic curves between midpoints
     ctx.beginPath();
     ctx.moveTo(pts[0].x * this.width, pts[0].y * this.height);
 
@@ -555,8 +640,8 @@ export class DrawingCanvas {
     const px = progress * this.width;
     const ctx = this.ctx;
 
-    // Soft fading trail band behind playhead
-    const trailWidth = Math.min(26, this.width * 0.04);
+    // Faint fading band behind playhead (3% to 8% width)
+    const trailWidth = Math.max(16, Math.min(36, this.width * 0.05));
     const grad = ctx.createLinearGradient(px - trailWidth, 0, px, 0);
     grad.addColorStop(0, 'rgba(28, 26, 22, 0)');
     grad.addColorStop(0.7, 'rgba(28, 26, 22, 0.03)');
@@ -573,27 +658,52 @@ export class DrawingCanvas {
     ctx.stroke();
   }
 
-  private drawHitRipples() {
-    if (this.hitRipples.length === 0) return;
+  private drawHitEffects() {
+    if (this.hitEffects.length === 0) return;
     const now = performance.now();
     const ctx = this.ctx;
+    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-    // Retain only unexpired ripples
-    this.hitRipples = this.hitRipples.filter((r) => now - r.startTime < r.duration);
+    this.hitEffects = this.hitEffects.filter((r) => now - r.startTime < r.duration);
 
-    for (const r of this.hitRipples) {
+    for (const r of this.hitEffects) {
       const elapsed = now - r.startTime;
       const progress = elapsed / r.duration;
-      const radius = 3 + progress * 22; // expands to ~25px
-      const alpha = (1 - progress) * 0.85;
+      const alpha = Math.max(0, 1 - progress);
+      const px = r.x * this.width;
+      const py = r.y * this.height;
 
       ctx.save();
-      ctx.beginPath();
-      ctx.strokeStyle = r.color;
-      ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
-      ctx.lineWidth = 1.5;
-      ctx.arc(r.x * this.width, r.y * this.height, radius, 0, Math.PI * 2);
-      ctx.stroke();
+
+      if (prefersReducedMotion) {
+        // Reduced motion: simple opacity flash (no expanding ring)
+        ctx.beginPath();
+        ctx.fillStyle = r.color;
+        ctx.globalAlpha = alpha * 0.7;
+        ctx.arc(px, py, 6, 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        // Expanding ring ripple (stroke only, no fill, ~24px expansion)
+        const radius = 3 + progress * 21;
+        ctx.beginPath();
+        ctx.strokeStyle = r.color;
+        ctx.globalAlpha = alpha * 0.85;
+        ctx.lineWidth = 1.5;
+        ctx.arc(px, py, radius, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      // Small floating note readout near hit (e.g. "G4") fading over ~300ms
+      if (state.showHitNotes && elapsed < 320) {
+        const noteAlpha = Math.max(0, 1 - elapsed / 320);
+        ctx.font = '500 10px "DM Mono", monospace';
+        ctx.fillStyle = '#1C1A16';
+        ctx.globalAlpha = noteAlpha * 0.9;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText(r.noteName, px, py - 10 - progress * 8);
+      }
+
       ctx.restore();
     }
   }

@@ -76,6 +76,7 @@ export interface AppState {
   rootNote: number;
   scaleName: ScaleName;
   activeTool: ToolMode;
+  showHitNotes: boolean;
   strokes: Stroke[];
 }
 
@@ -88,6 +89,7 @@ export const state: AppState = {
   rootNote: 0, // C
   scaleName: 'major pentatonic',
   activeTool: 'draw',
+  showHitNotes: true,
   strokes: [],
 };
 

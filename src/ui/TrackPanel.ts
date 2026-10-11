@@ -217,6 +217,14 @@ export class TrackPanel {
             `).join('')}
           </div>
         </div>
+
+        <div class="key-section">
+          <span class="section-title">Display Options</span>
+          <label class="panel-checkbox-row">
+            <input type="checkbox" class="panel-checkbox" id="toggle-hit-notes" ${state.showHitNotes ? 'checked' : ''} />
+            <span class="checkbox-label">Show note names on playhead hit</span>
+          </label>
+        </div>
       </div>
     `;
   }
@@ -367,6 +375,12 @@ export class TrackPanel {
           this.render();
         }
       });
+    });
+
+    // Display options
+    const hitNotesToggle = this.panel.querySelector<HTMLInputElement>('#toggle-hit-notes');
+    hitNotesToggle?.addEventListener('change', () => {
+      state.showHitNotes = hitNotesToggle.checked;
     });
   }
 
