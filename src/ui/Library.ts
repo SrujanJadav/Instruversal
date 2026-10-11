@@ -98,7 +98,10 @@ export class LibraryModal {
 
           <div class="library-empty" id="lib-empty" style="display: none;">
             <div class="library-empty-title">Nothing saved yet</div>
-            <div class="library-empty-desc">Draw something and it shows up here.</div>
+            <div class="library-empty-desc">Draw something and it shows up here, or explore our demo song.</div>
+            <button type="button" class="library-btn library-btn-primary" id="lib-empty-demo-btn" style="margin-top: var(--space-3);">
+              Try: Perfect by Demo Artist
+            </button>
           </div>
         </div>
 
@@ -208,6 +211,15 @@ export class LibraryModal {
     // New button
     this.overlay.querySelector('#lib-new-btn')?.addEventListener('click', async () => {
       await getCreationManager().createNewCreation();
+      this.close();
+    });
+
+    // Empty state demo button
+    this.overlay.querySelector('#lib-empty-demo-btn')?.addEventListener('click', async () => {
+      const { MARIMBA_POP_CREATION } = await import('../presets/edDemoPerfect');
+      const store = getCreationStore();
+      await store.save(MARIMBA_POP_CREATION);
+      await getCreationManager().openCreation(MARIMBA_POP_CREATION, true);
       this.close();
     });
 

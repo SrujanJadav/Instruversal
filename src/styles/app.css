@@ -38,6 +38,82 @@
   gap: var(--space-2);
 }
 
+/* Gate Screen Corner Demo ('Try Yourself') */
+.gate-corner-demo {
+  position: absolute;
+  bottom: var(--space-4);
+  left: var(--space-4);
+  z-index: 20;
+}
+
+.gate-demo-btn {
+  appearance: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  padding: 10px 14px;
+  min-height: 44px;
+  background-color: var(--paper-deep);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-align: left;
+  touch-action: manipulation;
+  transition: transform var(--transition-fast), border-color var(--transition-fast), background-color var(--transition-fast);
+}
+
+.gate-demo-btn:hover {
+  transform: translateY(-1px);
+  border-color: var(--ink-soft);
+}
+
+.gate-demo-btn:active {
+  transform: translateY(0);
+  background-color: var(--paper);
+}
+
+.gate-demo-btn:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.gate-demo-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.gate-demo-pill {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--vermilion);
+}
+
+.gate-demo-title {
+  font-family: var(--font-display);
+  font-size: 0.98rem;
+  font-weight: 500;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+
+.gate-demo-hint {
+  font-family: var(--font-ui);
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+}
+
+@media (max-width: 600px) {
+  .gate-corner-demo {
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
+    left: 16px;
+  }
+}
+
 .gate-theme-wrapper {
   display: flex;
   align-items: center;

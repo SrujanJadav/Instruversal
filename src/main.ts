@@ -74,6 +74,15 @@ app.innerHTML = `
       </button>
       <span class="load-count-badge" id="gate-load-count">0 saved</span>
     </div>
+    <div class="gate-corner-demo" id="gate-corner-demo">
+      <button type="button" class="gate-demo-btn" id="gate-demo-btn" aria-label="Try yourself: Perfect by Demo Artist demo">
+        <div class="gate-demo-header">
+          <span class="gate-demo-pill">Try yourself</span>
+        </div>
+        <span class="gate-demo-title">Perfect · Demo Artist</span>
+        <span class="gate-demo-hint">Tap to play & explore</span>
+      </button>
+    </div>
   </section>
 
   <main class="main-view" id="main-view" aria-hidden="true" style="display: none;">
@@ -506,6 +515,36 @@ async function handleStart() {
 }
 
 startBtn.addEventListener('click', handleStart);
+
+const gateDemoBtn = document.querySelector<HTMLButtonElement>('#gate-demo-btn');
+gateDemoBtn?.addEventListener('click', async () => {
+  if (gateDemoBtn.disabled) return;
+  gateDemoBtn.disabled = true;
+  try {
+    // 1. Audio unlock within user gesture
+    if (Tone.context.state !== 'running') {
+      try {
+        await Tone.start();
+        state.audioStarted = true;
+        events.emit('audio:started', undefined);
+      } catch {}
+    }
+
+    // 2. Transition gate -> editor
+    await enterMainView(true);
+
+    // 3. Dynamically import and load the Perfect preset
+    const { MARIMBA_POP_CREATION } = await import('./presets/edDemoPerfect');
+    const store = getCreationStore();
+    await store.save(MARIMBA_POP_CREATION);
+    await creationManager.openCreation(MARIMBA_POP_CREATION, true);
+  } catch (err) {
+    console.error('Failed to load demo preset:', err);
+  } finally {
+    gateDemoBtn.disabled = false;
+  }
+});
+
 events.on('app:start', (opts) => enterMainView(opts?.startAudio));
 
 mixerBtn.addEventListener('click', () => {
