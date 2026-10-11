@@ -5,6 +5,8 @@ import './styles/app.css';
 import * as Tone from 'tone';
 import { CONFIG } from './config';
 import { state, events } from './state';
+import { DrawingCanvas } from './canvas/DrawingCanvas';
+import { DEFAULT_TRACK_CONFIGS, getTrackManager } from './audio/tracks';
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 
@@ -22,9 +24,11 @@ app.innerHTML = `
       <h2 class="header-title">${CONFIG.appName}</h2>
       <span class="header-status" id="header-status">AUDIO READY</span>
     </header>
-    <div class="canvas-placeholder-container" id="canvas-container">
-      <p class="placeholder-note">Canvas will be built in Step 2</p>
-    </div>
+
+    <!-- Temporary Track Selector Dots (Step 4) -->
+    <nav class="track-dot-row" id="track-dot-row" aria-label="Select track colour and instrument"></nav>
+
+    <div class="canvas-container" id="canvas-container"></div>
   </main>
 `;
 
@@ -32,51 +36,85 @@ const startBtn = document.querySelector<HTMLButtonElement>('#start-btn')!;
 const gateScreen = document.querySelector<HTMLElement>('#gate-screen')!;
 const mainView = document.querySelector<HTMLElement>('#main-view')!;
 const headerStatus = document.querySelector<HTMLElement>('#header-status')!;
-
-import { DrawingCanvas } from './canvas/DrawingCanvas';
+const trackDotRow = document.querySelector<HTMLElement>('#track-dot-row')!;
 
 let drawingCanvas: DrawingCanvas | null = null;
+
+function renderTrackDots() {
+  trackDotRow.innerHTML = '';
+  const trackManager = getTrackManager();
+
+  DEFAULT_TRACK_CONFIGS.forEach((trackConfig) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = `track-dot-btn ${trackConfig.id === state.selectedTrackId ? 'active' : ''}`;
+    btn.setAttribute('aria-label', `Select ${trackConfig.name} (${trackConfig.instrumentId})`);
+    btn.dataset.trackId = trackConfig.id;
+
+    const circle = document.createElement('span');
+    circle.className = 'track-dot-circle';
+    circle.style.backgroundColor = trackConfig.colorHex;
+
+    btn.appendChild(circle);
+
+    btn.addEventListener('click', () => {
+      state.selectedTrackId = trackConfig.id;
+
+      // Update active button state
+      trackDotRow.querySelectorAll('.track-dot-btn').forEach((el) => {
+        el.classList.toggle('active', (el as HTMLElement).dataset.trackId === trackConfig.id);
+      });
+
+      // Update header info
+      if (headerStatus) {
+        headerStatus.textContent = `${trackConfig.name.toUpperCase()} · ${trackConfig.instrumentId.toUpperCase()}`;
+      }
+
+      // Audition instrument with a short pleasant phrase
+      const track = trackManager.getTrack(trackConfig.id);
+      if (track) {
+        track.audition();
+      }
+
+      events.emit('track:select', trackConfig.id);
+    });
+
+    trackDotRow.appendChild(btn);
+  });
+}
 
 async function handleStart() {
   startBtn.disabled = true;
   startBtn.textContent = 'Starting…';
 
   try {
-    // Tone.start() must be called directly within a user gesture
+    // Tone.start() must be called directly within user gesture
     await Tone.start();
     state.audioStarted = true;
     events.emit('audio:started', undefined);
 
-    // Play a soft test note to confirm audio output
-    const testSynth = new Tone.Synth({
-      oscillator: { type: 'sine' },
-      envelope: { attack: 0.05, decay: 0.3, sustain: 0.2, release: 0.8 },
-    }).toDestination();
+    // Initialize track manager and audition default track
+    const trackManager = getTrackManager();
+    const defaultTrack = trackManager.getTrack(state.selectedTrackId);
+    if (defaultTrack) {
+      defaultTrack.audition();
+    }
 
-    testSynth.volume.value = -14;
-    testSynth.triggerAttackRelease('C4', '8n');
-
-    // Clean up test synth after release
-    window.setTimeout(() => {
-      testSynth.dispose();
-    }, 1500);
-
-    // Smoothly transition from gate to main view
+    // Transition to main screen
     gateScreen.classList.add('hidden');
     window.setTimeout(() => {
       gateScreen.style.display = 'none';
       mainView.style.display = 'flex';
       mainView.removeAttribute('aria-hidden');
 
-      if (headerStatus) {
-        headerStatus.textContent = `READY TO DRAW (${Tone.context.state.toUpperCase()})`;
+      renderTrackDots();
+
+      if (headerStatus && defaultTrack) {
+        headerStatus.textContent = `${defaultTrack.name.toUpperCase()} · ${defaultTrack.instrumentId.toUpperCase()}`;
       }
 
-      // Initialize drawing engine
       const canvasContainer = document.querySelector<HTMLElement>('#canvas-container');
       if (canvasContainer && !drawingCanvas) {
-        canvasContainer.innerHTML = '';
-        canvasContainer.className = 'canvas-container';
         drawingCanvas = new DrawingCanvas(canvasContainer);
       }
     }, 220);

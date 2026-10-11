@@ -117,6 +117,53 @@
   -webkit-touch-callout: none;
 }
 
+/* Temporary Track Dots Row (Step 4) */
+.track-dot-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+}
+
+.track-dot-btn {
+  appearance: none;
+  border: none;
+  background: transparent;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  touch-action: manipulation;
+  padding: 0;
+}
+
+.track-dot-circle {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid rgba(28, 26, 22, 0.2);
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.track-dot-btn:hover .track-dot-circle {
+  transform: scale(1.1);
+}
+
+.track-dot-btn.active .track-dot-circle {
+  transform: scale(1.15);
+  box-shadow: 0 0 0 2px var(--paper), 0 0 0 3.5px var(--ink);
+}
+
+.track-dot-label {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--ink-soft);
+  margin-left: var(--space-1);
+}
+
 .placeholder-note {
   font-family: var(--font-mono);
   font-size: 0.8rem;

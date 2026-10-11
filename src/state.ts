@@ -21,6 +21,7 @@ export type EventMap = {
   'transport:pause': void;
   'bpm:change': number;
   'scale:change': { rootNote: number; scaleName: ScaleName };
+  'track:select': string;
   'stroke:added': Stroke;
   'strokes:updated': Stroke[];
 };

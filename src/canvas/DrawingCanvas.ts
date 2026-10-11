@@ -1,4 +1,3 @@
-import * as Tone from 'tone';
 import { Stroke, state, events } from '../state';
 import {
   buildScaleNotes,
@@ -6,6 +5,7 @@ import {
   midiToNoteName,
   isRootNote,
 } from '../audio/scales';
+import { getTrackManager } from '../audio/tracks';
 
 export class DrawingCanvas {
   private container: HTMLElement;
@@ -24,13 +24,14 @@ export class DrawingCanvas {
   private lastPointPos: { x: number; y: number } | null = null;
 
   // Live pitch preview & readout
-  private previewSynth: Tone.Synth | null = null;
   private lastPreviewMidi: number | null = null;
   private lastPreviewTime: number = 0;
   private activeNoteDisplay: { name: string; x: number; y: number } | null = null;
 
-  // Track pigment for Step 2 & 3 (vermilion)
-  private readonly defaultColor = '#D2432A';
+  // Event cleanup
+  private unsubTrackSelect: (() => void) | null = null;
+
+  // Line styling
   private readonly lineColor = 'rgba(28, 26, 22, 0.16)';
   private readonly lineRootColor = 'rgba(28, 26, 22, 0.28)';
   private readonly lineSubtleColor = 'rgba(28, 26, 22, 0.08)';
@@ -63,17 +64,12 @@ export class DrawingCanvas {
     window.addEventListener('resize', this.onWindowResize);
     window.addEventListener('orientationchange', this.onWindowResize);
 
+    this.unsubTrackSelect = events.on('track:select', () => {
+      this.redraw();
+    });
+
     // Initial sizing
     this.handleResize();
-  }
-
-  private initPreviewSynth() {
-    if (this.previewSynth) return;
-    this.previewSynth = new Tone.Synth({
-      oscillator: { type: 'sine' },
-      envelope: { attack: 0.015, decay: 0.12, sustain: 0.05, release: 0.18 },
-    }).toDestination();
-    this.previewSynth.volume.value = -12;
   }
 
   private onWindowResize = () => {
@@ -112,6 +108,11 @@ export class DrawingCanvas {
     this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
   }
 
+  private getTrackColor(trackId: string): string {
+    const track = getTrackManager().getTrack(trackId);
+    return track ? track.colorHex : '#D2432A';
+  }
+
   private triggerLivePitch(normX: number, normY: number) {
     const scaleNotes = buildScaleNotes(state.rootNote, state.scaleName, 3, 6);
     const midi = yToMidi(normY, scaleNotes);
@@ -121,20 +122,21 @@ export class DrawingCanvas {
 
     if (!state.audioStarted) return;
 
-    if (!this.previewSynth) {
-      this.initPreviewSynth();
-    }
-
     const now = performance.now();
     // Throttle preview note: trigger if pitch changed or if > 110ms elapsed
-    if (this.previewSynth && (midi !== this.lastPreviewMidi || now - this.lastPreviewTime > 110)) {
+    if (midi !== this.lastPreviewMidi || now - this.lastPreviewTime > 110) {
       try {
-        const freq = Tone.Frequency(midi, 'midi').toFrequency();
-        this.previewSynth.triggerAttackRelease(freq, '16n');
+        getTrackManager().triggerNoteOnTrack(
+          state.selectedTrackId,
+          midi,
+          '16n',
+          undefined,
+          0.75
+        );
         this.lastPreviewMidi = midi;
         this.lastPreviewTime = now;
       } catch {
-        // Safe guard against audio context suspension
+        // Safe guard against suspended audio
       }
     }
   }
@@ -265,12 +267,12 @@ export class DrawingCanvas {
 
     this.drawBackgroundGuides();
 
-    // Draw committed strokes
+    // Draw committed strokes in their track's pigment
     for (const stroke of state.strokes) {
       this.drawStroke(stroke);
     }
 
-    // Draw currently active stroke
+    // Draw currently active stroke in current track's pigment
     if (this.currentStroke) {
       this.drawStroke(this.currentStroke);
     }
@@ -307,7 +309,6 @@ export class DrawingCanvas {
         ctx.fillStyle = '#5B554A';
         ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
-        // Faint background tab behind the root label for legibility
         const label = midiToNoteName(midi);
         ctx.fillText(label, 6, y - 7);
         ctx.restore();
@@ -333,10 +334,11 @@ export class DrawingCanvas {
     const pts = stroke.points;
     if (pts.length === 0) return;
 
+    const strokeColor = this.getTrackColor(stroke.trackId);
     const ctx = this.ctx;
     ctx.save();
-    ctx.strokeStyle = this.defaultColor;
-    ctx.fillStyle = this.defaultColor;
+    ctx.strokeStyle = strokeColor;
+    ctx.fillStyle = strokeColor;
     ctx.lineWidth = stroke.width;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
@@ -429,8 +431,10 @@ export class DrawingCanvas {
   }
 
   public destroy() {
-    this.previewSynth?.dispose();
-    this.previewSynth = null;
+    if (this.unsubTrackSelect) {
+      this.unsubTrackSelect();
+      this.unsubTrackSelect = null;
+    }
     this.resizeObserver.disconnect();
     window.removeEventListener('resize', this.onWindowResize);
     window.removeEventListener('orientationchange', this.onWindowResize);
