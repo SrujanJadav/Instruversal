@@ -85,6 +85,7 @@ export type EventMap = {
   'eraser:radius-change': number;
   'eraser:mode-change': 'part' | 'stroke';
   'eraser:track-only-change': boolean;
+  'app:start': { startAudio?: boolean } | undefined;
 };
 
 type EventKey = keyof EventMap;
@@ -379,4 +380,10 @@ export function canUndo(): boolean {
 
 export function canRedo(): boolean {
   return redoStack.length > 0;
+}
+
+export function clearHistory(): void {
+  undoStack = [];
+  redoStack = [];
+  emitHistoryChange();
 }

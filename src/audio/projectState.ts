@@ -1,8 +1,9 @@
-import { state, events, Stroke, TrackType, PlaybackMode, BeatPlaybackMode, BeatFlowStyle, BeatRollVoice, BeatSweepCharacter } from '../state';
+import { state, events, Stroke, TrackType, PlaybackMode, BeatPlaybackMode, BeatFlowStyle, BeatRollVoice, BeatSweepCharacter, FxConfig } from '../state';
 import { getTrackManager, Track } from './tracks';
 import { DrumKitId } from './drums';
 import { BeatRate } from './beatSchedule';
 import { ScaleName } from './scales';
+import { getMasterEffectsRack } from './effects';
 
 export const PROJECT_STORAGE_KEY = 'instruversal:project';
 
@@ -34,10 +35,18 @@ export interface SerializedProject {
   glide: number;
   tracks: SerializedTrack[];
   strokes: Stroke[];
+  fx?: FxConfig;
 }
 
 export function serializeProject(tracks?: Track[]): SerializedProject {
-  const allTracks = tracks || getTrackManager().getAllTracks();
+  let allTracks = tracks;
+  if (!allTracks) {
+    try {
+      allTracks = getTrackManager().getAllTracks();
+    } catch {
+      allTracks = [];
+    }
+  }
   const serializedTracks: SerializedTrack[] = allTracks.map((t: Track) => ({
     id: t.id,
     name: t.name,
@@ -66,6 +75,7 @@ export function serializeProject(tracks?: Track[]): SerializedProject {
     glide: state.glide,
     tracks: serializedTracks,
     strokes: state.strokes,
+    fx: state.fx ? JSON.parse(JSON.stringify(state.fx)) : undefined,
   };
 }
 
@@ -102,6 +112,13 @@ export function deserializeProject(data: SerializedProject, tracks?: Track[]): b
   if (data.playbackMode) state.playbackMode = data.playbackMode;
   if (typeof data.glide === 'number') state.glide = data.glide;
   if (Array.isArray(data.strokes)) state.strokes = data.strokes;
+  if (data.fx && typeof data.fx === 'object') {
+    state.fx = { ...state.fx, ...data.fx };
+    try {
+      getMasterEffectsRack().applyConfig(state.fx);
+    } catch {}
+    events.emit('fx:change', state.fx);
+  }
 
   return true;
 }
@@ -170,6 +187,7 @@ export function initProjectAutosave(): () => void {
     events.on('track:beat-param-change', scheduleAutosave),
     events.on('track:type-change', scheduleAutosave),
     events.on('track:update', scheduleAutosave),
+    events.on('fx:change', scheduleAutosave),
   ];
 
   return () => {

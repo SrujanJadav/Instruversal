@@ -199,3 +199,47 @@ export function initAudioLifecycle(): () => void {
     releaseWakeLock();
   };
 }
+
+/**
+ * Fades master gain to zero over durationSec (default 150ms) to allow effect tails
+ * to ring out naturally, pauses the transport, and cleanly releases all voice pools.
+ * Does NOT suspend the AudioContext so it remains unlocked for future sound.
+ */
+export async function fadeMasterOut(durationSec: number = 0.15): Promise<void> {
+  try {
+    const rack = getMasterEffectsRack();
+    if (rack && rack.masterGain) {
+      rack.masterGain.gain.rampTo(0, durationSec);
+    }
+  } catch {}
+
+  // Allow tails to ring out naturally over the fade duration
+  await new Promise((resolve) => setTimeout(resolve, durationSec * 1000));
+
+  if (Tone.getTransport().state === 'started') {
+    getTransport().pause();
+  }
+
+  // Release voices cleanly without clicks
+  try {
+    getFlowVoicePool().releaseAll(0.01);
+  } catch {}
+  try {
+    getBeatFlowVoicePool().releaseAll(0.01);
+  } catch {}
+  try {
+    getPreviewEngine().cancelPreview();
+  } catch {}
+}
+
+/**
+ * Restores the master gain node back to unity/calibrated level with a subtle click-free ramp.
+ */
+export function restoreMasterGain(): void {
+  try {
+    const rack = getMasterEffectsRack();
+    if (rack && rack.masterGain) {
+      rack.masterGain.gain.rampTo(0.75, 0.05);
+    }
+  } catch {}
+}

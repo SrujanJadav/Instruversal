@@ -21,8 +21,13 @@ export class SyncSettingsPill {
     btn.type = 'button';
     btn.className = 'header-btn sync-settings-btn';
     btn.id = 'header-sync-btn';
-    btn.setAttribute('aria-label', 'Audio sync settings');
-    btn.textContent = 'Sync';
+    btn.setAttribute('aria-label', 'Sync audio and visuals');
+    btn.innerHTML = `
+      <span class="sync-text">Sync</span>
+      <svg class="sync-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M2 12h2l3-7 4 14 4-10 3 5h4" />
+      </svg>
+    `;
 
     this.wrapper.appendChild(btn);
     parent.insertBefore(this.wrapper, parent.firstChild);
@@ -54,7 +59,7 @@ export class SyncSettingsPill {
     });
   }
 
-  private close() {
+  public close() {
     if (this.isTestPlaying) {
       this.stopTestClick();
     }

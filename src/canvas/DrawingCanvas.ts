@@ -206,6 +206,26 @@ export class DrawingCanvas {
     }
   };
 
+  /**
+   * Pauses the animation loop and playhead redraws to save battery.
+   */
+  public pause() {
+    if (this.animFrameId !== null) {
+      cancelAnimationFrame(this.animFrameId);
+      this.animFrameId = null;
+    }
+  }
+
+  /**
+   * Resumes the canvas render loop and requests a fresh redraw.
+   */
+  public resume() {
+    this.markStaticDirty();
+    if (state.isPlaying) {
+      this.startAnimation();
+    }
+  }
+
   private onWindowResize = () => {
     this.handleResize();
   };

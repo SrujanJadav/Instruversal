@@ -17,6 +17,8 @@ Instruversal is a draw-to-compose loop sequencer for desktop and phones. Draw st
 - **Beat Tracks & Drum Lanes:** Dedicated 8-voice drum kit engine with 8 visual drum lanes, rhythm quantization, swing, humanization, and continuous Glide/Roll/Sweep beat flow modes.
 - **Master Effects Rack:** 7-module studio chain featuring Soft Drive saturation, Sweeping Auto-Filter, 3-Band Parametric EQ, Dimension Chorus, Ping-Pong Delay, Lush Algorithmic Reverb, and Master Peak Limiter with one-tap presets.
 - **Key & Scale Audition:** 12 root keys and 6 diatonic/pentatonic musical scales with interactive audio scale strips and chord auditions.
+- **My Creations Library:** Device-local IndexedDB storage for sketches with auto-save, RDP-simplified live SVG thumbnails that recolor with light/dark themes, card duplication, and JSON backup export/import.
+- **3D Circular Gallery:** Dynamic WebGL gallery powered by [OGL](https://github.com/oframe/ogl) on the start screen (#/load), presenting creations as colorful portrait cards on a curved arc with momentum physics and drag/swipe navigation.
 - **Light & Dark Themes:** Tactile paper-and-ink light mode and inked-night dark mode with a sky-style sun/moon toggle, zero theme flash, and WCAG-compliant contrast.
 - **Share Links & Autosave:** Share entire compositions via self-contained URL fragments with local backup autosave.
 - **Mobile-First & Accessible:** 44px+ touch targets, hardware haptics, pointer events, screen wake lock during playback, and audio interruption handling.
@@ -36,7 +38,7 @@ The canvas functions as a tactile graphic score:
 
 - **Runtime:** Vanilla TypeScript (strict mode, zero UI framework overhead)
 - **Audio Engine:** [Tone.js](https://tonejs.github.io/) running on interactive low-latency Web Audio Context
-- **Rendering:** HTML5 Canvas 2D with offscreen static layer caching and devicePixelRatio scaling
+- **Rendering:** HTML5 Canvas 2D with offscreen static layer caching and [OGL](https://github.com/oframe/ogl) for the 3D gallery
 - **Styling:** Vanilla CSS with custom paper-and-ink design tokens
 - **Build Tool:** [Vite](https://vitejs.dev/)
 
@@ -112,13 +114,28 @@ instruversal/
 │   │   ├── tracks.ts       # Track channels, mute/solo & auditioning
 │   │   └── voicePool.ts    # Polyphonic dynamic voice allocator for Flow mode
 │   ├── canvas/             # Canvas 2D renderer & touch/pen pointer handlers
+│   │   ├── eraser.ts       # Partial stroke circle intersection & geometry splitting
 │   │   └── DrawingCanvas.ts# Offscreen static buffer, playhead & hit ripple animator
+│   ├── gallery/            # 3D Circular Gallery on start page (#/load)
+│   │   ├── CircularGallery.ts # Plain TypeScript & OGL 3D curved gallery component
+│   │   ├── GalleryModal.ts # Route handler, opening/zoom animations & accessibility
+│   │   ├── thumbnail.ts    # Bounding-box fitted portrait thumbnail canvas renderer
+│   │   └── constants.ts    # Tunable animation timings, easings and physics
+│   ├── library/            # Device-local IndexedDB creations library
+│   │   ├── types.ts        # Creation, CreationMeta & CreationStore interfaces
+│   │   ├── store.ts        # IndexedDB wrapper with in-memory fallback & quota handling
+│   │   ├── manager.ts      # Active creation tracking & 800ms debounced autosave
+│   │   ├── simplify.ts     # Ramer-Douglas-Peucker stroke simplification for previews
+│   │   └── validator.ts    # Untrusted data validation, clamping & instrument fallback
 │   ├── styles/             # Design tokens, typography & component styles
 │   │   ├── tokens.css      # Paper, ink, and gouache pigment palette variables
 │   │   ├── base.css        # Reset, typography, paper grain & focus outlines
 │   │   ├── app.css         # Layout, toolbar dock, panels & responsiveness
+│   │   ├── library.css     # My creations library modal & card grid styling
+│   │   ├── gallery.css     # 3D circular gallery screen & load button styling
 │   │   └── theme-toggle.css# Sky theme switch animations and geometry
 │   ├── ui/                 # Accessible DOM components & dialog sheets
+│   │   ├── Library.ts      # Library screen with SVG thumbnails & 3-dot management
 │   │   ├── FxPanel.ts      # Master effects drawer
 │   │   ├── SyncSettingsPill.ts # Audio latency calibration popup
 │   │   ├── ThemeToggle.ts  # Sky theme switch controller
@@ -140,8 +157,10 @@ instruversal/
 
 - Inspired by the exploratory design of the `play_music_theory` web application by **Tala Rae Schlossberg**.
 - Audio engine powered by [Tone.js](https://tonejs.github.io/).
+- 3D gallery graphics powered by [OGL](https://github.com/oframe/ogl).
+- Circular gallery concept adapted to vanilla TypeScript & OGL from community component. *(Note: If you have author or license details, please submit an issue or pull request to update attribution).*
 - Typography set in **Fraunces**, **Instrument Sans**, and **DM Mono** via Google Fonts.
-- Sky-style theme toggle component adapted from a community component. *(Note: If you have author or license details, please submit an issue or pull request to update attribution).*
+- Sky-style theme toggle component adapted from community component. *(Note: If you have author or license details, please submit an issue or pull request to update attribution).*
 
 ---
 
