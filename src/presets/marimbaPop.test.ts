@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  MARIMBA_POP_SPEC,
+  MARIMBA_POP_INTRO_SPEC,
   convertExampleSongToProject,
   normalizeDrumSound,
   parseRootPitchClass,
@@ -10,24 +10,32 @@ import { generateEventsFromStrokes } from '../audio/schedule';
 import { generateFlowEventsFromStrokes } from '../audio/flowScheduler';
 import { generateBeatEventsFromStrokes } from '../audio/beatSchedule';
 
-describe('Marimba Pop (original) - F# Natural Minor Specification and Round-Trip Tests', () => {
-  const song = MARIMBA_POP_SPEC;
+describe('Marimba Pop Intro Hook - C# Natural Minor Specification and Round-Trip Tests', () => {
+  const song = MARIMBA_POP_INTRO_SPEC;
   const project = convertExampleSongToProject(song);
   const rootPitch = parseRootPitchClass(song.project.root);
   const scaleNotes = buildScaleNotes(rootPitch, 'natural minor', 1, 6);
 
-  it('verifies metadata: title, credit, licence, root F#, tempo 98, 2 bars', () => {
-    expect(song.project.title).toBe('Marimba Pop');
-    expect(song.project.credit).toBe('Original');
-    expect(song.project.licence).toBe('original, MIT');
-    expect(song.project.tempoBpm).toBe(98);
+  it('verifies 96 BPM tempo, C# minor key, 2-bar length, and effects configuration', () => {
+    expect(song.project.tempoBpm).toBe(96);
     expect(song.project.lengthBars).toBe(2);
-    expect(song.project.root).toBe('F#');
-    expect(rootPitch).toBe(6);
+    expect(song.project.root).toBe('C#');
+    expect(rootPitch).toBe(1);
     expect(song.project.timelineBeats).toBe(8);
+
+    // Verify effects setup
+    expect(project.bpm).toBe(96);
+    expect(project.glide).toBe(5); // 0% - 5% mallet transient
+    expect(project.fx?.delay.bypassed).toBe(false);
+    expect(project.fx?.delay.amount).toBe(12);
+    expect(project.fx?.reverb.bypassed).toBe(false);
+    expect(project.fx?.reverb.size).toBe(1.3);
+    expect(project.fx?.reverb.amount).toBe(15);
+    expect(project.fx?.drive.bypassed).toBe(false);
+    expect(project.fx?.drive.amount).toBe(5);
   });
 
-  it('verifies every melodic note in the piece is inside F# natural minor', () => {
+  it('verifies every melodic note in the piece is inside C# natural minor', () => {
     const naturalMinorIntervals = SCALES['natural minor'];
     const validPitchClasses = naturalMinorIntervals.map(
       (interval) => (rootPitch + interval) % 12
@@ -39,7 +47,7 @@ describe('Marimba Pop (original) - F# Natural Minor Specification and Round-Trip
         const pitchClass = ((note.pitch % 12) + 12) % 12;
         expect(
           validPitchClasses.includes(pitchClass),
-          `Note pitch ${note.pitch} (pitch class ${pitchClass}) must be inside F# natural minor`
+          `Note pitch ${note.pitch} (pitch class ${pitchClass}) must be inside C# natural minor`
         ).toBe(true);
       }
     }
@@ -77,7 +85,7 @@ describe('Marimba Pop (original) - F# Natural Minor Specification and Round-Trip
     }
   });
 
-  it('round-trip test Track 2 (Deep Sub Bass, Flow mode): recovers exact pitches and start times within 1ms', () => {
+  it('round-trip test Track 2 (Deep Sub Bass, Flow mode): recovers downbeat root notes (C#2->F#2->A2->B2) and start times within 1ms', () => {
     const track2Def = song.tracks.find((t) => t.id === 2)!;
     const track2Strokes = project.strokes.filter((s) => s.trackId === 'track-2');
 
@@ -90,7 +98,7 @@ describe('Marimba Pop (original) - F# Natural Minor Specification and Round-Trip
       song.project.lengthBars,
       song.project.tempoBpm,
       scaleNotes,
-      20
+      5
     );
 
     // Sort chronologically

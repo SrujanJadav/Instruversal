@@ -46,20 +46,27 @@ export interface ExampleSongDef {
   tracks: ExampleTrackDef[];
 }
 
-export const MARIMBA_POP_SPEC: ExampleSongDef = {
+/**
+ * Marimba Pop - Iconic Intro Hook Specification
+ * Tempo: 96 BPM
+ * Key: C# minor (root 1, natural minor)
+ * Chord Progression: C#m -> F#m -> A -> B
+ * Rhythm: 3+3+2 Tresillo syncopated pulse
+ */
+export const MARIMBA_POP_INTRO_SPEC: ExampleSongDef = {
   project: {
     title: "Marimba Pop",
     credit: "Original",
     licence: "original, MIT",
-    tempoBpm: 98,
+    tempoBpm: 96,
     timeSignature: "4/4",
     lengthBars: 2,
-    root: "F#",
-    scale: "F# natural minor",
+    root: "C#",
+    scale: "C# natural minor",
     timelineBeats: 8,
     startBeat: 0,
-    msPerBeat: 612.2448979591837,
-    startTimeMsFormula: "startBeat * 60000 / 98"
+    msPerBeat: 625.0, // 60000 / 96
+    startTimeMsFormula: "startBeat * 60000 / 96"
   },
   tracks: [
     {
@@ -67,20 +74,47 @@ export const MARIMBA_POP_SPEC: ExampleSongDef = {
       name: "Warm Pluck / Marimba",
       mode: "Notes",
       sound: "Soft, rounded marimba or muted pluck; short decay; warm tone; subtle stereo width",
-      defaultVelocity: 0.8,
+      defaultVelocity: 0.82,
       notes: [
-        { pitch: 66, startBeat: 0.00, duration: 0.50, velocity: 0.8 },
-        { pitch: 69, startBeat: 0.75, duration: 0.25, velocity: 0.8 },
-        { pitch: 73, startBeat: 1.25, duration: 0.50, velocity: 0.8 },
-        { pitch: 71, startBeat: 2.00, duration: 0.50, velocity: 0.8 },
-        { pitch: 69, startBeat: 2.75, duration: 0.25, velocity: 0.8 },
-        { pitch: 64, startBeat: 3.50, duration: 0.25, velocity: 0.8 },
-        { pitch: 66, startBeat: 4.00, duration: 0.50, velocity: 0.8 },
-        { pitch: 69, startBeat: 4.75, duration: 0.25, velocity: 0.8 },
-        { pitch: 73, startBeat: 5.25, duration: 0.50, velocity: 0.8 },
-        { pitch: 71, startBeat: 6.00, duration: 0.25, velocity: 0.8 },
-        { pitch: 69, startBeat: 6.50, duration: 0.25, velocity: 0.8 },
-        { pitch: 66, startBeat: 7.00, duration: 1.00, velocity: 0.8 }
+        // --- BAR 1 ---
+        // C#m: 3+3+2 pulse hits (C#5=73 + E5=76 dyad)
+        { pitch: 73, startBeat: 0.00, duration: 0.25, velocity: 0.85 },
+        { pitch: 76, startBeat: 0.00, duration: 0.25, velocity: 0.85 },
+        { pitch: 73, startBeat: 0.75, duration: 0.25, velocity: 0.80 },
+        { pitch: 76, startBeat: 0.75, duration: 0.25, velocity: 0.80 },
+        { pitch: 73, startBeat: 1.50, duration: 0.25, velocity: 0.82 },
+        { pitch: 76, startBeat: 1.50, duration: 0.25, velocity: 0.82 },
+
+        // F#m: pulse hits (C#5=73 + E5=76 dyad)
+        { pitch: 73, startBeat: 2.00, duration: 0.25, velocity: 0.84 },
+        { pitch: 76, startBeat: 2.00, duration: 0.25, velocity: 0.84 },
+        { pitch: 73, startBeat: 2.75, duration: 0.25, velocity: 0.80 },
+        { pitch: 76, startBeat: 2.75, duration: 0.25, velocity: 0.80 },
+
+        // Turnaround end of Bar 1: descending flick E5 (76) -> D#5 (75) -> B4 (71)
+        { pitch: 76, startBeat: 3.25, duration: 0.25, velocity: 0.82 },
+        { pitch: 75, startBeat: 3.50, duration: 0.25, velocity: 0.80 },
+        { pitch: 71, startBeat: 3.75, duration: 0.25, velocity: 0.78 },
+
+        // --- BAR 2 ---
+        // A: 3+3+2 pulse hits (C#5=73 + E5=76 dyad)
+        { pitch: 73, startBeat: 4.00, duration: 0.25, velocity: 0.85 },
+        { pitch: 76, startBeat: 4.00, duration: 0.25, velocity: 0.85 },
+        { pitch: 73, startBeat: 4.75, duration: 0.25, velocity: 0.80 },
+        { pitch: 76, startBeat: 4.75, duration: 0.25, velocity: 0.80 },
+        { pitch: 73, startBeat: 5.50, duration: 0.25, velocity: 0.82 },
+        { pitch: 76, startBeat: 5.50, duration: 0.25, velocity: 0.82 },
+
+        // B: pulse hits (C#5=73 + E5=76 dyad)
+        { pitch: 73, startBeat: 6.00, duration: 0.25, velocity: 0.84 },
+        { pitch: 76, startBeat: 6.00, duration: 0.25, velocity: 0.84 },
+        { pitch: 73, startBeat: 6.75, duration: 0.25, velocity: 0.80 },
+        { pitch: 76, startBeat: 6.75, duration: 0.25, velocity: 0.80 },
+
+        // Turnaround end of Bar 2: resolve down D#5 (75) -> C#5 (73) -> B4 (71)
+        { pitch: 75, startBeat: 7.25, duration: 0.25, velocity: 0.80 },
+        { pitch: 73, startBeat: 7.50, duration: 0.25, velocity: 0.78 },
+        { pitch: 71, startBeat: 7.75, duration: 0.25, velocity: 0.76 }
       ]
     },
     {
@@ -90,9 +124,11 @@ export const MARIMBA_POP_SPEC: ExampleSongDef = {
       sound: "Round, deep sub-bass with tight releases; locks with the kick",
       defaultVelocity: 0.9,
       notes: [
-        { pitch: 42, startBeat: 4.00, duration: 1.25, velocity: 0.9 },
-        { pitch: 45, startBeat: 5.50, duration: 0.50, velocity: 0.9 },
-        { pitch: 49, startBeat: 6.75, duration: 1.25, velocity: 0.9 }
+        // Root notes on downbeats: C#2 (37) -> F#2 (42) -> A2 (45) -> B2 (47)
+        { pitch: 37, startBeat: 0.00, duration: 1.50, velocity: 0.90 },
+        { pitch: 42, startBeat: 2.00, duration: 1.50, velocity: 0.90 },
+        { pitch: 45, startBeat: 4.00, duration: 1.50, velocity: 0.90 },
+        { pitch: 47, startBeat: 6.00, duration: 1.50, velocity: 0.90 }
       ]
     },
     {
@@ -102,31 +138,45 @@ export const MARIMBA_POP_SPEC: ExampleSongDef = {
       kit: "808",
       sound: "Punchy kick, dry clap, tight closed hi-hat, lightly airy open hi-hat",
       hits: [
-        { drum: "kick",      startBeat: 4.00, velocity: 0.9 },
-        { drum: "closedHat", startBeat: 4.00, velocity: 0.7 },
+        // Kick on tresillo dancehall accents
+        { drum: "kick",      startBeat: 0.00, velocity: 0.90 },
+        { drum: "kick",      startBeat: 1.50, velocity: 0.88 },
+        { drum: "kick",      startBeat: 4.00, velocity: 0.90 },
+        { drum: "kick",      startBeat: 5.50, velocity: 0.88 },
+        { drum: "kick",      startBeat: 6.75, velocity: 0.85 },
 
-        { drum: "closedHat", startBeat: 4.50, velocity: 0.5 },
-
+        // Clap on backbeats (beats 2 & 4)
+        { drum: "clap",      startBeat: 1.00, velocity: 0.85 },
+        { drum: "clap",      startBeat: 3.00, velocity: 0.85 },
         { drum: "clap",      startBeat: 5.00, velocity: 0.85 },
-        { drum: "closedHat", startBeat: 5.00, velocity: 0.7 },
-
-        { drum: "kick",      startBeat: 5.50, velocity: 0.9 },
-        { drum: "closedHat", startBeat: 5.50, velocity: 0.5 },
-
-        { drum: "closedHat", startBeat: 6.00, velocity: 0.7 },
-
-        { drum: "openHat",   startBeat: 6.50, velocity: 0.6 },
-
-        { drum: "kick",      startBeat: 6.75, velocity: 0.9 },
-
         { drum: "clap",      startBeat: 7.00, velocity: 0.85 },
-        { drum: "closedHat", startBeat: 7.00, velocity: 0.5 },
 
-        { drum: "closedHat", startBeat: 7.50, velocity: 0.7 }
+        // Closed hats pulse
+        { drum: "closedHat", startBeat: 0.00, velocity: 0.70 },
+        { drum: "closedHat", startBeat: 0.50, velocity: 0.50 },
+        { drum: "closedHat", startBeat: 1.00, velocity: 0.70 },
+        { drum: "closedHat", startBeat: 1.50, velocity: 0.50 },
+        { drum: "closedHat", startBeat: 2.00, velocity: 0.70 },
+        { drum: "closedHat", startBeat: 2.50, velocity: 0.50 },
+        { drum: "closedHat", startBeat: 3.00, velocity: 0.70 },
+
+        { drum: "closedHat", startBeat: 4.00, velocity: 0.70 },
+        { drum: "closedHat", startBeat: 4.50, velocity: 0.50 },
+        { drum: "closedHat", startBeat: 5.00, velocity: 0.70 },
+        { drum: "closedHat", startBeat: 5.50, velocity: 0.50 },
+        { drum: "closedHat", startBeat: 6.00, velocity: 0.70 },
+        { drum: "closedHat", startBeat: 6.50, velocity: 0.50 },
+        { drum: "closedHat", startBeat: 7.00, velocity: 0.70 },
+
+        // Open hats marking the turnarounds
+        { drum: "openHat",   startBeat: 3.50, velocity: 0.65 },
+        { drum: "openHat",   startBeat: 7.50, velocity: 0.65 }
       ]
     }
   ]
 };
+
+export const MARIMBA_POP_SPEC = MARIMBA_POP_INTRO_SPEC;
 
 export function normalizeDrumSound(name: string): DrumSoundId {
   if (name === 'closedHat') return 'closed-hat';
@@ -144,7 +194,7 @@ export function parseRootPitchClass(root: string): number {
     'A': 9, 'A#': 10, 'Bb': 10,
     'B': 11,
   };
-  return map[root] ?? 6;
+  return map[root] ?? 1;
 }
 
 /**
@@ -232,12 +282,12 @@ export function convertExampleSongToProject(songDef: ExampleSongDef): ProjectDat
 
   return {
     version: 1,
-    bpm: songDef.project.tempoBpm,
+    bpm: songDef.project.tempoBpm, // 96 BPM
     bars: songDef.project.lengthBars,
-    rootNote: rootPitch,
-    scaleName,
+    rootNote: rootPitch, // C# = 1
+    scaleName, // 'natural minor'
     playbackMode: 'flow',
-    glide: 20,
+    glide: 5, // Glide turned down to 5% so notes strike sharply like physical mallets
     tracks: [
       {
         id: 'track-1',
@@ -245,7 +295,7 @@ export function convertExampleSongToProject(songDef: ExampleSongDef): ProjectDat
         trackType: 'melodic',
         instrumentId: 'marimba',
         kitId: '808',
-        volume: 0.8,
+        volume: 0.85,
         muted: false,
         solo: false,
         beatRate: '1/16',
@@ -262,7 +312,7 @@ export function convertExampleSongToProject(songDef: ExampleSongDef): ProjectDat
         trackType: 'melodic',
         instrumentId: 'sub-bass',
         kitId: '808',
-        volume: 0.9,
+        volume: 0.90,
         muted: false,
         solo: false,
         beatRate: '1/16',
@@ -344,28 +394,31 @@ export function convertExampleSongToProject(songDef: ExampleSongDef): ProjectDat
     ],
     strokes,
     fx: {
-      reverb: { amount: 16, size: 2.0, bypassed: false },
-      delay: { amount: 10, time: '8n', bypassed: false },
+      // Reverb: Size down to 1.3s, Amount 15% for tight, crisp room reverb
+      reverb: { amount: 15, size: 1.3, bypassed: false },
+      // Delay: Active, time 8n, amount 12% for subtle bounce
+      delay: { amount: 12, time: '8n', bypassed: false },
       chorus: { amount: 0, depth: 0.5, bypassed: true },
       phaser: { amount: 0, speed: 0.5, bypassed: true },
       tremolo: { amount: 0, rate: '8n', bypassed: true },
       autoFilter: { amount: 0, speed: '2m', bypassed: true },
-      drive: { amount: 0, tone: 4000, bypassed: true },
+      // Soft drive: 5% bite to mimic recorded acoustic mallet transient
+      drive: { amount: 5, tone: 4000, bypassed: false },
     },
   };
 }
 
-export const MARIMBA_POP_PROJECT: ProjectData = convertExampleSongToProject(MARIMBA_POP_SPEC);
+export const MARIMBA_POP_PROJECT: ProjectData = convertExampleSongToProject(MARIMBA_POP_INTRO_SPEC);
 
 export const MARIMBA_POP_CREATION: Creation = {
-  id: 'marimba-pop-original',
+  id: 'marimba-pop-intro',
   title: 'Marimba Pop',
   createdAt: 1710000000000,
   updatedAt: 1710000000000,
   schemaVersion: 1,
   project: MARIMBA_POP_PROJECT,
   preview: extractCreationMeta({
-    id: 'marimba-pop-original',
+    id: 'marimba-pop-intro',
     title: 'Marimba Pop',
     createdAt: 1710000000000,
     updatedAt: 1710000000000,
