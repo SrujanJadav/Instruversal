@@ -6,6 +6,15 @@ import {
   isRootNote,
 } from '../audio/scales';
 import { getTrackManager } from '../audio/tracks';
+import { getTransport } from '../audio/transport';
+
+interface HitRipple {
+  x: number;
+  y: number;
+  color: string;
+  startTime: number;
+  duration: number;
+}
 
 export class DrawingCanvas {
   private container: HTMLElement;
@@ -28,8 +37,15 @@ export class DrawingCanvas {
   private lastPreviewTime: number = 0;
   private activeNoteDisplay: { name: string; x: number; y: number } | null = null;
 
+  // Hit ripples & stroke highlight
+  private hitRipples: HitRipple[] = [];
+  private strokeHighlights: Map<string, number> = new Map();
+
+  // Animation frame loop
+  private animFrameId: number | null = null;
+
   // Event cleanup
-  private unsubTrackSelect: (() => void) | null = null;
+  private unsubs: (() => void)[] = [];
 
   // Line styling
   private readonly lineColor = 'rgba(28, 26, 22, 0.16)';
@@ -64,13 +80,52 @@ export class DrawingCanvas {
     window.addEventListener('resize', this.onWindowResize);
     window.addEventListener('orientationchange', this.onWindowResize);
 
-    this.unsubTrackSelect = events.on('track:select', () => {
-      this.redraw();
-    });
+    this.setupAppListeners();
 
     // Initial sizing
     this.handleResize();
   }
+
+  private setupAppListeners() {
+    this.unsubs.push(
+      events.on('track:select', () => this.redraw()),
+      events.on('transport:play', () => this.startAnimation()),
+      events.on('transport:pause', () => this.redraw()),
+      events.on('note:hit', (hit) => {
+        const color = this.getTrackColor(hit.trackId);
+        this.hitRipples.push({
+          x: hit.x,
+          y: hit.y,
+          color,
+          startTime: performance.now(),
+          duration: 400,
+        });
+        if (hit.strokeId) {
+          this.strokeHighlights.set(hit.strokeId, performance.now() + 200);
+        }
+        this.startAnimation();
+      })
+    );
+  }
+
+  private startAnimation() {
+    if (this.animFrameId === null) {
+      this.renderLoop();
+    }
+  }
+
+  private renderLoop = () => {
+    this.redraw();
+
+    const hasActiveRipples = this.hitRipples.length > 0;
+    const isDrawing = this.currentStroke !== null;
+
+    if (state.isPlaying || hasActiveRipples || isDrawing) {
+      this.animFrameId = requestAnimationFrame(this.renderLoop);
+    } else {
+      this.animFrameId = null;
+    }
+  };
 
   private onWindowResize = () => {
     this.handleResize();
@@ -173,7 +228,7 @@ export class DrawingCanvas {
     };
 
     this.triggerLivePitch(normX, normY);
-    this.redraw();
+    this.startAnimation();
   };
 
   private onPointerMove = (e: PointerEvent) => {
@@ -222,7 +277,7 @@ export class DrawingCanvas {
     this.lastPointTime = now;
 
     this.triggerLivePitch(normX, normY);
-    this.redraw();
+    this.startAnimation();
   };
 
   private onPointerUp = (e: PointerEvent) => {
@@ -277,6 +332,12 @@ export class DrawingCanvas {
       this.drawStroke(this.currentStroke);
     }
 
+    // Draw playhead and soft trail
+    this.drawPlayhead();
+
+    // Draw hit ripples
+    this.drawHitRipples();
+
     // Draw active floating note badge
     if (this.activeNoteDisplay) {
       this.drawNoteBadge(this.activeNoteDisplay);
@@ -320,7 +381,6 @@ export class DrawingCanvas {
     for (let i = 1; i < totalBeats; i++) {
       const x = Math.round((i / totalBeats) * this.width);
       ctx.beginPath();
-      // Measure boundary at bar 2 (halfway) is slightly stronger
       const isBarBoundary = i === totalBeats / 2;
       ctx.lineWidth = 1;
       ctx.strokeStyle = isBarBoundary ? this.lineColor : this.lineSubtleColor;
@@ -334,12 +394,15 @@ export class DrawingCanvas {
     const pts = stroke.points;
     if (pts.length === 0) return;
 
+    const now = performance.now();
+    const isHighlighted = this.strokeHighlights.has(stroke.id) && now < (this.strokeHighlights.get(stroke.id) || 0);
+
     const strokeColor = this.getTrackColor(stroke.trackId);
     const ctx = this.ctx;
     ctx.save();
     ctx.strokeStyle = strokeColor;
     ctx.fillStyle = strokeColor;
-    ctx.lineWidth = stroke.width;
+    ctx.lineWidth = isHighlighted ? stroke.width * 1.25 : stroke.width;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
@@ -349,7 +412,7 @@ export class DrawingCanvas {
       const px = pt.x * this.width;
       const py = pt.y * this.height;
       ctx.beginPath();
-      ctx.arc(px, py, Math.max(2, stroke.width * 0.7), 0, Math.PI * 2);
+      ctx.arc(px, py, Math.max(2, (stroke.width * (isHighlighted ? 1.3 : 1)) * 0.7), 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
       return;
@@ -386,25 +449,71 @@ export class DrawingCanvas {
     ctx.restore();
   }
 
+  private drawPlayhead() {
+    if (!state.isPlaying) return;
+
+    const progress = getTransport().getProgress();
+    const px = progress * this.width;
+    const ctx = this.ctx;
+
+    // Soft fading trail band behind playhead
+    const trailWidth = Math.min(26, this.width * 0.04);
+    const grad = ctx.createLinearGradient(px - trailWidth, 0, px, 0);
+    grad.addColorStop(0, 'rgba(28, 26, 22, 0)');
+    grad.addColorStop(0.7, 'rgba(28, 26, 22, 0.03)');
+    grad.addColorStop(1, 'rgba(28, 26, 22, 0.08)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(px - trailWidth, 0, trailWidth, this.height);
+
+    // Crisp ink line
+    ctx.beginPath();
+    ctx.strokeStyle = '#1C1A16';
+    ctx.lineWidth = 1.5;
+    ctx.moveTo(px + 0.5, 0);
+    ctx.lineTo(px + 0.5, this.height);
+    ctx.stroke();
+  }
+
+  private drawHitRipples() {
+    if (this.hitRipples.length === 0) return;
+    const now = performance.now();
+    const ctx = this.ctx;
+
+    // Retain only unexpired ripples
+    this.hitRipples = this.hitRipples.filter((r) => now - r.startTime < r.duration);
+
+    for (const r of this.hitRipples) {
+      const elapsed = now - r.startTime;
+      const progress = elapsed / r.duration;
+      const radius = 3 + progress * 22; // expands to ~25px
+      const alpha = (1 - progress) * 0.85;
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.strokeStyle = r.color;
+      ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
+      ctx.lineWidth = 1.5;
+      ctx.arc(r.x * this.width, r.y * this.height, radius, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
   private drawNoteBadge(display: { name: string; x: number; y: number }) {
     const ctx = this.ctx;
     const px = display.x * this.width;
     const py = display.y * this.height;
 
-    // Small floating badge floating slightly above and to the right of pointer
     const badgeW = 32;
     const badgeH = 20;
     const badgeX = Math.min(px + 14, this.width - badgeW - 8);
     const badgeY = Math.max(py - 26, 8);
 
     ctx.save();
-
-    // Subtle paper background card
     ctx.fillStyle = '#F3ECDD';
     ctx.strokeStyle = 'rgba(28, 26, 22, 0.22)';
     ctx.lineWidth = 1;
 
-    // Rounded rectangle
     const r = 4;
     ctx.beginPath();
     ctx.moveTo(badgeX + r, badgeY);
@@ -420,7 +529,6 @@ export class DrawingCanvas {
     ctx.fill();
     ctx.stroke();
 
-    // Note name text in DM Mono
     ctx.font = '500 11px "DM Mono", monospace';
     ctx.fillStyle = '#1C1A16';
     ctx.textAlign = 'center';
@@ -431,10 +539,14 @@ export class DrawingCanvas {
   }
 
   public destroy() {
-    if (this.unsubTrackSelect) {
-      this.unsubTrackSelect();
-      this.unsubTrackSelect = null;
+    if (this.animFrameId !== null) {
+      cancelAnimationFrame(this.animFrameId);
+      this.animFrameId = null;
     }
+    for (const unsub of this.unsubs) {
+      unsub();
+    }
+    this.unsubs = [];
     this.resizeObserver.disconnect();
     window.removeEventListener('resize', this.onWindowResize);
     window.removeEventListener('orientationchange', this.onWindowResize);

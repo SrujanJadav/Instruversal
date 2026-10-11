@@ -22,6 +22,13 @@ export type EventMap = {
   'bpm:change': number;
   'scale:change': { rootNote: number; scaleName: ScaleName };
   'track:select': string;
+  'note:hit': {
+    strokeId?: string;
+    trackId: string;
+    midi: number;
+    x: number;
+    y: number;
+  };
   'stroke:added': Stroke;
   'strokes:updated': Stroke[];
 };

@@ -7,6 +7,8 @@ import { CONFIG } from './config';
 import { state, events } from './state';
 import { DrawingCanvas } from './canvas/DrawingCanvas';
 import { DEFAULT_TRACK_CONFIGS, getTrackManager } from './audio/tracks';
+import { getTransport } from './audio/transport';
+import { getLoopScheduler } from './audio/schedule';
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 
@@ -22,7 +24,12 @@ app.innerHTML = `
   <main class="main-view" id="main-view" aria-hidden="true" style="display: none;">
     <header class="app-header">
       <h2 class="header-title">${CONFIG.appName}</h2>
-      <span class="header-status" id="header-status">AUDIO READY</span>
+      <div class="header-actions">
+        <button class="play-toggle-btn" id="play-btn" type="button" aria-label="Play or pause loop sequencer">
+          ▶ Play
+        </button>
+        <span class="header-status" id="header-status">AUDIO READY</span>
+      </div>
     </header>
 
     <!-- Temporary Track Selector Dots (Step 4) -->
@@ -37,6 +44,7 @@ const gateScreen = document.querySelector<HTMLElement>('#gate-screen')!;
 const mainView = document.querySelector<HTMLElement>('#main-view')!;
 const headerStatus = document.querySelector<HTMLElement>('#header-status')!;
 const trackDotRow = document.querySelector<HTMLElement>('#track-dot-row')!;
+const playBtn = document.querySelector<HTMLButtonElement>('#play-btn')!;
 
 let drawingCanvas: DrawingCanvas | null = null;
 
@@ -83,6 +91,32 @@ function renderTrackDots() {
   });
 }
 
+function updatePlayButtonUI() {
+  if (state.isPlaying) {
+    playBtn.textContent = '❚❚ Pause';
+    playBtn.classList.add('playing');
+  } else {
+    playBtn.textContent = '▶ Play';
+    playBtn.classList.remove('playing');
+  }
+}
+
+playBtn.addEventListener('click', async () => {
+  const transport = getTransport();
+  await transport.toggle();
+});
+
+window.addEventListener('keydown', (e) => {
+  if (e.code === 'Space' && state.audioStarted) {
+    e.preventDefault();
+    const transport = getTransport();
+    transport.toggle();
+  }
+});
+
+events.on('transport:play', () => updatePlayButtonUI());
+events.on('transport:pause', () => updatePlayButtonUI());
+
 async function handleStart() {
   startBtn.disabled = true;
   startBtn.textContent = 'Starting…';
@@ -93,8 +127,10 @@ async function handleStart() {
     state.audioStarted = true;
     events.emit('audio:started', undefined);
 
-    // Initialize track manager and audition default track
+    // Initialize track manager and loop scheduler
     const trackManager = getTrackManager();
+    getLoopScheduler();
+
     const defaultTrack = trackManager.getTrack(state.selectedTrackId);
     if (defaultTrack) {
       defaultTrack.audition();
@@ -108,6 +144,7 @@ async function handleStart() {
       mainView.removeAttribute('aria-hidden');
 
       renderTrackDots();
+      updatePlayButtonUI();
 
       if (headerStatus && defaultTrack) {
         headerStatus.textContent = `${defaultTrack.name.toUpperCase()} · ${defaultTrack.instrumentId.toUpperCase()}`;
