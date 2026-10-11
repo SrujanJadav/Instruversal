@@ -247,6 +247,10 @@ export class MasterEffectsRack {
     this.applyConfig(state.fx);
   }
 
+  public get input(): Tone.ToneAudioNode {
+    return this.masterGain;
+  }
+
   public applyConfig(cfg: FxConfig) {
     const now = Tone.now();
 

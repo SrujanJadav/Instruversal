@@ -5,6 +5,7 @@ import { DRUM_KITS, DrumKitId } from '../audio/drums';
 import { SCALES, ScaleName } from '../audio/scales';
 import { getTotalAudioLatencySeconds } from '../audio/context';
 import { getTransport } from '../audio/transport';
+import { getPreviewEngine, getAuditionEnabled, setAuditionEnabled } from '../audio/preview';
 
 const ROOT_NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
@@ -45,6 +46,7 @@ export class TrackPanel {
   }
 
   public close() {
+    getPreviewEngine().cancelPreview();
     this.activeInstrumentPickerTrackId = null;
     this.panel.classList.remove('visible');
     this.overlay.classList.add('hidden');
@@ -294,13 +296,21 @@ export class TrackPanel {
     const currentScale = state.scaleName;
     const scaleKeys = Object.keys(SCALES) as ScaleName[];
 
+    const tm = getTrackManager();
+    const selTrack = tm.getTrack(state.selectedTrackId);
+    const isBeat = selTrack?.trackType === 'beat';
+
+    const intervals = SCALES[currentScale] || SCALES['major pentatonic'];
+    const stripNotes = intervals.map((semi) => ROOT_NOTE_NAMES[(currentRoot + semi) % 12]);
+    stripNotes.push(ROOT_NOTE_NAMES[currentRoot % 12]); // Octave
+
     return `
       <div class="key-picker-container">
         <div class="key-section">
           <span class="section-title">Root Key</span>
           <div class="root-note-grid">
             ${ROOT_NOTE_NAMES.map((name, idx) => `
-              <button type="button" class="root-note-btn ${currentRoot === idx ? 'active' : ''}" data-root-idx="${idx}">
+              <button type="button" class="root-note-btn ${currentRoot === idx ? 'active' : ''}" data-root-idx="${idx}" tabindex="0">
                 ${name}
               </button>
             `).join('')}
@@ -311,22 +321,85 @@ export class TrackPanel {
           <span class="section-title">Musical Scale</span>
           <div class="scale-list-grid">
             ${scaleKeys.map((scaleName) => `
-              <button type="button" class="scale-pill-btn ${currentScale === scaleName ? 'active' : ''}" data-scale-name="${scaleName}">
+              <button type="button" class="scale-pill-btn ${currentScale === scaleName ? 'active' : ''}" data-scale-name="${scaleName}" tabindex="0">
                 ${scaleName.replace(/\b\w/g, (c) => c.toUpperCase())}
               </button>
             `).join('')}
+          </div>
+
+          ${
+            isBeat
+              ? `<p class="scale-beat-note" id="scale-beat-note">Beat track selected, previewing with Keys.</p>`
+              : ''
+          }
+
+          <!-- Scale Strip with note names and Replay button -->
+          <div class="scale-strip-row" aria-label="Scale note sequence">
+            <div class="scale-strip" id="scale-strip">
+              ${stripNotes.map((name, idx) => `
+                <span class="scale-strip-note" data-strip-idx="${idx}">${name}</span>
+              `).join('')}
+            </div>
+            <button type="button" class="scale-replay-btn" id="scale-replay-btn" aria-label="Replay scale audition" tabindex="0">
+              Play
+            </button>
           </div>
         </div>
 
         <div class="key-section">
           <span class="section-title">Display Options</span>
           <label class="panel-checkbox-row">
-            <input type="checkbox" class="panel-checkbox" id="toggle-hit-notes" ${state.showHitNotes ? 'checked' : ''} />
+            <input type="checkbox" class="panel-checkbox" id="toggle-audition" ${getAuditionEnabled() ? 'checked' : ''} tabindex="0" />
+            <span class="checkbox-label">Hear it when I choose</span>
+          </label>
+          <label class="panel-checkbox-row">
+            <input type="checkbox" class="panel-checkbox" id="toggle-hit-notes" ${state.showHitNotes ? 'checked' : ''} tabindex="0" />
             <span class="checkbox-label">Show note names on playhead hit</span>
           </label>
         </div>
       </div>
     `;
+  }
+
+  private handleHighlight(step: number | 'chord' | null, intervals: readonly number[]) {
+    const noteEls = this.panel.querySelectorAll<HTMLElement>('.scale-strip-note');
+    if (noteEls.length === 0) return;
+
+    const tm = getTrackManager();
+    const selTrack = tm.getTrack(state.selectedTrackId);
+    const trackColor = selTrack?.colorHex || '#1C1A16';
+
+    noteEls.forEach((el) => {
+      el.classList.remove('active', 'chord-active');
+      el.style.backgroundColor = '';
+      el.style.borderColor = '';
+      el.style.color = '';
+    });
+
+    if (step === null) return;
+
+    if (step === 'chord') {
+      const thirdIdx = 2;
+      const fifthIdx = intervals.length === 5 ? 3 : 4;
+      const octaveIdx = noteEls.length - 1;
+      [0, thirdIdx, fifthIdx, octaveIdx].forEach((idx) => {
+        const el = noteEls[idx];
+        if (el) {
+          el.classList.add('chord-active');
+          el.style.backgroundColor = trackColor;
+          el.style.borderColor = trackColor;
+          el.style.color = '#F3ECDD';
+        }
+      });
+    } else if (typeof step === 'number') {
+      const el = noteEls[step];
+      if (el) {
+        el.classList.add('active');
+        el.style.backgroundColor = trackColor;
+        el.style.borderColor = trackColor;
+        el.style.color = '#F3ECDD';
+      }
+    }
   }
 
   private bindEvents() {
@@ -502,28 +575,82 @@ export class TrackPanel {
       });
     });
 
-    // Key & Root Note selection
+    // Key & Root Note selection with audition
     const rootBtns = this.panel.querySelectorAll<HTMLButtonElement>('.root-note-btn');
     rootBtns.forEach((btn) => {
-      btn.addEventListener('click', () => {
+      const handleRootClick = () => {
         const idx = parseInt(btn.dataset.rootIdx || '0', 10);
         state.rootNote = idx;
         events.emit('scale:change', { rootNote: state.rootNote, scaleName: state.scaleName });
         this.render();
+
+        if (getAuditionEnabled()) {
+          const previewEngine = getPreviewEngine();
+          const activeBtn = this.panel.querySelector<HTMLButtonElement>(`[data-root-idx="${idx}"]`);
+          activeBtn?.classList.add('audition-pressed');
+          window.setTimeout(() => activeBtn?.classList.remove('audition-pressed'), 350);
+
+          const curIntervals = SCALES[state.scaleName] || SCALES['major pentatonic'];
+          previewEngine.previewRoot(idx, undefined, (step) => this.handleHighlight(step, curIntervals));
+        }
+      };
+
+      btn.addEventListener('click', handleRootClick);
+      btn.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          handleRootClick();
+        }
       });
     });
 
-    // Scale selection
+    // Scale selection with audition
     const scaleBtns = this.panel.querySelectorAll<HTMLButtonElement>('.scale-pill-btn');
     scaleBtns.forEach((btn) => {
-      btn.addEventListener('click', () => {
+      const handleScaleClick = () => {
         const scaleName = btn.dataset.scaleName as ScaleName;
         if (scaleName) {
           state.scaleName = scaleName;
           events.emit('scale:change', { rootNote: state.rootNote, scaleName: state.scaleName });
           this.render();
+
+          if (getAuditionEnabled()) {
+            const previewEngine = getPreviewEngine();
+            const activeBtn = this.panel.querySelector<HTMLButtonElement>(`[data-scale-name="${scaleName}"]`);
+            activeBtn?.classList.add('audition-pressed');
+            window.setTimeout(() => activeBtn?.classList.remove('audition-pressed'), 450);
+
+            const curIntervals = SCALES[state.scaleName] || SCALES['major pentatonic'];
+            previewEngine.previewScale(state.rootNote, state.scaleName, undefined, (step) =>
+              this.handleHighlight(step, curIntervals)
+            );
+          }
+        }
+      };
+
+      btn.addEventListener('click', handleScaleClick);
+      btn.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          handleScaleClick();
         }
       });
+    });
+
+    // Replay scale preview button
+    const replayBtn = this.panel.querySelector<HTMLButtonElement>('#scale-replay-btn');
+    replayBtn?.addEventListener('click', () => {
+      const previewEngine = getPreviewEngine();
+      const curIntervals = SCALES[state.scaleName] || SCALES['major pentatonic'];
+      previewEngine.previewScale(state.rootNote, state.scaleName, undefined, (step) =>
+        this.handleHighlight(step, curIntervals)
+      );
+    });
+
+    // Audition toggle checkbox
+    const auditionToggle = this.panel.querySelector<HTMLInputElement>('#toggle-audition');
+    auditionToggle?.addEventListener('change', () => {
+      setAuditionEnabled(auditionToggle.checked);
     });
 
     // Display options
