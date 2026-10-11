@@ -737,6 +737,9 @@ export class DrawingCanvas {
     const now = performance.now();
 
     for (const stroke of state.strokes) {
+      const tr = getTrackManager().getTrack(stroke.trackId);
+      if (tr && tr.trackType === 'beat') continue;
+
       const pts = stroke.points;
       if (pts.length === 0) continue;
 

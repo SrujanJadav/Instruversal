@@ -305,13 +305,13 @@ export class DrumKitInstance {
         this.openHatGain.gain.setValueAtTime(0, at);
         this.openHatGain.gain.setValueAtTime(1.0, at + 0.05);
 
-        this.closedHat.triggerAttackRelease('32n', at, velocity * 0.75);
+        this.closedHat.triggerAttackRelease(200, '32n', at, velocity * 0.75);
         break;
       }
 
       case 'open-hat': {
         this.openHatGain.gain.setValueAtTime(1.0, at);
-        this.openHat.triggerAttackRelease('8n', at, velocity * 0.75);
+        this.openHat.triggerAttackRelease(200, '8n', at, velocity * 0.75);
         break;
       }
 
@@ -323,7 +323,7 @@ export class DrumKitInstance {
       case 'cowbell': {
         this.cowbellGain.gain.cancelScheduledValues(at);
         this.cowbellGain.gain.setValueAtTime(velocity * 0.45, at);
-        this.cowbellGain.gain.exponentialRampToValueAtTime(0.001, at + 0.25);
+        this.cowbellGain.gain.linearRampToValueAtTime(0, at + 0.25);
         break;
       }
     }

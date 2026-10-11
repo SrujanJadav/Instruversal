@@ -260,14 +260,28 @@ export class LoopScheduler {
         this.beatPart = null;
       }
     } else {
-      const selectedTr = trackManager.getTrack(state.selectedTrackId);
-      const beatHits = generateBeatEventsFromStrokes(beatStrokes, {
-        bpm: state.bpm,
-        bars: state.bars,
-        rate: selectedTr?.beatRate || '1/16',
-        swing: selectedTr?.swing || 0,
-        humanize: selectedTr?.humanize !== undefined ? selectedTr.humanize : 15,
-      });
+      const beatHits: BeatHitEvent[] = [];
+      const strokesByTrack = new Map<string, Stroke[]>();
+      for (const stroke of beatStrokes) {
+        let list = strokesByTrack.get(stroke.trackId);
+        if (!list) {
+          list = [];
+          strokesByTrack.set(stroke.trackId, list);
+        }
+        list.push(stroke);
+      }
+
+      for (const [tId, sList] of strokesByTrack.entries()) {
+        const tr = trackManager.getTrack(tId);
+        const hits = generateBeatEventsFromStrokes(sList, {
+          bpm: state.bpm,
+          bars: state.bars,
+          rate: tr?.beatRate || '1/16',
+          swing: tr?.swing || 0,
+          humanize: tr?.humanize !== undefined ? tr.humanize : 15,
+        });
+        beatHits.push(...hits);
+      }
 
       if (beatHits.length === 0) {
         if (oldBeatPart) {

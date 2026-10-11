@@ -2,9 +2,10 @@ import { Stroke } from '../state';
 import { DRUM_LANES, DrumSoundId, yToDrumSound } from './drums';
 
 export interface BeatHitEvent {
+  time: number; // Scheduled Tone.Part transport time in seconds
+  timeSeconds?: number;
   soundId: DrumSoundId;
   laneIndex: number;
-  timeSeconds: number;
   velocity: number;
   strokeId: string;
   trackId: string;
@@ -59,8 +60,8 @@ export function generateBeatEventsFromStrokes(
     const spanX = maxX - minX;
     const spanY = maxY - minY;
 
-    // Classification 1: Tap / Short stroke
-    if (pts.length === 1 || (spanX < 0.025 && spanY < 0.05)) {
+    // Classification 1: Single point or very short tap
+    if (pts.length === 1 || (spanX < 0.03 && spanY < 0.08)) {
       const p = pts[0];
       const stepIndex = Math.max(0, Math.min(total16thSteps - 1, Math.round(p.x * total16thSteps)));
       const baseTime = stepIndex * stepDuration;
@@ -68,9 +69,10 @@ export function generateBeatEventsFromStrokes(
       const laneIndex = Math.max(0, Math.min(7, Math.floor(p.y * 8)));
 
       rawHits.push({
+        time: baseTime,
+        timeSeconds: baseTime,
         soundId,
         laneIndex,
-        timeSeconds: baseTime,
         velocity: baseVelocity,
         strokeId: stroke.id,
         trackId: stroke.trackId,
@@ -80,76 +82,136 @@ export function generateBeatEventsFromStrokes(
       continue;
     }
 
-    // Classification 2: Vertical or diagonal stroke crossing multiple lanes (Drum roll / fill)
-    if (spanY >= 0.18 && spanY > spanX * 1.5) {
-      // Sort points by X or time order so roll advances with playhead
-      const sorted = [...pts].sort((a, b) => a.x - b.x);
-      const crossedLanes = new Set<number>();
-      const laneHits: { lane: number; x: number; y: number }[] = [];
+    // Classification 2: Horizontal line in a single lane (spanY < 0.14)
+    if (spanY < 0.14 && spanX >= 0.03) {
+      let rateInterval16ths = 1;
+      if (rate === '1/4') rateInterval16ths = 4;
+      else if (rate === '1/8') rateInterval16ths = 2;
+      else if (rate === '1/8T') rateInterval16ths = 4 / 3;
+      else if (rate === '1/16') rateInterval16ths = 1;
+      else if (rate === '1/32') rateInterval16ths = 0.5;
 
-      for (const pt of sorted) {
-        const lane = Math.max(0, Math.min(7, Math.floor(pt.y * 8)));
-        if (!crossedLanes.has(lane)) {
-          crossedLanes.add(lane);
-          laneHits.push({ lane, x: pt.x, y: pt.y });
-        }
-      }
+      const startStep = Math.max(0, Math.floor(minX * total16thSteps));
+      const endStep = Math.min(total16thSteps - 1, Math.ceil(maxX * total16thSteps));
+      const midY = (minY + maxY) / 2;
+      const laneIndex = Math.max(0, Math.min(7, Math.floor(midY * 8)));
+      const soundId = DRUM_LANES[laneIndex].id;
 
-      const count = laneHits.length;
-      for (let i = 0; i < count; i++) {
-        const hit = laneHits[i];
-        const stepProgress = minX + (i / Math.max(1, count - 1)) * Math.max(0.015, spanX);
-        const timeSec = stepProgress * loopDuration;
-        const soundId = DRUM_LANES[hit.lane].id;
+      let hitCounter = 0;
+      for (let s = startStep; s <= endStep; s += rateInterval16ths) {
+        if (s < 0 || s >= total16thSteps) continue;
+        const timeSec = s * stepDuration;
+        const isAccented = hitCounter % 4 === 0;
+        const vel = Math.min(1.0, isAccented ? baseVelocity + 0.12 : baseVelocity);
 
         rawHits.push({
-          soundId,
-          laneIndex: hit.lane,
+          time: timeSec,
           timeSeconds: timeSec,
+          soundId,
+          laneIndex,
+          velocity: vel,
+          strokeId: stroke.id,
+          trackId: stroke.trackId,
+          normX: s / total16thSteps,
+          normY: (laneIndex + 0.5) / 8,
+        });
+        hitCounter++;
+      }
+      continue;
+    }
+
+    // Classification 3: Vertical stroke across lanes (near vertical: spanX < 0.04)
+    const isNearVertical = spanX < 0.04;
+    if (isNearVertical) {
+      const crossedLanes = new Set<number>();
+      const orderedLanes: number[] = [];
+      for (const p of pts) {
+        const lane = Math.max(0, Math.min(7, Math.floor(p.y * 8)));
+        if (!crossedLanes.has(lane)) {
+          crossedLanes.add(lane);
+          orderedLanes.push(lane);
+        }
+      }
+      const midX = (minX + maxX) / 2;
+      const baseStep = Math.max(0, Math.min(total16thSteps - 1, Math.round(midX * total16thSteps)));
+      const count = orderedLanes.length;
+      for (let i = 0; i < count; i++) {
+        const lane = orderedLanes[i];
+        const staggerSec = i * (stepDuration * 0.5); // 32nd note stagger
+        const timeSec = Math.min(loopDuration - 0.01, baseStep * stepDuration + staggerSec);
+        rawHits.push({
+          time: timeSec,
+          timeSeconds: timeSec,
+          soundId: DRUM_LANES[lane].id,
+          laneIndex: lane,
           velocity: Math.max(0.45, baseVelocity - i * 0.03),
           strokeId: stroke.id,
           trackId: stroke.trackId,
-          normX: stepProgress,
-          normY: (hit.lane + 0.5) / 8,
+          normX: midX,
+          normY: (lane + 0.5) / 8,
         });
       }
       continue;
     }
 
-    // Classification 3: Horizontal line in a lane (repeating hits at selected Rate)
-    // Rate step spacing in 16th increments
-    let rateInterval16ths = 1;
-    if (rate === '1/4') rateInterval16ths = 4;
-    else if (rate === '1/8') rateInterval16ths = 2;
-    else if (rate === '1/8T') rateInterval16ths = 4 / 3;
-    else if (rate === '1/16') rateInterval16ths = 1;
-    else if (rate === '1/32') rateInterval16ths = 0.5;
-
-    const startStep = Math.floor(minX * total16thSteps);
-    const endStep = Math.ceil(maxX * total16thSteps);
-    const midY = (minY + maxY) / 2;
-    const laneIndex = Math.max(0, Math.min(7, Math.floor(midY * 8)));
-    const soundId = DRUM_LANES[laneIndex].id;
-
+    // Classification 4: Multi-lane diagonal, zigzag, or scribble stroke
+    // Discretize into 16th-note steps across its X span. At each step, trigger crossed lanes!
+    const startStep = Math.max(0, Math.floor(minX * total16thSteps));
+    const endStep = Math.min(total16thSteps - 1, Math.ceil(maxX * total16thSteps));
     let hitCounter = 0;
-    for (let s = startStep; s <= endStep; s += rateInterval16ths) {
-      if (s < 0 || s >= total16thSteps) continue;
-      const timeSec = s * stepDuration;
-      // Accent every 4th hit slightly louder
-      const isAccented = hitCounter % 4 === 0;
-      const vel = Math.min(1.0, isAccented ? baseVelocity + 0.12 : baseVelocity);
 
-      rawHits.push({
-        soundId,
-        laneIndex,
-        timeSeconds: timeSec,
-        velocity: vel,
-        strokeId: stroke.id,
-        trackId: stroke.trackId,
-        normX: s / total16thSteps,
-        normY: (laneIndex + 0.5) / 8,
-      });
-      hitCounter++;
+    for (let s = startStep; s <= endStep; s++) {
+      const stepX = (s + 0.5) / total16thSteps;
+      if (stepX < minX || stepX > maxX) continue;
+
+      const hitsAtStep: number[] = [];
+      for (let k = 0; k < pts.length - 1; k++) {
+        const p1 = pts[k];
+        const p2 = pts[k + 1];
+        const segMinX = Math.min(p1.x, p2.x);
+        const segMaxX = Math.max(p1.x, p2.x);
+
+        if (stepX >= segMinX && stepX <= segMaxX) {
+          const dx = p2.x - p1.x;
+          const t = Math.abs(dx) > 0.0001 ? (stepX - p1.x) / dx : 0.5;
+          const y = p1.y + t * (p2.y - p1.y);
+          const lane = Math.max(0, Math.min(7, Math.floor(y * 8)));
+          if (!hitsAtStep.includes(lane)) {
+            hitsAtStep.push(lane);
+          }
+        }
+      }
+
+      if (hitsAtStep.length === 0) {
+        let closest = pts[0];
+        let closestDist = Infinity;
+        for (const p of pts) {
+          const d = Math.abs(p.x - stepX);
+          if (d < closestDist) {
+            closestDist = d;
+            closest = p;
+          }
+        }
+        hitsAtStep.push(Math.max(0, Math.min(7, Math.floor(closest.y * 8))));
+      }
+
+      const timeSec = s * stepDuration;
+      for (const lane of hitsAtStep) {
+        const isAccented = hitCounter % 4 === 0;
+        const vel = Math.min(1.0, isAccented ? baseVelocity + 0.1 : baseVelocity);
+        rawHits.push({
+          time: timeSec,
+          timeSeconds: timeSec,
+          soundId: DRUM_LANES[lane].id,
+          laneIndex: lane,
+          velocity: vel,
+          strokeId: stroke.id,
+          trackId: stroke.trackId,
+          normX: stepX,
+          normY: (lane + 0.5) / 8,
+        });
+        hitCounter++;
+      }
     }
   }
 
@@ -159,7 +221,7 @@ export function generateBeatEventsFromStrokes(
   const humanFraction = Math.max(0, Math.min(1.0, humanize / 100));
 
   for (const hit of rawHits) {
-    let t = hit.timeSeconds;
+    let t = hit.time;
 
     // Swing applied to off-beat 16th notes
     const stepInBar = Math.round(t / stepDuration) % 4;
@@ -177,12 +239,13 @@ export function generateBeatEventsFromStrokes(
 
     finalHits.push({
       ...hit,
+      time: t,
       timeSeconds: t,
       velocity: finalVel,
     });
   }
 
   // Sort chronologically
-  finalHits.sort((a, b) => a.timeSeconds - b.timeSeconds);
+  finalHits.sort((a, b) => a.time - b.time);
   return finalHits;
 }

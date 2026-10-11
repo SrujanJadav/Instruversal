@@ -60,10 +60,17 @@ let toolbar: Toolbar | null = null;
 let trackPanel: TrackPanel | null = null;
 let fxPanel: FxPanel | null = null;
 
+import { DRUM_KITS } from './audio/drums';
+
 function updateHeaderStatus() {
   const track = getTrackManager().getTrack(state.selectedTrackId);
   if (track && headerStatus) {
-    headerStatus.textContent = `${track.name.toUpperCase()} · ${track.instrumentId.toUpperCase()}`;
+    if (track.trackType === 'beat') {
+      const kit = DRUM_KITS[track.kitId];
+      headerStatus.textContent = `${track.name.toUpperCase()} · ${(kit?.name || '808 KIT').toUpperCase()}`;
+    } else {
+      headerStatus.textContent = `${track.name.toUpperCase()} · ${track.instrumentId.toUpperCase()}`;
+    }
   }
 }
 
@@ -144,6 +151,8 @@ fxBtn.addEventListener('click', () => {
 });
 
 events.on('track:select', () => updateHeaderStatus());
+events.on('track:type-change', () => updateHeaderStatus());
+events.on('track:update', () => updateHeaderStatus());
 events.on('ui:open-fx', () => {
   if (fxPanel) {
     fxPanel.toggle();
