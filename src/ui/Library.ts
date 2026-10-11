@@ -100,7 +100,7 @@ export class LibraryModal {
             <div class="library-empty-title">Nothing saved yet</div>
             <div class="library-empty-desc">Draw something and it shows up here, or explore our demo song.</div>
             <button type="button" class="library-btn library-btn-primary" id="lib-empty-demo-btn" style="margin-top: var(--space-3);">
-              Try: Perfect by Demo Artist
+              Try: Marimba Pop (Marimba Pop)
             </button>
           </div>
         </div>
@@ -216,7 +216,7 @@ export class LibraryModal {
 
     // Empty state demo button
     this.overlay.querySelector('#lib-empty-demo-btn')?.addEventListener('click', async () => {
-      const { MARIMBA_POP_CREATION } = await import('../presets/edDemoPerfect');
+      const { MARIMBA_POP_CREATION } = await import('../presets/marimbaPop');
       const store = getCreationStore();
       await store.save(MARIMBA_POP_CREATION);
       await getCreationManager().openCreation(MARIMBA_POP_CREATION, true);

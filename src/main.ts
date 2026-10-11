@@ -75,12 +75,13 @@ app.innerHTML = `
       <span class="load-count-badge" id="gate-load-count">0 saved</span>
     </div>
     <div class="gate-corner-demo" id="gate-corner-demo">
-      <button type="button" class="gate-demo-btn" id="gate-demo-btn" aria-label="Try yourself: Perfect by Demo Artist demo">
+      <button type="button" class="gate-demo-btn" id="gate-demo-btn" aria-label="Try yourself: Marimba Pop — Marimba Pop (Original)">
         <div class="gate-demo-header">
           <span class="gate-demo-pill">Try yourself</span>
+          <span class="gate-demo-credit">Original</span>
         </div>
-        <span class="gate-demo-title">Perfect · Demo Artist</span>
-        <span class="gate-demo-hint">Tap to play & explore</span>
+        <span class="gate-demo-title">Marimba Pop</span>
+        <span class="gate-demo-hint">Marimba Pop · Tap to play</span>
       </button>
     </div>
   </section>
@@ -533,8 +534,8 @@ gateDemoBtn?.addEventListener('click', async () => {
     // 2. Transition gate -> editor
     await enterMainView(true);
 
-    // 3. Dynamically import and load the Perfect preset
-    const { MARIMBA_POP_CREATION } = await import('./presets/edDemoPerfect');
+    // 3. Dynamically import and load the Marimba Pop preset
+    const { MARIMBA_POP_CREATION } = await import('./presets/marimbaPop');
     const store = getCreationStore();
     await store.save(MARIMBA_POP_CREATION);
     await creationManager.openCreation(MARIMBA_POP_CREATION, true);

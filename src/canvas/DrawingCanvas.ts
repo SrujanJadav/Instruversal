@@ -337,7 +337,7 @@ export class DrawingCanvas {
       return;
     }
 
-    const scaleNotes = buildScaleNotes(state.rootNote, state.scaleName, 3, 6);
+    const scaleNotes = buildScaleNotes(state.rootNote, state.scaleName, 1, 6);
     const midi = yToMidi(normY, scaleNotes);
     const noteName = midiToNoteName(midi);
 
@@ -737,7 +737,7 @@ export class DrawingCanvas {
       return;
     }
 
-    const scaleNotes = buildScaleNotes(state.rootNote, state.scaleName, 3, 6);
+    const scaleNotes = buildScaleNotes(state.rootNote, state.scaleName, 1, 6);
     const noteCount = scaleNotes.length;
 
     // Pitch guide lines

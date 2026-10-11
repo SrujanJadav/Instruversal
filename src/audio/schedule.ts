@@ -534,7 +534,7 @@ export class LoopScheduler {
       return;
     }
 
-    const scaleNotes = buildScaleNotes(state.rootNote, state.scaleName, 3, 6);
+    const scaleNotes = buildScaleNotes(state.rootNote, state.scaleName, 1, 6);
     const voicePool = getFlowVoicePool();
 
     if (state.playbackMode === 'flow') {
