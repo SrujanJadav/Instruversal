@@ -16,6 +16,11 @@ import { Toolbar } from './ui/Toolbar';
 import { TrackPanel } from './ui/TrackPanel';
 import { FxPanel } from './ui/FxPanel';
 import { SyncSettingsPill } from './ui/SyncSettingsPill';
+import { loadSavedProject, initProjectAutosave } from './audio/projectState';
+
+// Restore any saved project from share link or localStorage
+loadSavedProject();
+initProjectAutosave();
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 

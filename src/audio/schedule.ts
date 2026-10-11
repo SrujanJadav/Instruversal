@@ -161,6 +161,8 @@ export function generateEventsFromStrokes(
 import { generateFlowEventsFromStrokes } from './flowScheduler';
 import { getFlowVoicePool } from './voicePool';
 import { generateBeatEventsFromStrokes, BeatHitEvent } from './beatSchedule';
+import { generateBeatFlowEventsFromStrokes, BeatFlowStrokeEvent } from './beatFlowSchedule';
+import { getBeatFlowVoicePool } from './beatFlowVoices';
 import { triggerKickDucking } from './tracks';
 
 interface FlowPartEvent {
@@ -176,9 +178,22 @@ interface FlowPartEvent {
   normY?: number;
 }
 
+interface BeatFlowPartEvent {
+  type: 'attack' | 'breakpoint' | 'rollHit' | 'release' | 'loopWrap';
+  time: number;
+  strokeId: string;
+  trackId: string;
+  freqOrY?: number;
+  normY?: number;
+  slideSeconds?: number;
+  velocity?: number;
+  width?: number;
+}
+
 export class LoopScheduler {
   private melodicPart: Tone.Part | null = null;
   private beatPart: Tone.Part | null = null;
+  private beatFlowPart: Tone.Part | null = null;
   private rebuildTimer: number | null = null;
   private unsubs: (() => void)[] = [];
 
@@ -192,6 +207,7 @@ export class LoopScheduler {
       events.on('stroke:added', () => this.debouncedRebuild()),
       events.on('strokes:updated', () => {
         getFlowVoicePool().releaseAll(0.02);
+        getBeatFlowVoicePool().releaseAll(0.02);
         this.debouncedRebuild();
       }),
       events.on('scale:change', () => {
@@ -204,10 +220,18 @@ export class LoopScheduler {
         this.debouncedRebuild();
       }),
       events.on('glide:change', () => this.debouncedRebuild()),
-      events.on('track:type-change', () => this.debouncedRebuild()),
-      events.on('track:beat-param-change', () => this.debouncedRebuild()),
+      events.on('track:type-change', () => {
+        getFlowVoicePool().releaseAll(0.02);
+        getBeatFlowVoicePool().releaseAll(0.02);
+        this.debouncedRebuild();
+      }),
+      events.on('track:beat-param-change', () => {
+        getBeatFlowVoicePool().releaseAll(0.02);
+        this.debouncedRebuild();
+      }),
       events.on('transport:pause', () => {
         getFlowVoicePool().releaseAll(0.02);
+        getBeatFlowVoicePool().releaseAll(0.02);
       })
     );
   }
@@ -225,6 +249,7 @@ export class LoopScheduler {
   public rebuild() {
     const oldMelodicPart = this.melodicPart;
     const oldBeatPart = this.beatPart;
+    const oldBeatFlowPart = this.beatFlowPart;
     const trackManager = getTrackManager();
 
     if (state.strokes.length === 0) {
@@ -236,25 +261,35 @@ export class LoopScheduler {
         oldBeatPart.dispose();
         this.beatPart = null;
       }
+      if (oldBeatFlowPart) {
+        oldBeatFlowPart.dispose();
+        this.beatFlowPart = null;
+      }
       getFlowVoicePool().releaseAll(0.02);
+      getBeatFlowVoicePool().releaseAll(0.02);
       return;
     }
 
-    // Partition strokes into melodic vs beat
+    // Partition strokes into melodic vs beat (hits vs flow)
     const melodicStrokes: Stroke[] = [];
-    const beatStrokes: Stroke[] = [];
+    const beatHitsStrokes: Stroke[] = [];
+    const beatFlowStrokes: Stroke[] = [];
 
     for (const stroke of state.strokes) {
       const tr = trackManager.getTrack(stroke.trackId);
       if (tr && tr.trackType === 'beat') {
-        beatStrokes.push(stroke);
+        if (tr.beatMode === 'flow') {
+          beatFlowStrokes.push(stroke);
+        } else {
+          beatHitsStrokes.push(stroke);
+        }
       } else {
         melodicStrokes.push(stroke);
       }
     }
 
-    // 1. Rebuild Beat Part
-    if (beatStrokes.length === 0) {
+    // 1. Rebuild Beat Hits Part
+    if (beatHitsStrokes.length === 0) {
       if (oldBeatPart) {
         oldBeatPart.dispose();
         this.beatPart = null;
@@ -262,7 +297,7 @@ export class LoopScheduler {
     } else {
       const beatHits: BeatHitEvent[] = [];
       const strokesByTrack = new Map<string, Stroke[]>();
-      for (const stroke of beatStrokes) {
+      for (const stroke of beatHitsStrokes) {
         let list = strokesByTrack.get(stroke.trackId);
         if (!list) {
           list = [];
@@ -300,7 +335,7 @@ export class LoopScheduler {
             triggerKickDucking(state.kickDucking);
           }
 
-          // Visual pulse at hit coordinates via Tone.Draw (no ripples for beats)
+          // Visual pulse at hit coordinates via Tone.Draw
           Tone.getDraw().schedule(() => {
             events.emit('note:hit', {
               strokeId: hit.strokeId,
@@ -321,6 +356,169 @@ export class LoopScheduler {
         this.beatPart = newBeatPart;
         if (oldBeatPart) {
           oldBeatPart.dispose();
+        }
+      }
+    }
+
+    // 2. Rebuild Beat Flow Part
+    const beatVoicePool = getBeatFlowVoicePool();
+    if (beatFlowStrokes.length === 0) {
+      if (oldBeatFlowPart) {
+        oldBeatFlowPart.dispose();
+        this.beatFlowPart = null;
+      }
+      beatVoicePool.releaseAll(0.02);
+    } else {
+      const beatFlowEvents: BeatFlowStrokeEvent[] = [];
+      const flowStrokesByTrack = new Map<string, Stroke[]>();
+      for (const stroke of beatFlowStrokes) {
+        let list = flowStrokesByTrack.get(stroke.trackId);
+        if (!list) {
+          list = [];
+          flowStrokesByTrack.set(stroke.trackId, list);
+        }
+        list.push(stroke);
+      }
+
+      for (const [tId, sList] of flowStrokesByTrack.entries()) {
+        const tr = trackManager.getTrack(tId);
+        const style = tr?.beatFlowStyle || 'glide';
+        const evs = generateBeatFlowEventsFromStrokes(
+          sList,
+          state.bars,
+          state.bpm,
+          style,
+          state.glide
+        );
+        beatFlowEvents.push(...evs);
+      }
+
+      if (beatFlowEvents.length === 0) {
+        if (oldBeatFlowPart) {
+          oldBeatFlowPart.dispose();
+          this.beatFlowPart = null;
+        }
+      } else {
+        const loopDuration = state.bars * 4 * (60 / state.bpm);
+        const beatFlowPartEvents: BeatFlowPartEvent[] = [];
+
+        for (const ev of beatFlowEvents) {
+          if (ev.style === 'roll') {
+            // One attack at start
+            beatFlowPartEvents.push({
+              type: 'attack',
+              time: ev.startTime,
+              strokeId: ev.strokeId,
+              trackId: ev.trackId,
+              normY: ev.startY,
+              velocity: ev.initialVelocity,
+              width: ev.initialWidth,
+            });
+
+            // Pre-scheduled retrigger hits
+            for (const rh of ev.rollHits) {
+              beatFlowPartEvents.push({
+                type: 'rollHit',
+                time: rh.timeSeconds,
+                strokeId: ev.strokeId,
+                trackId: ev.trackId,
+                normY: rh.normY,
+                velocity: rh.velocity,
+                width: rh.width,
+              });
+            }
+
+            // Release at end
+            beatFlowPartEvents.push({
+              type: 'release',
+              time: ev.endTime,
+              strokeId: ev.strokeId,
+              trackId: ev.trackId,
+            });
+          } else {
+            // Glide or Sweep
+            beatFlowPartEvents.push({
+              type: 'attack',
+              time: ev.startTime,
+              strokeId: ev.strokeId,
+              trackId: ev.trackId,
+              freqOrY: ev.initialFreqOrY,
+              velocity: ev.initialVelocity,
+              width: ev.initialWidth,
+            });
+
+            for (const bp of ev.breakpoints) {
+              beatFlowPartEvents.push({
+                type: 'breakpoint',
+                time: bp.timeSeconds,
+                strokeId: ev.strokeId,
+                trackId: ev.trackId,
+                freqOrY: bp.freqOrY,
+                slideSeconds: bp.slideSeconds,
+                width: bp.width,
+              });
+            }
+
+            beatFlowPartEvents.push({
+              type: 'release',
+              time: ev.endTime,
+              strokeId: ev.strokeId,
+              trackId: ev.trackId,
+            });
+          }
+        }
+
+        // Loop wrap clean fade
+        beatFlowPartEvents.push({
+          type: 'loopWrap',
+          time: Math.max(0, loopDuration - 0.005),
+          strokeId: '',
+          trackId: '',
+        });
+
+        const newBeatFlowPart = new Tone.Part((time, item: BeatFlowPartEvent) => {
+          if (item.type === 'loopWrap') {
+            beatVoicePool.releaseAll(0.01);
+            return;
+          }
+
+          const track = trackManager.getTrack(item.trackId);
+          if (!track || !track.shouldPlay(trackManager.hasAnySolo())) {
+            if (item.type === 'release') {
+              beatVoicePool.markStrokeEnded(item.strokeId);
+            }
+            return;
+          }
+
+          const voice = beatVoicePool.acquireVoice(
+            item.strokeId,
+            item.trackId,
+            track.beatFlowStyle,
+            track.beatRollVoice,
+            track.beatSweepCharacter,
+            track.channel
+          );
+
+          if (item.type === 'attack') {
+            voice.triggerAttack(item.freqOrY ?? 0.5, time, item.velocity ?? 0.8, item.width ?? 3.5);
+          } else if (item.type === 'breakpoint') {
+            voice.updateParam(item.freqOrY ?? 0.5, time, item.slideSeconds ?? 0.03, item.width ?? 3.5);
+          } else if (item.type === 'rollHit') {
+            voice.updateParam(item.normY ?? 0.5, time, 0.03, item.width ?? 3.5);
+          } else if (item.type === 'release') {
+            voice.triggerRelease(time);
+            beatVoicePool.markStrokeEnded(item.strokeId);
+          }
+        }, beatFlowPartEvents as unknown as any[]);
+
+        newBeatFlowPart.loop = true;
+        newBeatFlowPart.loopStart = 0;
+        newBeatFlowPart.loopEnd = `${state.bars}m`;
+        newBeatFlowPart.start(0);
+
+        this.beatFlowPart = newBeatFlowPart;
+        if (oldBeatFlowPart) {
+          oldBeatFlowPart.dispose();
         }
       }
     }
@@ -528,7 +726,12 @@ export class LoopScheduler {
       this.beatPart.dispose();
       this.beatPart = null;
     }
+    if (this.beatFlowPart) {
+      this.beatFlowPart.dispose();
+      this.beatFlowPart = null;
+    }
     getFlowVoicePool().releaseAll(0.01);
+    getBeatFlowVoicePool().releaseAll(0.01);
   }
 }
 

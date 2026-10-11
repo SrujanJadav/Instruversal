@@ -1,4 +1,16 @@
-import { state, events, undo, redo, canUndo, canRedo, clearStrokes, ToolMode } from '../state';
+import {
+  state,
+  events,
+  undo,
+  redo,
+  canUndo,
+  canRedo,
+  clearStrokes,
+  ToolMode,
+  BeatFlowStyle,
+  BeatRollVoice,
+  BeatSweepCharacter,
+} from '../state';
 import { getTransport } from '../audio/transport';
 import { DEFAULT_TRACK_CONFIGS, getTrackManager, Track } from '../audio/tracks';
 import { INSTRUMENTS_MAP } from '../audio/instruments';
@@ -451,36 +463,87 @@ export class Toolbar {
     if (isBeat && track) {
       container.innerHTML = `
         <div class="toolbar-beat-group" role="group" aria-label="Beat pattern controls">
-          <!-- Kit chips -->
-          <div class="segmented-chips kit-chips" role="group" aria-label="Drum kit">
-            <button type="button" class="chip-btn ${track.kitId === '808' ? 'active' : ''}" data-kit="808" title="808 Kit" tabindex="0">808</button>
-            <button type="button" class="chip-btn ${track.kitId === 'lofi' ? 'active' : ''}" data-kit="lofi" title="Lo-fi Kit" tabindex="0">Lo-fi</button>
-            <button type="button" class="chip-btn ${track.kitId === 'acoustic' ? 'active' : ''}" data-kit="acoustic" title="Acoustic Kit" tabindex="0">Acoustic</button>
-            <button type="button" class="chip-btn ${track.kitId === 'electro' ? 'active' : ''}" data-kit="electro" title="Electro Kit" tabindex="0">Electro</button>
+          <!-- Hits | Flow toggle -->
+          <div class="toolbar-mode-toggle" role="group" aria-label="Beat playback mode">
+            <button type="button" class="mode-pill-btn ${track.beatMode === 'hits' ? 'active' : ''}" id="tb-beat-mode-hits" aria-label="Stepped drum hits mode" tabindex="0">
+              Hits
+            </button>
+            <button type="button" class="mode-pill-btn ${track.beatMode === 'flow' ? 'active' : ''}" id="tb-beat-mode-flow" aria-label="Continuous beat flow mode" tabindex="0">
+              Flow
+            </button>
           </div>
 
-          <!-- Rate chips -->
-          <div class="segmented-chips rate-chips" role="group" aria-label="Repeat rate">
-            <button type="button" class="chip-btn ${track.beatRate === '1/4' ? 'active' : ''}" data-rate="1/4" title="1/4 Note" tabindex="0">1/4</button>
-            <button type="button" class="chip-btn ${track.beatRate === '1/8' ? 'active' : ''}" data-rate="1/8" title="1/8 Note" tabindex="0">1/8</button>
-            <button type="button" class="chip-btn ${track.beatRate === '1/8T' ? 'active' : ''}" data-rate="1/8T" title="1/8 Triplet" tabindex="0">1/8T</button>
-            <button type="button" class="chip-btn ${track.beatRate === '1/16' ? 'active' : ''}" data-rate="1/16" title="1/16 Note" tabindex="0">1/16</button>
-            <button type="button" class="chip-btn ${track.beatRate === '1/32' ? 'active' : ''}" data-rate="1/32" title="1/32 Note" tabindex="0">1/32</button>
-          </div>
+          ${
+            track.beatMode === 'hits'
+              ? `
+            <!-- Kit chips -->
+            <div class="segmented-chips kit-chips" role="group" aria-label="Drum kit">
+              <button type="button" class="chip-btn ${track.kitId === '808' ? 'active' : ''}" data-kit="808" title="808 Kit" tabindex="0">808</button>
+              <button type="button" class="chip-btn ${track.kitId === 'lofi' ? 'active' : ''}" data-kit="lofi" title="Lo-fi Kit" tabindex="0">Lo-fi</button>
+              <button type="button" class="chip-btn ${track.kitId === 'acoustic' ? 'active' : ''}" data-kit="acoustic" title="Acoustic Kit" tabindex="0">Acoustic</button>
+              <button type="button" class="chip-btn ${track.kitId === 'electro' ? 'active' : ''}" data-kit="electro" title="Electro Kit" tabindex="0">Electro</button>
+            </div>
 
-          <!-- Swing slider -->
-          <div class="toolbar-mini-slider" title="Swing timing (0-60%)">
-            <span class="mini-slider-lbl">Swing</span>
-            <input type="range" class="mini-slider-input" id="tb-swing-slider" min="0" max="60" step="5" value="${track.swing}" aria-label="Swing percentage" tabindex="0" />
-            <span class="mini-slider-val" id="tb-swing-val">${track.swing}%</span>
-          </div>
+            <!-- Rate chips -->
+            <div class="segmented-chips rate-chips" role="group" aria-label="Repeat rate">
+              <button type="button" class="chip-btn ${track.beatRate === '1/4' ? 'active' : ''}" data-rate="1/4" title="1/4 Note" tabindex="0">1/4</button>
+              <button type="button" class="chip-btn ${track.beatRate === '1/8' ? 'active' : ''}" data-rate="1/8" title="1/8 Note" tabindex="0">1/8</button>
+              <button type="button" class="chip-btn ${track.beatRate === '1/8T' ? 'active' : ''}" data-rate="1/8T" title="1/8 Triplet" tabindex="0">1/8T</button>
+              <button type="button" class="chip-btn ${track.beatRate === '1/16' ? 'active' : ''}" data-rate="1/16" title="1/16 Note" tabindex="0">1/16</button>
+              <button type="button" class="chip-btn ${track.beatRate === '1/32' ? 'active' : ''}" data-rate="1/32" title="1/32 Note" tabindex="0">1/32</button>
+            </div>
 
-          <!-- Humanize slider -->
-          <div class="toolbar-mini-slider" title="Humanize jitter (0-100%)">
-            <span class="mini-slider-lbl">Human</span>
-            <input type="range" class="mini-slider-input" id="tb-human-slider" min="0" max="100" step="5" value="${track.humanize}" aria-label="Humanize percentage" tabindex="0" />
-            <span class="mini-slider-val" id="tb-human-val">${track.humanize}%</span>
-          </div>
+            <!-- Swing slider -->
+            <div class="toolbar-mini-slider" title="Swing timing (0-60%)">
+              <span class="mini-slider-lbl">Swing</span>
+              <input type="range" class="mini-slider-input" id="tb-swing-slider" min="0" max="60" step="5" value="${track.swing}" aria-label="Swing percentage" tabindex="0" />
+              <span class="mini-slider-val" id="tb-swing-val">${track.swing}%</span>
+            </div>
+
+            <!-- Humanize slider -->
+            <div class="toolbar-mini-slider" title="Humanize jitter (0-100%)">
+              <span class="mini-slider-lbl">Human</span>
+              <input type="range" class="mini-slider-input" id="tb-human-slider" min="0" max="100" step="5" value="${track.humanize}" aria-label="Humanize percentage" tabindex="0" />
+              <span class="mini-slider-val" id="tb-human-val">${track.humanize}%</span>
+            </div>
+          `
+              : `
+            <!-- Flow Style chips -->
+            <div class="segmented-chips style-chips" role="group" aria-label="Flow style">
+              <button type="button" class="chip-btn ${track.beatFlowStyle === 'glide' ? 'active' : ''}" data-style="glide" title="Glide sub/bass" tabindex="0">Glide</button>
+              <button type="button" class="chip-btn ${track.beatFlowStyle === 'roll' ? 'active' : ''}" data-style="roll" title="Retrigger drum roll" tabindex="0">Roll</button>
+              <button type="button" class="chip-btn ${track.beatFlowStyle === 'sweep' ? 'active' : ''}" data-style="sweep" title="Filtered noise sweep" tabindex="0">Sweep</button>
+            </div>
+
+            ${
+              track.beatFlowStyle === 'glide'
+                ? `
+              <!-- Glide slider -->
+              <div class="toolbar-glide-ctrl" id="tb-beat-glide-ctrl" title="Slide smoothness">
+                <span class="glide-lbl">Glide</span>
+                <input type="range" class="glide-slider" id="tb-beat-glide-slider" min="0" max="100" value="${state.glide}" aria-label="Glide percentage" tabindex="0" />
+                <span class="glide-val" id="tb-beat-glide-val">${state.glide}%</span>
+              </div>
+            `
+                : track.beatFlowStyle === 'roll'
+                ? `
+              <!-- Roll voice chips -->
+              <div class="segmented-chips roll-voice-chips" role="group" aria-label="Roll voice">
+                <button type="button" class="chip-btn ${track.beatRollVoice === 'snare' ? 'active' : ''}" data-voice="snare" title="Snare" tabindex="0">Snare</button>
+                <button type="button" class="chip-btn ${track.beatRollVoice === 'hat' ? 'active' : ''}" data-voice="hat" title="Hi-Hat" tabindex="0">Hat</button>
+                <button type="button" class="chip-btn ${track.beatRollVoice === 'tom' ? 'active' : ''}" data-voice="tom" title="Tom" tabindex="0">Tom</button>
+              </div>
+            `
+                : `
+              <!-- Sweep character chips -->
+              <div class="segmented-chips sweep-char-chips" role="group" aria-label="Sweep character">
+                <button type="button" class="chip-btn ${track.beatSweepCharacter === 'shaker' ? 'active' : ''}" data-char="shaker" title="Shaker noise" tabindex="0">Shaker</button>
+                <button type="button" class="chip-btn ${track.beatSweepCharacter === 'hat' ? 'active' : ''}" data-char="hat" title="Hat noise" tabindex="0">Hat</button>
+              </div>
+            `
+            }
+          `
+          }
         </div>
       `;
       this.bindBeatControls(container, track);
@@ -545,51 +608,124 @@ export class Toolbar {
   }
 
   private bindBeatControls(container: HTMLElement, track: Track) {
-    const kitBtns = container.querySelectorAll<HTMLButtonElement>('.kit-chips .chip-btn');
-    kitBtns.forEach((btn) => {
-      btn.addEventListener('click', () => {
-        if (this.hasDragged) return;
-        const kitId = btn.dataset.kit as DrumKitId;
-        if (!kitId) return;
-        track.setKit(kitId);
-        track.audition();
-        kitBtns.forEach((b) => b.classList.toggle('active', b.dataset.kit === kitId));
-        this.updateInstrumentButton();
-        events.emit('track:beat-param-change', { trackId: track.id, kitId });
-        events.emit('track:update', track.id);
+    // 1. Hits | Flow mode toggling
+    const hitsBtn = container.querySelector<HTMLButtonElement>('#tb-beat-mode-hits');
+    const flowBtn = container.querySelector<HTMLButtonElement>('#tb-beat-mode-flow');
+
+    hitsBtn?.addEventListener('click', () => {
+      if (this.hasDragged) return;
+      track.setBeatMode('hits');
+      events.emit('track:beat-param-change', { trackId: track.id, beatMode: 'hits' });
+      events.emit('track:update', track.id);
+      this.renderContextControls();
+    });
+
+    flowBtn?.addEventListener('click', () => {
+      if (this.hasDragged) return;
+      track.setBeatMode('flow');
+      events.emit('track:beat-param-change', { trackId: track.id, beatMode: 'flow' });
+      events.emit('track:update', track.id);
+      this.renderContextControls();
+    });
+
+    if (track.beatMode === 'hits') {
+      const kitBtns = container.querySelectorAll<HTMLButtonElement>('.kit-chips .chip-btn');
+      kitBtns.forEach((btn) => {
+        btn.addEventListener('click', () => {
+          if (this.hasDragged) return;
+          const kitId = btn.dataset.kit as DrumKitId;
+          if (!kitId) return;
+          track.setKit(kitId);
+          track.audition();
+          kitBtns.forEach((b) => b.classList.toggle('active', b.dataset.kit === kitId));
+          this.updateInstrumentButton();
+          events.emit('track:beat-param-change', { trackId: track.id, kitId });
+          events.emit('track:update', track.id);
+        });
       });
-    });
 
-    const rateBtns = container.querySelectorAll<HTMLButtonElement>('.rate-chips .chip-btn');
-    rateBtns.forEach((btn) => {
-      btn.addEventListener('click', () => {
-        if (this.hasDragged) return;
-        const rate = btn.dataset.rate as BeatRate;
-        if (!rate) return;
-        track.beatRate = rate;
-        rateBtns.forEach((b) => b.classList.toggle('active', b.dataset.rate === rate));
-        events.emit('track:beat-param-change', { trackId: track.id, rate });
-        events.emit('track:update', track.id);
+      const rateBtns = container.querySelectorAll<HTMLButtonElement>('.rate-chips .chip-btn');
+      rateBtns.forEach((btn) => {
+        btn.addEventListener('click', () => {
+          if (this.hasDragged) return;
+          const rate = btn.dataset.rate as BeatRate;
+          if (!rate) return;
+          track.beatRate = rate;
+          rateBtns.forEach((b) => b.classList.toggle('active', b.dataset.rate === rate));
+          events.emit('track:beat-param-change', { trackId: track.id, rate });
+          events.emit('track:update', track.id);
+        });
       });
-    });
 
-    const swingSlider = container.querySelector<HTMLInputElement>('#tb-swing-slider');
-    const swingVal = container.querySelector<HTMLElement>('#tb-swing-val');
-    swingSlider?.addEventListener('input', () => {
-      const val = parseInt(swingSlider.value, 10);
-      track.swing = val;
-      if (swingVal) swingVal.textContent = `${val}%`;
-      events.emit('track:beat-param-change', { trackId: track.id, swing: val });
-    });
+      const swingSlider = container.querySelector<HTMLInputElement>('#tb-swing-slider');
+      const swingVal = container.querySelector<HTMLElement>('#tb-swing-val');
+      swingSlider?.addEventListener('input', () => {
+        const val = parseInt(swingSlider.value, 10);
+        track.swing = val;
+        if (swingVal) swingVal.textContent = `${val}%`;
+        events.emit('track:beat-param-change', { trackId: track.id, swing: val });
+      });
 
-    const humanSlider = container.querySelector<HTMLInputElement>('#tb-human-slider');
-    const humanVal = container.querySelector<HTMLElement>('#tb-human-val');
-    humanSlider?.addEventListener('input', () => {
-      const val = parseInt(humanSlider.value, 10);
-      track.humanize = val;
-      if (humanVal) humanVal.textContent = `${val}%`;
-      events.emit('track:beat-param-change', { trackId: track.id, humanize: val });
-    });
+      const humanSlider = container.querySelector<HTMLInputElement>('#tb-human-slider');
+      const humanVal = container.querySelector<HTMLElement>('#tb-human-val');
+      humanSlider?.addEventListener('input', () => {
+        const val = parseInt(humanSlider.value, 10);
+        track.humanize = val;
+        if (humanVal) humanVal.textContent = `${val}%`;
+        events.emit('track:beat-param-change', { trackId: track.id, humanize: val });
+      });
+    } else {
+      // Flow mode controls
+      const styleBtns = container.querySelectorAll<HTMLButtonElement>('.style-chips .chip-btn');
+      styleBtns.forEach((btn) => {
+        btn.addEventListener('click', () => {
+          if (this.hasDragged) return;
+          const style = btn.dataset.style as BeatFlowStyle;
+          if (!style) return;
+          track.setBeatFlowStyle(style);
+          events.emit('track:beat-param-change', { trackId: track.id, beatFlowStyle: style });
+          events.emit('track:update', track.id);
+          this.renderContextControls();
+        });
+      });
+
+      if (track.beatFlowStyle === 'glide') {
+        const glideSlider = container.querySelector<HTMLInputElement>('#tb-beat-glide-slider');
+        const glideVal = container.querySelector<HTMLElement>('#tb-beat-glide-val');
+        glideSlider?.addEventListener('input', () => {
+          const val = parseInt(glideSlider.value, 10);
+          state.glide = val;
+          if (glideVal) glideVal.textContent = `${val}%`;
+          events.emit('glide:change', val);
+        });
+      } else if (track.beatFlowStyle === 'roll') {
+        const rollVoiceBtns = container.querySelectorAll<HTMLButtonElement>('.roll-voice-chips .chip-btn');
+        rollVoiceBtns.forEach((btn) => {
+          btn.addEventListener('click', () => {
+            if (this.hasDragged) return;
+            const voice = btn.dataset.voice as BeatRollVoice;
+            if (!voice) return;
+            track.setBeatRollVoice(voice);
+            events.emit('track:beat-param-change', { trackId: track.id, beatRollVoice: voice });
+            events.emit('track:update', track.id);
+            rollVoiceBtns.forEach((b) => b.classList.toggle('active', b.dataset.voice === voice));
+          });
+        });
+      } else if (track.beatFlowStyle === 'sweep') {
+        const sweepCharBtns = container.querySelectorAll<HTMLButtonElement>('.sweep-char-chips .chip-btn');
+        sweepCharBtns.forEach((btn) => {
+          btn.addEventListener('click', () => {
+            if (this.hasDragged) return;
+            const char = btn.dataset.char as BeatSweepCharacter;
+            if (!char) return;
+            track.setBeatSweepCharacter(char);
+            events.emit('track:beat-param-change', { trackId: track.id, beatSweepCharacter: char });
+            events.emit('track:update', track.id);
+            sweepCharBtns.forEach((b) => b.classList.toggle('active', b.dataset.char === char));
+          });
+        });
+      }
+    }
   }
 
   private setupListeners() {

@@ -2,7 +2,7 @@ import * as Tone from 'tone';
 import { InstrumentInstance, INSTRUMENTS_MAP } from './instruments';
 import { DrumKitInstance, DrumKitId, DrumSoundId } from './drums';
 import { BeatRate } from './beatSchedule';
-import { TrackType } from '../state';
+import { TrackType, BeatPlaybackMode, BeatFlowStyle, BeatRollVoice, BeatSweepCharacter } from '../state';
 
 export interface TrackConfig {
   id: string;
@@ -15,6 +15,10 @@ export interface TrackConfig {
   beatRate?: BeatRate;
   swing?: number; // 0 to 60 (%)
   humanize?: number; // 0 to 100 (%)
+  beatMode?: BeatPlaybackMode;
+  beatFlowStyle?: BeatFlowStyle;
+  beatRollVoice?: BeatRollVoice;
+  beatSweepCharacter?: BeatSweepCharacter;
   muted: boolean;
   solo: boolean;
   volume: number; // 0 to 1
@@ -38,6 +42,10 @@ export class Track {
   public beatRate: BeatRate;
   public swing: number;
   public humanize: number;
+  public beatMode: BeatPlaybackMode;
+  public beatFlowStyle: BeatFlowStyle;
+  public beatRollVoice: BeatRollVoice;
+  public beatSweepCharacter: BeatSweepCharacter;
   public muted: boolean;
   public solo: boolean;
   public volume: number;
@@ -57,6 +65,10 @@ export class Track {
     this.beatRate = config.beatRate || '1/16';
     this.swing = config.swing !== undefined ? config.swing : 0;
     this.humanize = config.humanize !== undefined ? config.humanize : 15;
+    this.beatMode = config.beatMode || 'hits';
+    this.beatFlowStyle = config.beatFlowStyle || 'glide';
+    this.beatRollVoice = config.beatRollVoice || 'snare';
+    this.beatSweepCharacter = config.beatSweepCharacter || 'shaker';
     this.muted = config.muted;
     this.solo = config.solo;
     this.volume = config.volume;
@@ -110,6 +122,22 @@ export class Track {
     } else {
       this.initDrumKit();
     }
+  }
+
+  public setBeatMode(mode: BeatPlaybackMode) {
+    this.beatMode = mode;
+  }
+
+  public setBeatFlowStyle(style: BeatFlowStyle) {
+    this.beatFlowStyle = style;
+  }
+
+  public setBeatRollVoice(voice: BeatRollVoice) {
+    this.beatRollVoice = voice;
+  }
+
+  public setBeatSweepCharacter(char: BeatSweepCharacter) {
+    this.beatSweepCharacter = char;
   }
 
   public setInstrument(instrumentId: string) {

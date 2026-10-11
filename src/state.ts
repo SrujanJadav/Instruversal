@@ -17,6 +17,10 @@ export type Stroke = {
 export type ToolMode = 'draw' | 'eraser';
 export type PlaybackMode = 'flow' | 'notes';
 export type TrackType = 'melodic' | 'beat';
+export type BeatPlaybackMode = 'hits' | 'flow';
+export type BeatFlowStyle = 'glide' | 'roll' | 'sweep';
+export type BeatRollVoice = 'snare' | 'hat' | 'tom';
+export type BeatSweepCharacter = 'shaker' | 'hat';
 
 export interface FxConfig {
   reverb: { amount: number; size: number; bypassed: boolean };
@@ -64,7 +68,17 @@ export type EventMap = {
     isBeat?: boolean;
   };
   'track:type-change': { trackId: string; type: TrackType };
-  'track:beat-param-change': { trackId: string; kitId?: string; rate?: string; swing?: number; humanize?: number };
+  'track:beat-param-change': {
+    trackId: string;
+    kitId?: string;
+    rate?: string;
+    swing?: number;
+    humanize?: number;
+    beatMode?: BeatPlaybackMode;
+    beatFlowStyle?: BeatFlowStyle;
+    beatRollVoice?: BeatRollVoice;
+    beatSweepCharacter?: BeatSweepCharacter;
+  };
   'stroke:added': Stroke;
   'strokes:updated': Stroke[];
 };

@@ -158,6 +158,7 @@ export class DrawingCanvas {
     this.unsubs.push(
       events.on('track:select', () => this.markStaticDirty()),
       events.on('track:type-change', () => this.markStaticDirty()),
+      events.on('track:beat-param-change', () => this.markStaticDirty()),
       events.on('scale:change', () => this.markStaticDirty()),
       events.on('tool:change', () => this.updateCursor()),
       events.on('strokes:updated', () => this.markStaticDirty()),
@@ -587,6 +588,11 @@ export class DrawingCanvas {
   }
 
   private drawDrumLanes(ctx: CanvasRenderingContext2D) {
+    const tm = getTrackManager();
+    const selTrack = tm.getTrack(state.selectedTrackId);
+    const isFlow = selTrack?.beatMode === 'flow';
+    const flowStyle = selTrack?.beatFlowStyle || 'glide';
+
     const laneHeight = this.height / 8;
     for (let i = 0; i < 8; i++) {
       const meta = DRUM_LANES[i];
@@ -601,15 +607,63 @@ export class DrawingCanvas {
       ctx.moveTo(0, Math.round(yTop) + 0.5);
       ctx.lineTo(this.width, Math.round(yTop) + 0.5);
       ctx.stroke();
+
       ctx.save();
       ctx.font = '600 10px "DM Mono", monospace';
-      ctx.fillStyle = "#5B554A";
+      ctx.fillStyle = isFlow ? "rgba(91, 85, 74, 0.18)" : "#5B554A";
       ctx.textAlign = "left";
       ctx.textBaseline = "middle";
       ctx.fillText(meta.shortLabel, 10, yTop + laneHeight / 2);
+
       ctx.font = '500 11px "Instrument Sans", sans-serif';
-      ctx.fillStyle = "rgba(28, 26, 22, 0.45)";
+      ctx.fillStyle = isFlow ? "rgba(28, 26, 22, 0.12)" : "rgba(28, 26, 22, 0.45)";
       ctx.fillText(meta.name, 36, yTop + laneHeight / 2);
+      ctx.restore();
+    }
+
+    // In Flow mode, draw left edge axis hint describing what height means
+    if (isFlow) {
+      ctx.save();
+      const axisName = flowStyle === 'glide' ? 'Pitch' : flowStyle === 'roll' ? 'Intensity' : 'Brightness';
+      const topDesc = flowStyle === 'glide' ? '▲ High (C4)' : flowStyle === 'roll' ? '▲ 1/64 Rate' : '▲ 10 kHz';
+      const botDesc = flowStyle === 'glide' ? '▼ Low (C1)' : flowStyle === 'roll' ? '▼ 1/8 Rate' : '▼ 400 Hz';
+
+      // Left axis pill indicator
+      ctx.fillStyle = 'rgba(233, 223, 203, 0.9)';
+      ctx.strokeStyle = 'rgba(28, 26, 22, 0.2)';
+      ctx.lineWidth = 1;
+
+      // Small top hint badge
+      ctx.beginPath();
+      ctx.roundRect(8, 8, 86, 20, 4);
+      ctx.fill();
+      ctx.stroke();
+      ctx.font = '600 9.5px "DM Mono", monospace';
+      ctx.fillStyle = '#1C1A16';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(topDesc, 14, 18);
+
+      // Center axis title tag
+      ctx.fillStyle = 'rgba(28, 26, 22, 0.08)';
+      ctx.beginPath();
+      ctx.roundRect(8, this.height / 2 - 12, 104, 24, 4);
+      ctx.fill();
+      ctx.stroke();
+      ctx.font = '600 10px "DM Mono", monospace';
+      ctx.fillStyle = '#1C1A16';
+      ctx.fillText(`Axis: ${axisName}`, 14, this.height / 2);
+
+      // Small bottom hint badge
+      ctx.fillStyle = 'rgba(233, 223, 203, 0.9)';
+      ctx.beginPath();
+      ctx.roundRect(8, this.height - 28, 86, 20, 4);
+      ctx.fill();
+      ctx.stroke();
+      ctx.font = '600 9.5px "DM Mono", monospace';
+      ctx.fillStyle = '#1C1A16';
+      ctx.fillText(botDesc, 14, this.height - 18);
+
       ctx.restore();
     }
   }
@@ -731,14 +785,19 @@ export class DrawingCanvas {
   }
 
   private drawFlowPlayheadDots() {
-    if (!state.isPlaying || state.playbackMode !== 'flow') return;
+    if (!state.isPlaying) return;
     const progress = getTransport().getProgress();
     const ctx = this.ctx;
     const now = performance.now();
 
     for (const stroke of state.strokes) {
       const tr = getTrackManager().getTrack(stroke.trackId);
-      if (tr && tr.trackType === 'beat') continue;
+      const isBeat = tr && tr.trackType === 'beat';
+      if (isBeat) {
+        if (tr.beatMode !== 'flow') continue;
+      } else {
+        if (state.playbackMode !== 'flow') continue;
+      }
 
       const pts = stroke.points;
       if (pts.length === 0) continue;

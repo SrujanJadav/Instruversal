@@ -3,9 +3,12 @@ import { DEFAULT_TRACK_CONFIGS, shouldTrackPlay } from './tracks';
 import { INSTRUMENT_METAS, INSTRUMENTS_MAP } from './instruments';
 
 describe('Instruments & Tracks module', () => {
-  it('registers all 7 required instruments', () => {
-    expect(INSTRUMENT_METAS.length).toBe(7);
-    const expectedIds = ['pluck', 'bell', 'marimba', 'soft-pad', 'warm-keys', 'kalimba', 'sub-bass'];
+  it('registers all 15 melodic instruments', () => {
+    expect(INSTRUMENT_METAS.length).toBe(15);
+    const expectedIds = [
+      'pluck', 'bell', 'marimba', 'soft-pad', 'warm-keys', 'kalimba', 'sub-bass',
+      'music-box', 'steel-pan', 'glass-harmonica', 'strings', 'theremin', 'wobble-bass', 'tape-keys', 'choir-pad'
+    ];
     for (const id of expectedIds) {
       expect(INSTRUMENTS_MAP[id]).toBeDefined();
     }
