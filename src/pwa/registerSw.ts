@@ -63,7 +63,7 @@ function showUpdateNotification(worker: ServiceWorker): void {
       Reload
     </button>
     <button type="button" class="sw-update-dismiss-btn" id="sw-update-dismiss-btn" aria-label="Dismiss update notification">
-      ✕
+      <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 3l10 10M13 3L3 13"/></svg>
     </button>
   `;
 

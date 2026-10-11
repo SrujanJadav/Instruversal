@@ -24,6 +24,7 @@ export class LibraryModal {
   private pendingDeletions: Map<string, { timer: number; meta: CreationMeta; creation?: Creation }> = new Map();
   private activeMenuCardId: string | null = null;
   private confirmingDeleteId: string | null = null;
+  private openerElement: HTMLElement | null = null;
 
   constructor() {
     this.overlay = document.createElement('div');
@@ -147,11 +148,15 @@ export class LibraryModal {
           const initial = (user.email || 'U')[0].toUpperCase();
           const shortEmail = (user.email || '').split('@')[0];
           accountContainer.innerHTML = `
-            <button type="button" class="auth-pill-btn" id="lib-auth-pill-btn" aria-label="Account: ${user.email}">
-              <span class="auth-avatar-circle">${initial}</span>
-              <span>${shortEmail}</span>
+            <button type="button" class="auth-pill-btn" id="lib-auth-pill-btn">
+              <span class="auth-avatar-circle"></span>
+              <span class="auth-email-label"></span>
             </button>
           `;
+          const btn = accountContainer.querySelector<HTMLButtonElement>('#lib-auth-pill-btn')!;
+          btn.setAttribute('aria-label', `Account: ${user.email}`);
+          btn.querySelector('.auth-avatar-circle')!.textContent = initial;
+          btn.querySelector('.auth-email-label')!.textContent = shortEmail;
         } else {
           accountContainer.innerHTML = `
             <button type="button" class="auth-pill-btn" id="lib-auth-pill-btn" aria-label="Sign in to your account">
@@ -306,6 +311,7 @@ export class LibraryModal {
   }
 
   public async open() {
+    this.openerElement = document.activeElement as HTMLElement | null;
     if (window.location.hash !== '#/library') {
       window.location.hash = '#/library';
       return;
@@ -337,6 +343,7 @@ export class LibraryModal {
     if (updateHash && window.location.hash === '#/library') {
       window.location.hash = '#/app';
     }
+    this.openerElement?.focus();
   }
 
   public async refreshCreations() {

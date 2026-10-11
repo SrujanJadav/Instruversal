@@ -23,7 +23,7 @@ export class ThemeToggle {
     this.checkbox.type = 'checkbox';
     this.checkbox.setAttribute('role', 'switch');
     this.checkbox.className = 'theme-switch__checkbox';
-    this.checkbox.setAttribute('aria-label', 'Dark mode');
+    this.checkbox.setAttribute('aria-label', isDark ? 'Dark mode, active' : 'Dark mode, inactive');
     this.checkbox.checked = isDark;
     this.checkbox.setAttribute('aria-checked', String(isDark));
 
@@ -86,6 +86,7 @@ export class ThemeToggle {
     this.checkbox.addEventListener('change', () => {
       const isDark = this.checkbox.checked;
       this.checkbox.setAttribute('aria-checked', String(isDark));
+      this.checkbox.setAttribute('aria-label', isDark ? 'Dark mode, active' : 'Dark mode, inactive');
       setTheme(isDark ? 'dark' : 'light', true);
     });
 
@@ -104,6 +105,7 @@ export class ThemeToggle {
       if (this.checkbox.checked !== isDark) {
         this.checkbox.checked = isDark;
         this.checkbox.setAttribute('aria-checked', String(isDark));
+        this.checkbox.setAttribute('aria-label', isDark ? 'Dark mode, active' : 'Dark mode, inactive');
       }
     }) as EventListener);
   }

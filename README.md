@@ -89,6 +89,23 @@ npm run preview
 
 ---
 
+## Environment Variables (Optional Cloud Sync)
+
+Instruversal functions 100% locally in offline/guest mode using IndexedDB. To enable cross-device cloud sync and public sketch sharing via [Supabase](https://supabase.com):
+
+1. Copy `.env.example` to `.env.local`:
+   ```bash
+   cp .env.example .env.local
+   ```
+2. Configure your public Supabase project credentials in `.env.local`:
+   ```env
+   VITE_SUPABASE_URL=https://your-project-id.supabase.co
+   VITE_SUPABASE_ANON_KEY=your-anon-publishable-key-here
+   ```
+3. Run the SQL schema and RLS policies in `supabase/migrations/001_creations.sql` in your Supabase SQL editor.
+> **Note:** Only publishable anonymous keys should be placed in client environment files. Never store `service_role` keys on the client!
+
+
 ## Browser & Device Notes
 
 - **Audio Gesture Requirement:** Browsers require a user interaction before Web Audio can output sound. Tap the "Tap to start" screen to wake the audio engine.

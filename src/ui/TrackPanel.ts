@@ -182,7 +182,7 @@ export class TrackPanel {
           </button>
         </div>
         <button type="button" class="panel-close-btn" id="panel-close-btn" aria-label="Close mixer panel">
-          ✕
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 3l10 10M13 3L3 13"/></svg>
         </button>
       </div>
 

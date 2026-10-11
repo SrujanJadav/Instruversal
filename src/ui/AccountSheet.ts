@@ -11,6 +11,7 @@ import {
 export class AccountSheet {
   private overlay: HTMLElement;
   private isOpen = false;
+  private openerElement: HTMLElement | null = null;
 
   constructor() {
     this.overlay = document.createElement('div');
@@ -45,6 +46,7 @@ export class AccountSheet {
   }
 
   public open() {
+    this.openerElement = document.activeElement as HTMLElement | null;
     this.isOpen = true;
     this.render();
     this.overlay.classList.add('open');
@@ -53,6 +55,7 @@ export class AccountSheet {
   public close() {
     this.isOpen = false;
     this.overlay.classList.remove('open');
+    this.openerElement?.focus();
   }
 
   private render() {
@@ -87,7 +90,7 @@ export class AccountSheet {
           </header>
 
           <div class="account-user-card">
-            <span class="account-user-email">${email}</span>
+            <span class="account-user-email"></span>
             <span class="account-user-status">Cloud sync active</span>
           </div>
 
@@ -108,6 +111,11 @@ export class AccountSheet {
           </div>
         </div>
       `;
+
+      const emailEl = this.overlay.querySelector<HTMLElement>('.account-user-email');
+      if (emailEl) {
+        emailEl.textContent = email;
+      }
 
       this.overlay.querySelector('#account-close-btn')?.addEventListener('click', () => this.close());
 

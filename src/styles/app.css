@@ -700,31 +700,7 @@
 
 /* Edge fade masks */
 .dock-fade {
-  position: absolute;
-  top: 2px;
-  bottom: 5px;
-  width: 28px;
-  pointer-events: none;
-  z-index: 10;
-  transition: opacity 160ms ease-out;
-}
-
-.dock-fade-left {
-  left: 2px;
-  background: linear-gradient(to right, var(--paper-deep), rgba(233, 223, 203, 0));
-  border-top-left-radius: var(--radius-lg);
-  border-bottom-left-radius: var(--radius-lg);
-}
-
-.dock-fade-right {
-  right: 2px;
-  background: linear-gradient(to left, var(--paper-deep), rgba(233, 223, 203, 0));
-  border-top-right-radius: var(--radius-lg);
-  border-bottom-right-radius: var(--radius-lg);
-}
-
-.dock-fade.hidden {
-  opacity: 0;
+  display: none;
 }
 
 .toolbar-inner {
@@ -1936,7 +1912,6 @@
   position: fixed;
   inset: 0;
   background-color: var(--backdrop, rgba(28, 26, 22, 0.25));
-  backdrop-filter: blur(1px);
   z-index: 90;
   opacity: 0;
   pointer-events: none;
@@ -2525,9 +2500,7 @@
 .hint-overlay-backdrop {
   position: fixed;
   inset: 0;
-  background-color: rgba(28, 26, 22, 0.45);
-  backdrop-filter: blur(2px);
-  -webkit-backdrop-filter: blur(2px);
+  background-color: var(--backdrop, rgba(28, 26, 22, 0.45));
   z-index: 2000;
   display: flex;
   align-items: center;

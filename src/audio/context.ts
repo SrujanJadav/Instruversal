@@ -22,20 +22,7 @@ export function initLowLatencyContext(): void {
 }
 
 export function logAudioLatencyInfo(): void {
-  const ctx = Tone.getContext();
-  const rawCtx = ctx.rawContext as AudioContext;
-  const baseLatency = (rawCtx as any).baseLatency ?? (ctx as any).baseLatency ?? 0;
-  const outputLatency = (rawCtx as any).outputLatency ?? 0;
-  const lookAhead = (ctx as any).lookAhead ?? 0.03;
-  const sampleRate = ctx.sampleRate;
-
-  console.group('[Instruversal] Audio Context Latency Report');
-  console.log(`  baseLatency:    ${(baseLatency * 1000).toFixed(1)} ms`);
-  console.log(`  outputLatency:  ${(outputLatency * 1000).toFixed(1)} ms`);
-  console.log(`  lookAhead:      ${(lookAhead * 1000).toFixed(0)} ms`);
-  console.log(`  sampleRate:     ${sampleRate} Hz`);
-  console.log(`  total audioLatency ≈ ${((baseLatency + outputLatency + lookAhead) * 1000).toFixed(1)} ms`);
-  console.groupEnd();
+  // Silent in production to prevent console noise
 }
 
 export function getTotalAudioLatencySeconds(): number {

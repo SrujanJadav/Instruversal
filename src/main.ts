@@ -7,7 +7,7 @@ import './styles/gallery.css';
 import './styles/account.css';
 
 // MUST be first before any Tone.js module instantiates nodes
-import { initLowLatencyContext, logAudioLatencyInfo } from './audio/context';
+import { initLowLatencyContext } from './audio/context';
 initLowLatencyContext();
 
 import * as Tone from 'tone';
@@ -390,11 +390,15 @@ function updateGateAccountButton() {
     const initial = (user.email || 'U')[0].toUpperCase();
     const shortEmail = (user.email || '').split('@')[0];
     gateAccountContainer.innerHTML = `
-      <button type="button" class="auth-pill-btn" id="gate-auth-btn" aria-label="Account: ${user.email}">
-        <span class="auth-avatar-circle">${initial}</span>
-        <span>${shortEmail}</span>
+      <button type="button" class="auth-pill-btn" id="gate-auth-btn">
+        <span class="auth-avatar-circle"></span>
+        <span class="auth-email-label"></span>
       </button>
     `;
+    const btn = gateAccountContainer.querySelector<HTMLButtonElement>('#gate-auth-btn')!;
+    btn.setAttribute('aria-label', `Account: ${user.email}`);
+    btn.querySelector('.auth-avatar-circle')!.textContent = initial;
+    btn.querySelector('.auth-email-label')!.textContent = shortEmail;
   } else {
     gateAccountContainer.innerHTML = `
       <button type="button" class="auth-pill-btn" id="gate-auth-btn" aria-label="Sign in to your account">
@@ -427,7 +431,6 @@ export async function enterMainView(startAudio: boolean = true) {
     await Tone.start();
     state.audioStarted = true;
     events.emit('audio:started', undefined);
-    logAudioLatencyInfo();
   }
 
   restoreMasterGain();

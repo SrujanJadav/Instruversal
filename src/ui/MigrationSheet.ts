@@ -16,7 +16,9 @@ class MigrationSheet {
       <div class="migration-sheet-dialog">
         <div class="migration-sheet-header">
           <h2 class="migration-sheet-title">Sync existing sketches?</h2>
-          <button type="button" class="migration-sheet-close" aria-label="Close">✕</button>
+          <button type="button" class="migration-sheet-close" aria-label="Close">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 3l10 10M13 3L3 13"/></svg>
+          </button>
         </div>
         <div class="migration-sheet-body">
           <p class="migration-desc" id="migration-desc">

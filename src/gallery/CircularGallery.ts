@@ -820,11 +820,16 @@ export class CircularGallery {
   private update() {
     if (this.isPaused) return;
 
-    this.scroll.current = lerp(
-      this.scroll.current,
-      this.scroll.target,
-      this.scroll.ease
-    );
+    const prefersReducedMotion = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (prefersReducedMotion) {
+      this.scroll.current = this.scroll.target;
+    } else {
+      this.scroll.current = lerp(
+        this.scroll.current,
+        this.scroll.target,
+        this.scroll.ease
+      );
+    }
 
     const direction = this.scroll.current >= this.scroll.last ? 'right' : 'left';
 

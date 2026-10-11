@@ -118,7 +118,9 @@ export function checkSilentSwitchNotice(): void {
   silentHintEl.className = 'silent-switch-hint';
   silentHintEl.innerHTML = `
     <span>No sound? Check your phone's silent switch and volume.</span>
-    <button type="button" class="silent-hint-dismiss" aria-label="Dismiss note">✕</button>
+    <button type="button" class="silent-hint-dismiss" aria-label="Dismiss note">
+      <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 3l10 10M13 3L3 13"/></svg>
+    </button>
   `;
 
   const container = document.querySelector('.main-view');

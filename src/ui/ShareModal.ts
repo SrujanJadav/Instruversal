@@ -21,7 +21,9 @@ class ShareModal {
       <div class="share-modal-dialog">
         <div class="share-modal-header">
           <h2 class="share-modal-title">Share Sketch</h2>
-          <button type="button" class="share-modal-close" aria-label="Close share sheet">✕</button>
+          <button type="button" class="share-modal-close" aria-label="Close share sheet">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 3l10 10M13 3L3 13"/></svg>
+          </button>
         </div>
         <div class="share-modal-body" id="share-modal-body"></div>
       </div>
@@ -46,7 +48,10 @@ class ShareModal {
     });
   }
 
+  private openerElement: HTMLElement | null = null;
+
   public open(id: string, title: string, isPublic: boolean = false, publicSlug: string | null = null) {
+    this.openerElement = document.activeElement as HTMLElement | null;
     this.currentId = id;
     this.currentTitle = title;
     this.isPublic = isPublic;
@@ -54,11 +59,14 @@ class ShareModal {
     this.isOpen = true;
     this.render();
     this.overlay.classList.add('visible');
+    const closeBtn = this.overlay.querySelector<HTMLButtonElement>('.share-modal-close');
+    closeBtn?.focus();
   }
 
   public close() {
     this.isOpen = false;
     this.overlay.classList.remove('visible');
+    this.openerElement?.focus();
   }
 
   private render() {

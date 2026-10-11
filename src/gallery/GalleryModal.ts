@@ -15,7 +15,9 @@ export class GalleryModal {
   private openBtn: HTMLElement;
   private srMirror: HTMLElement;
 
-  private galleryInstance: any | null = null;
+  // Lazy-loaded CircularGallery instance
+  private galleryInstance: import('./CircularGallery').CircularGallery | null = null;
+  private openerElement: HTMLElement | null = null;
   private creations: CreationMeta[] = [];
   private currentCenteredMeta: CreationMeta | null = null;
   private isOpen: boolean = false;
@@ -131,6 +133,7 @@ export class GalleryModal {
       } catch {}
     }
 
+    this.openerElement = document.activeElement as HTMLElement | null;
     this.isOpen = true;
     this.isAnimating = true;
 
@@ -336,6 +339,7 @@ export class GalleryModal {
     if (updateHash && window.location.hash === '#/load') {
       window.location.hash = '#/';
     }
+    this.openerElement?.focus();
   }
 }
 
