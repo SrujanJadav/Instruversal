@@ -13,11 +13,14 @@ export type Stroke = {
   width: number;
 };
 
+import { ScaleName } from './audio/scales';
+
 export type EventMap = {
   'audio:started': void;
   'transport:play': void;
   'transport:pause': void;
   'bpm:change': number;
+  'scale:change': { rootNote: number; scaleName: ScaleName };
   'stroke:added': Stroke;
   'strokes:updated': Stroke[];
 };
@@ -59,6 +62,8 @@ export interface AppState {
   bpm: number;
   bars: number;
   selectedTrackId: string;
+  rootNote: number;
+  scaleName: ScaleName;
   strokes: Stroke[];
 }
 
@@ -68,6 +73,8 @@ export const state: AppState = {
   bpm: CONFIG.defaultBpm,
   bars: CONFIG.defaultBars,
   selectedTrackId: 'track-1',
+  rootNote: 0, // C
+  scaleName: 'major pentatonic',
   strokes: [],
 };
 

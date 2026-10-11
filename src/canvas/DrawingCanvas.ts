@@ -1,4 +1,11 @@
+import * as Tone from 'tone';
 import { Stroke, state, events } from '../state';
+import {
+  buildScaleNotes,
+  yToMidi,
+  midiToNoteName,
+  isRootNote,
+} from '../audio/scales';
 
 export class DrawingCanvas {
   private container: HTMLElement;
@@ -16,10 +23,17 @@ export class DrawingCanvas {
   private lastPointTime: number = 0;
   private lastPointPos: { x: number; y: number } | null = null;
 
-  // Track pigment for Step 2 (vermilion)
+  // Live pitch preview & readout
+  private previewSynth: Tone.Synth | null = null;
+  private lastPreviewMidi: number | null = null;
+  private lastPreviewTime: number = 0;
+  private activeNoteDisplay: { name: string; x: number; y: number } | null = null;
+
+  // Track pigment for Step 2 & 3 (vermilion)
   private readonly defaultColor = '#D2432A';
-  private readonly lineColor = 'rgba(28, 26, 22, 0.14)';
-  private readonly lineSubtleColor = 'rgba(28, 26, 22, 0.07)';
+  private readonly lineColor = 'rgba(28, 26, 22, 0.16)';
+  private readonly lineRootColor = 'rgba(28, 26, 22, 0.28)';
+  private readonly lineSubtleColor = 'rgba(28, 26, 22, 0.08)';
 
   constructor(container: HTMLElement) {
     this.container = container;
@@ -51,6 +65,15 @@ export class DrawingCanvas {
 
     // Initial sizing
     this.handleResize();
+  }
+
+  private initPreviewSynth() {
+    if (this.previewSynth) return;
+    this.previewSynth = new Tone.Synth({
+      oscillator: { type: 'sine' },
+      envelope: { attack: 0.015, decay: 0.12, sustain: 0.05, release: 0.18 },
+    }).toDestination();
+    this.previewSynth.volume.value = -12;
   }
 
   private onWindowResize = () => {
@@ -89,6 +112,33 @@ export class DrawingCanvas {
     this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
   }
 
+  private triggerLivePitch(normX: number, normY: number) {
+    const scaleNotes = buildScaleNotes(state.rootNote, state.scaleName, 3, 6);
+    const midi = yToMidi(normY, scaleNotes);
+    const noteName = midiToNoteName(midi);
+
+    this.activeNoteDisplay = { name: noteName, x: normX, y: normY };
+
+    if (!state.audioStarted) return;
+
+    if (!this.previewSynth) {
+      this.initPreviewSynth();
+    }
+
+    const now = performance.now();
+    // Throttle preview note: trigger if pitch changed or if > 110ms elapsed
+    if (this.previewSynth && (midi !== this.lastPreviewMidi || now - this.lastPreviewTime > 110)) {
+      try {
+        const freq = Tone.Frequency(midi, 'midi').toFrequency();
+        this.previewSynth.triggerAttackRelease(freq, '16n');
+        this.lastPreviewMidi = midi;
+        this.lastPreviewTime = now;
+      } catch {
+        // Safe guard against audio context suspension
+      }
+    }
+  }
+
   private onPointerDown = (e: PointerEvent) => {
     // Ignore secondary pointers to prevent multi-touch interference
     if (this.activePointerId !== null) return;
@@ -120,6 +170,7 @@ export class DrawingCanvas {
       width: baseWidth,
     };
 
+    this.triggerLivePitch(normX, normY);
     this.redraw();
   };
 
@@ -168,6 +219,7 @@ export class DrawingCanvas {
     this.lastPointPos = { x: normX, y: normY };
     this.lastPointTime = now;
 
+    this.triggerLivePitch(normX, normY);
     this.redraw();
   };
 
@@ -178,6 +230,8 @@ export class DrawingCanvas {
       this.canvas.releasePointerCapture(e.pointerId);
     }
     this.activePointerId = null;
+    this.activeNoteDisplay = null;
+    this.lastPreviewMidi = null;
 
     if (this.currentStroke && this.currentStroke.points.length > 0) {
       state.strokes.push(this.currentStroke);
@@ -196,6 +250,8 @@ export class DrawingCanvas {
         this.canvas.releasePointerCapture(e.pointerId);
       }
       this.activePointerId = null;
+      this.activeNoteDisplay = null;
+      this.lastPreviewMidi = null;
       this.currentStroke = null;
       this.lastPointPos = null;
       this.redraw();
@@ -218,21 +274,44 @@ export class DrawingCanvas {
     if (this.currentStroke) {
       this.drawStroke(this.currentStroke);
     }
+
+    // Draw active floating note badge
+    if (this.activeNoteDisplay) {
+      this.drawNoteBadge(this.activeNoteDisplay);
+    }
   }
 
   private drawBackgroundGuides() {
     const ctx = this.ctx;
+    const scaleNotes = buildScaleNotes(state.rootNote, state.scaleName, 3, 6);
 
-    // Horizontal pitch guide lines (placeholder pitch divisions)
-    const pitchLines = 10;
-    ctx.lineWidth = 1;
-    for (let i = 1; i <= pitchLines; i++) {
-      const y = Math.round((i / (pitchLines + 1)) * this.height);
+    // Horizontal pitch guide lines at each scale note
+    const noteCount = scaleNotes.length;
+    for (let i = 0; i < noteCount; i++) {
+      const midi = scaleNotes[i];
+      const yNorm = 1 - i / (noteCount - 1);
+      const y = Math.round(yNorm * this.height);
+      const isRoot = isRootNote(midi, state.rootNote);
+
       ctx.beginPath();
-      ctx.strokeStyle = i === Math.floor((pitchLines + 1) / 2) ? this.lineColor : this.lineSubtleColor;
+      ctx.lineWidth = isRoot ? 1.2 : 0.8;
+      ctx.strokeStyle = isRoot ? this.lineRootColor : this.lineSubtleColor;
       ctx.moveTo(0, y + 0.5);
       ctx.lineTo(this.width, y + 0.5);
       ctx.stroke();
+
+      // Show tiny DM Mono note label on the left edge for root notes only
+      if (isRoot) {
+        ctx.save();
+        ctx.font = '500 10px "DM Mono", monospace';
+        ctx.fillStyle = '#5B554A';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        // Faint background tab behind the root label for legibility
+        const label = midiToNoteName(midi);
+        ctx.fillText(label, 6, y - 7);
+        ctx.restore();
+      }
     }
 
     // Vertical beat markers (8 beats in a 2-bar 4/4 loop)
@@ -242,6 +321,7 @@ export class DrawingCanvas {
       ctx.beginPath();
       // Measure boundary at bar 2 (halfway) is slightly stronger
       const isBarBoundary = i === totalBeats / 2;
+      ctx.lineWidth = 1;
       ctx.strokeStyle = isBarBoundary ? this.lineColor : this.lineSubtleColor;
       ctx.moveTo(x + 0.5, 0);
       ctx.lineTo(x + 0.5, this.height);
@@ -304,7 +384,53 @@ export class DrawingCanvas {
     ctx.restore();
   }
 
+  private drawNoteBadge(display: { name: string; x: number; y: number }) {
+    const ctx = this.ctx;
+    const px = display.x * this.width;
+    const py = display.y * this.height;
+
+    // Small floating badge floating slightly above and to the right of pointer
+    const badgeW = 32;
+    const badgeH = 20;
+    const badgeX = Math.min(px + 14, this.width - badgeW - 8);
+    const badgeY = Math.max(py - 26, 8);
+
+    ctx.save();
+
+    // Subtle paper background card
+    ctx.fillStyle = '#F3ECDD';
+    ctx.strokeStyle = 'rgba(28, 26, 22, 0.22)';
+    ctx.lineWidth = 1;
+
+    // Rounded rectangle
+    const r = 4;
+    ctx.beginPath();
+    ctx.moveTo(badgeX + r, badgeY);
+    ctx.lineTo(badgeX + badgeW - r, badgeY);
+    ctx.arcTo(badgeX + badgeW, badgeY, badgeX + badgeW, badgeY + r, r);
+    ctx.lineTo(badgeX + badgeW, badgeY + badgeH - r);
+    ctx.arcTo(badgeX + badgeW, badgeY + badgeH, badgeX + badgeW - r, badgeY + badgeH, r);
+    ctx.lineTo(badgeX + r, badgeY + badgeH);
+    ctx.arcTo(badgeX, badgeY + badgeH, badgeX, badgeY + badgeH - r, r);
+    ctx.lineTo(badgeX, badgeY + r);
+    ctx.arcTo(badgeX, badgeY, badgeX + r, badgeY, r);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Note name text in DM Mono
+    ctx.font = '500 11px "DM Mono", monospace';
+    ctx.fillStyle = '#1C1A16';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(display.name, badgeX + badgeW / 2, badgeY + badgeH / 2 + 0.5);
+
+    ctx.restore();
+  }
+
   public destroy() {
+    this.previewSynth?.dispose();
+    this.previewSynth = null;
     this.resizeObserver.disconnect();
     window.removeEventListener('resize', this.onWindowResize);
     window.removeEventListener('orientationchange', this.onWindowResize);
