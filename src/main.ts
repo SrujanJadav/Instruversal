@@ -2,6 +2,10 @@ import './styles/tokens.css';
 import './styles/base.css';
 import './styles/app.css';
 
+// MUST be first before any Tone.js module instantiates nodes
+import { initLowLatencyContext, logAudioLatencyInfo } from './audio/context';
+initLowLatencyContext();
+
 import * as Tone from 'tone';
 import { CONFIG } from './config';
 import { state, events } from './state';
@@ -11,6 +15,7 @@ import { getLoopScheduler } from './audio/schedule';
 import { Toolbar } from './ui/Toolbar';
 import { TrackPanel } from './ui/TrackPanel';
 import { FxPanel } from './ui/FxPanel';
+import { SyncSettingsPill } from './ui/SyncSettingsPill';
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 
@@ -72,6 +77,9 @@ async function handleStart() {
     state.audioStarted = true;
     events.emit('audio:started', undefined);
 
+    // Log latency values for diagnosis
+    logAudioLatencyInfo();
+
     // Initialize track manager and loop scheduler
     const trackManager = getTrackManager();
     getLoopScheduler();
@@ -106,6 +114,12 @@ async function handleStart() {
 
       if (!fxPanel) {
         fxPanel = new FxPanel(app);
+      }
+
+      // Sync settings pill
+      const headerActionsEl = document.querySelector<HTMLElement>('.header-actions');
+      if (headerActionsEl) {
+        new SyncSettingsPill(headerActionsEl);
       }
     }, 220);
   } catch (err) {

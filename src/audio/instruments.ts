@@ -168,7 +168,7 @@ export function createSoftPad(): InstrumentInstance {
   const synth = new Tone.PolySynth(Tone.Synth, {
     oscillator: { type: 'sawtooth' },
     envelope: {
-      attack: 0.22,
+      attack: 0.045,
       decay: 0.6,
       sustain: 0.45,
       release: 0.75,

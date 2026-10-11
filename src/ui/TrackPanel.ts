@@ -2,6 +2,8 @@ import { state, events } from '../state';
 import { getTrackManager, auditionInstrument, Track } from '../audio/tracks';
 import { INSTRUMENT_METAS } from '../audio/instruments';
 import { SCALES, ScaleName } from '../audio/scales';
+import { getTotalAudioLatencySeconds } from '../audio/context';
+import { getTransport } from '../audio/transport';
 
 const ROOT_NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
@@ -81,6 +83,12 @@ export class TrackPanel {
         if (this.isOpen() && this.currentTab === 'key') {
           this.render();
         }
+      }),
+      events.on('sync:change', (offsetMs) => {
+        const slider = this.panel.querySelector<HTMLInputElement>('#panel-sync-slider');
+        const display = this.panel.querySelector<HTMLElement>('#panel-sync-val');
+        if (slider) slider.value = String(offsetMs);
+        if (display) display.textContent = `${offsetMs >= 0 ? '+' : ''}${offsetMs}ms`;
       })
     );
   }
@@ -150,10 +158,26 @@ export class TrackPanel {
       `;
     }
 
+    const hwMs = Math.round(getTotalAudioLatencySeconds() * 1000);
     return `
       <ul class="track-list">
         ${tracks.map((t) => this.renderTrackRow(t)).join('')}
       </ul>
+      <div class="mixer-sync-section">
+        <div class="mixer-sync-header">
+          <span class="section-title">Audio & Playhead Sync</span>
+          <span class="sync-hw-info">Hardware latency ≈ ${hwMs}ms</span>
+        </div>
+        <p class="sync-hint">Using Bluetooth headphones? Raise this until the line hits the stroke exactly when you hear the note.</p>
+        <div class="sync-slider-row">
+          <span class="sync-range-lbl">-200ms</span>
+          <input type="range" class="sync-slider" id="panel-sync-slider"
+            min="-200" max="400" step="5" value="${state.syncOffsetMs}"
+            aria-label="Sync nudge offset in milliseconds" />
+          <span class="sync-range-lbl">+400ms</span>
+          <span class="sync-val-display" id="panel-sync-val">${state.syncOffsetMs >= 0 ? '+' : ''}${state.syncOffsetMs}ms</span>
+        </div>
+      </div>
     `;
   }
 
@@ -381,6 +405,15 @@ export class TrackPanel {
     const hitNotesToggle = this.panel.querySelector<HTMLInputElement>('#toggle-hit-notes');
     hitNotesToggle?.addEventListener('change', () => {
       state.showHitNotes = hitNotesToggle.checked;
+    });
+
+    // Sync calibration slider in Mixer
+    const syncSlider = this.panel.querySelector<HTMLInputElement>('#panel-sync-slider');
+    const syncValDisplay = this.panel.querySelector<HTMLElement>('#panel-sync-val');
+    syncSlider?.addEventListener('input', () => {
+      const val = parseInt(syncSlider.value, 10);
+      if (syncValDisplay) syncValDisplay.textContent = `${val >= 0 ? '+' : ''}${val}ms`;
+      getTransport().setSyncOffset(val);
     });
   }
 

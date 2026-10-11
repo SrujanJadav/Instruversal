@@ -1,6 +1,7 @@
 import * as Tone from 'tone';
 import { CONFIG } from '../config';
-import { state, events } from '../state';
+import { state, events, saveSyncOffset } from '../state';
+import { getTotalAudioLatencySeconds } from './context';
 
 export class TransportController {
   private bpm: number = CONFIG.defaultBpm;
@@ -50,7 +51,8 @@ export class TransportController {
       state.audioStarted = true;
       events.emit('audio:started', undefined);
     }
-    Tone.getTransport().start();
+    // Small scheduled offset so first notes are not clipped on initial play
+    Tone.getTransport().start('+0.05');
     state.isPlaying = true;
     events.emit('transport:play', undefined);
   }
@@ -76,15 +78,50 @@ export class TransportController {
   }
 
   /**
-   * Returns current loop progress in range [0, 1) strictly based on Tone.Transport.
+   * Returns current loop progress in range [0, 1) compensated for audio latency.
+   * The visual playhead is drawn at (Transport.seconds - audioLatency) so the line
+   * crosses the stroke exactly when the sound is heard.
    */
   public getProgress(): number {
     if (!this.isPlaying()) {
       return 0;
     }
-    // Progress calculation from Tone.Transport loop
-    const progress = Tone.getTransport().progress;
-    return typeof progress === 'number' && !isNaN(progress) ? Math.max(0, Math.min(1, progress)) : 0;
+
+    // Compute total loop duration in seconds from current BPM
+    const loopDuration = this.bars * 4 * (60 / Tone.getTransport().bpm.value);
+    if (loopDuration <= 0) return 0;
+
+    // Latency compensation:
+    // audioLatency = baseLatency + outputLatency + lookAhead + userSyncOffset
+    const hardwareLatency = getTotalAudioLatencySeconds();
+    const userOffset = state.syncOffsetMs / 1000;
+    const audioLatency = hardwareLatency + userOffset;
+
+    // Current transport time in seconds (raw)
+    const transportSec = Tone.getTransport().seconds;
+
+    // Shift playhead back by audioLatency so visual matches what you hear
+    let compensatedSec = transportSec - audioLatency;
+
+    // Wrap around correctly for negative values and values > loopDuration
+    compensatedSec = ((compensatedSec % loopDuration) + loopDuration) % loopDuration;
+
+    const progress = compensatedSec / loopDuration;
+    return Math.max(0, Math.min(1, progress));
+  }
+
+  /**
+   * Sync offset management (user calibration)
+   */
+  public setSyncOffset(ms: number) {
+    const clamped = Math.max(-200, Math.min(400, ms));
+    state.syncOffsetMs = clamped;
+    saveSyncOffset(clamped);
+    events.emit('sync:change', clamped);
+  }
+
+  public getSyncOffset(): number {
+    return state.syncOffsetMs;
   }
 }
 

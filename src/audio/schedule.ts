@@ -218,12 +218,13 @@ export class LoopScheduler {
   }
 
   public rebuild() {
-    if (this.part) {
-      this.part.dispose();
-      this.part = null;
-    }
+    const oldPart = this.part;
 
     if (state.strokes.length === 0) {
+      if (oldPart) {
+        oldPart.dispose();
+        this.part = null;
+      }
       getFlowVoicePool().releaseAll(0.02);
       return;
     }
@@ -241,7 +242,13 @@ export class LoopScheduler {
         state.glide
       );
 
-      if (flowEvents.length === 0) return;
+      if (flowEvents.length === 0) {
+        if (oldPart) {
+          oldPart.dispose();
+          this.part = null;
+        }
+        return;
+      }
 
       const loopDuration = state.bars * 4 * (60 / state.bpm);
       const partEvents: FlowPartEvent[] = [];
@@ -292,7 +299,7 @@ export class LoopScheduler {
         trackId: '',
       });
 
-      this.part = new Tone.Part((time, item: FlowPartEvent) => {
+      const newPart = new Tone.Part((time, item: FlowPartEvent) => {
         if (item.type === 'loopWrap') {
           voicePool.releaseAll(0.01);
           return;
@@ -345,16 +352,27 @@ export class LoopScheduler {
         }
       }, partEvents as unknown as any[]);
 
-      this.part.loop = true;
-      this.part.loopStart = 0;
-      this.part.loopEnd = `${state.bars}m`;
-      this.part.start(0);
+      newPart.loop = true;
+      newPart.loopStart = 0;
+      newPart.loopEnd = `${state.bars}m`;
+      newPart.start(0);
+
+      this.part = newPart;
+      if (oldPart) {
+        oldPart.dispose();
+      }
     } else {
       // Notes mode: stepped 16th-note grid
       const noteEvents = generateEventsFromStrokes(state.strokes, state.bars, scaleNotes);
-      if (noteEvents.length === 0) return;
+      if (noteEvents.length === 0) {
+        if (oldPart) {
+          oldPart.dispose();
+          this.part = null;
+        }
+        return;
+      }
 
-      this.part = new Tone.Part((time, note: NoteEvent) => {
+      const newPart = new Tone.Part((time, note: NoteEvent) => {
         trackManager.triggerNoteOnTrack(
           note.trackId,
           note.midi,
@@ -374,10 +392,15 @@ export class LoopScheduler {
         }, time);
       }, noteEvents as unknown as any[]);
 
-      this.part.loop = true;
-      this.part.loopStart = 0;
-      this.part.loopEnd = `${state.bars}m`;
-      this.part.start(0);
+      newPart.loop = true;
+      newPart.loopStart = 0;
+      newPart.loopEnd = `${state.bars}m`;
+      newPart.start(0);
+
+      this.part = newPart;
+      if (oldPart) {
+        oldPart.dispose();
+      }
     }
   }
 

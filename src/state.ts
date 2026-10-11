@@ -48,6 +48,7 @@ export type EventMap = {
   'playback-mode:change': PlaybackMode;
   'glide:change': number;
   'fx:change': FxConfig;
+  'sync:change': number;
   'history:change': { canUndo: boolean; canRedo: boolean };
   'note:hit': {
     strokeId?: string;
@@ -103,8 +104,27 @@ export interface AppState {
   playbackMode: PlaybackMode;
   glide: number; // 0 to 100
   showHitNotes: boolean;
+  syncOffsetMs: number; // user-calibrated latency offset in ms, stored in localStorage
   fx: FxConfig;
   strokes: Stroke[];
+}
+
+// Persisted sync offset
+const SYNC_STORAGE_KEY = 'instruversal:sync';
+function loadSyncOffset(): number {
+  try {
+    const raw = localStorage.getItem(SYNC_STORAGE_KEY);
+    if (raw !== null) {
+      const val = parseFloat(raw);
+      if (!isNaN(val)) return Math.max(-200, Math.min(400, val));
+    }
+  } catch {}
+  return 0;
+}
+export function saveSyncOffset(ms: number): void {
+  try {
+    localStorage.setItem(SYNC_STORAGE_KEY, String(ms));
+  } catch {}
 }
 
 export const state: AppState = {
@@ -118,6 +138,7 @@ export const state: AppState = {
   activeTool: 'draw',
   playbackMode: 'flow',
   glide: 25,
+  syncOffsetMs: loadSyncOffset(),
   showHitNotes: true,
   fx: { ...DEFAULT_FX_CONFIG },
   strokes: [],
