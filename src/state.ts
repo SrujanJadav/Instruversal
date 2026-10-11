@@ -44,6 +44,10 @@ export type EventMap = {
   'bpm:change': number;
   'scale:change': { rootNote: number; scaleName: ScaleName };
   'track:select': string;
+  'track:update': string;
+  'ui:open-mixer': 'tracks' | 'key' | undefined;
+  'ui:open-fx': void;
+  'ui:open-instruments': string | undefined;
   'tool:change': ToolMode;
   'playback-mode:change': PlaybackMode;
   'glide:change': number;

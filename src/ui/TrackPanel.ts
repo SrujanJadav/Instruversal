@@ -66,6 +66,16 @@ export class TrackPanel {
     }
   }
 
+  public openInstrumentPicker(trackId?: string) {
+    this.currentTab = 'tracks';
+    this.activeInstrumentPickerTrackId = trackId || state.selectedTrackId;
+    this.render();
+    this.overlay.classList.remove('hidden');
+    this.overlay.removeAttribute('aria-hidden');
+    this.panel.classList.remove('hidden');
+    this.panel.classList.add('visible');
+  }
+
   public isOpen(): boolean {
     return this.panel.classList.contains('visible');
   }
@@ -89,6 +99,12 @@ export class TrackPanel {
         const display = this.panel.querySelector<HTMLElement>('#panel-sync-val');
         if (slider) slider.value = String(offsetMs);
         if (display) display.textContent = `${offsetMs >= 0 ? '+' : ''}${offsetMs}ms`;
+      }),
+      events.on('ui:open-mixer', (tab) => {
+        this.open(tab || 'tracks');
+      }),
+      events.on('ui:open-instruments', (trackId) => {
+        this.openInstrumentPicker(trackId);
       })
     );
   }
@@ -305,6 +321,7 @@ export class TrackPanel {
           if (track) {
             track.setInstrument(instId);
             track.audition();
+            events.emit('track:update', track.id);
           }
           this.activeInstrumentPickerTrackId = null;
           this.render();

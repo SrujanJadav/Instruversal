@@ -150,30 +150,94 @@
   min-height: 0;
 }
 
-/* Toolbar: Bottom dock on mobile, central calm dock on desktop */
+/* Toolbar: Scrollable dock on mobile & desktop */
 .instruversal-toolbar {
   flex-shrink: 0;
   display: flex;
   justify-content: center;
-  padding-bottom: max(var(--space-1), env(safe-area-inset-bottom, 0px));
+  padding-bottom: max(var(--space-2), env(safe-area-inset-bottom, 8px));
   padding-top: var(--space-1);
   width: 100%;
-  max-width: 760px;
+  max-width: 960px;
   margin: 0 auto;
+  position: relative;
+}
+
+.dock-wrapper {
+  position: relative;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  max-width: 100%;
+}
+
+.dock-scroll-container {
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+  white-space: nowrap;
+  border-radius: var(--radius-lg);
+  background-color: var(--paper-deep);
+  border: 1px solid var(--line);
+  box-shadow: 0 1px 3px rgba(28, 26, 22, 0.05);
+  scrollbar-width: thin;
+  scrollbar-color: var(--ink-soft) var(--line);
+  user-select: none;
+  width: 100%;
+}
+
+/* Custom 3px scrollbar matching Instruversal design */
+.dock-scroll-container::-webkit-scrollbar {
+  height: 3px;
+}
+
+.dock-scroll-container::-webkit-scrollbar-track {
+  background: var(--line);
+  border-radius: 2px;
+}
+
+.dock-scroll-container::-webkit-scrollbar-thumb {
+  background: var(--ink-soft);
+  border-radius: 2px;
+}
+
+/* Edge fade masks */
+.dock-fade {
+  position: absolute;
+  top: 2px;
+  bottom: 5px;
+  width: 28px;
+  pointer-events: none;
+  z-index: 10;
+  transition: opacity 160ms ease-out;
+}
+
+.dock-fade-left {
+  left: 2px;
+  background: linear-gradient(to right, var(--paper-deep), rgba(233, 223, 203, 0));
+  border-top-left-radius: var(--radius-lg);
+  border-bottom-left-radius: var(--radius-lg);
+}
+
+.dock-fade-right {
+  right: 2px;
+  background: linear-gradient(to left, var(--paper-deep), rgba(233, 223, 203, 0));
+  border-top-right-radius: var(--radius-lg);
+  border-bottom-right-radius: var(--radius-lg);
+}
+
+.dock-fade.hidden {
+  opacity: 0;
 }
 
 .toolbar-inner {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  background-color: var(--paper-deep);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  padding: 4px 8px;
-  box-shadow: 0 1px 3px rgba(28, 26, 22, 0.05);
-  overflow-x: auto;
-  max-width: 100%;
-  -webkit-overflow-scrolling: touch;
+  padding: 4px 10px;
+  min-width: max-content;
 }
 
 .toolbar-divider {
@@ -233,10 +297,107 @@
   color: var(--paper);
 }
 
-/* Tool toggle: active state */
-.tool-btn.active {
-  background-color: rgba(28, 26, 22, 0.12);
-  border-color: rgba(28, 26, 22, 0.2);
+/* Tool group & Segmented Pencil / Eraser toggle */
+.toolbar-tool-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.toolbar-tool-toggle {
+  display: flex;
+  background-color: rgba(28, 26, 22, 0.04);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 2px;
+  gap: 2px;
+}
+
+.tool-seg-btn {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--ink-soft);
+  width: 40px;
+  height: 38px;
+  min-width: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background-color var(--transition-fast), color var(--transition-fast);
+}
+
+.tool-seg-btn:hover {
+  color: var(--ink);
+}
+
+.tool-seg-btn.active {
+  background-color: var(--paper);
+  color: var(--ink);
+  box-shadow: 0 1px 2px rgba(28, 26, 22, 0.08);
+}
+
+.toolbar-history-sub {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.tool-icon-btn {
+  width: 38px;
+  height: 38px;
+  min-width: 38px;
+  min-height: 38px;
+}
+
+/* Dock text buttons (Instrument, Effects, Mixer) */
+.toolbar-dock-btn {
+  appearance: none;
+  border: 1px solid var(--line);
+  background-color: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  font-weight: 500;
+  height: 40px;
+  min-height: 40px;
+  padding: 0 12px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.toolbar-dock-btn:hover {
+  background-color: var(--paper-deep);
+  border-color: var(--ink);
+}
+
+.dock-btn-text {
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.dock-btn-chevron {
+  display: inline-flex;
+  align-items: center;
+  color: var(--ink-soft);
+}
+
+/* Focus outlines */
+.toolbar-btn:focus-visible,
+.tool-seg-btn:focus-visible,
+.mode-pill-btn:focus-visible,
+.stepper-btn:focus-visible,
+.palette-dot-btn:focus-visible,
+.toolbar-dock-btn:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 1px;
 }
 
 /* BPM Stepper */

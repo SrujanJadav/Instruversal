@@ -144,3 +144,8 @@ fxBtn.addEventListener('click', () => {
 });
 
 events.on('track:select', () => updateHeaderStatus());
+events.on('ui:open-fx', () => {
+  if (fxPanel) {
+    fxPanel.toggle();
+  }
+});
