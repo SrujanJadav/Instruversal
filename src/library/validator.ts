@@ -117,12 +117,12 @@ export function validateProject(raw: unknown): ValidationResult<ProjectData> {
     }
   }
 
-  // Strokes: cap at 500 strokes, cap at 2000 points per stroke
+  // Strokes: cap at 1000 strokes, cap at 3000 points per stroke
   const strokes: Stroke[] = [];
   if (Array.isArray(p.strokes)) {
-    const rawStrokes = p.strokes.slice(0, 500);
-    if (p.strokes.length > 500) {
-      warnings.push(`Stroke limit exceeded (capped to 500).`);
+    const rawStrokes = p.strokes.slice(0, 1000);
+    if (p.strokes.length > 1000) {
+      warnings.push(`Stroke limit exceeded (capped to 1000).`);
     }
 
     for (let i = 0; i < rawStrokes.length; i++) {
@@ -134,7 +134,7 @@ export function validateProject(raw: unknown): ValidationResult<ProjectData> {
 
       const points: { x: number; y: number; t: number }[] = [];
       if (Array.isArray(s.points)) {
-        const rawPoints = s.points.slice(0, 2000);
+        const rawPoints = s.points.slice(0, 3000);
         for (const pt of rawPoints) {
           if (!pt || typeof pt !== 'object') continue;
           points.push({

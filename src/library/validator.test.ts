@@ -48,19 +48,19 @@ describe('validateProject', () => {
     expect(res.warnings).toBeDefined();
   });
 
-  it('caps strokes at 500 and points at 2000', () => {
+  it('caps strokes at 1000 and points at 3000', () => {
     const strokes = [];
-    for (let i = 0; i < 600; i++) {
+    for (let i = 0; i < 1100; i++) {
       strokes.push({
         id: `s-${i}`,
-        points: Array.from({ length: 2500 }, (_, idx) => ({ x: 0.1, y: 0.2, t: idx })),
+        points: Array.from({ length: 3500 }, (_, idx) => ({ x: 0.1, y: 0.2, t: idx })),
       });
     }
 
     const res = validateProject({ strokes });
     expect(res.isValid).toBe(true);
-    expect(res.data?.strokes.length).toBe(500);
-    expect(res.data?.strokes[0].points.length).toBe(2000);
+    expect(res.data?.strokes.length).toBe(1000);
+    expect(res.data?.strokes[0].points.length).toBe(3000);
   });
 
   it('clamps coordinates to 0..1', () => {

@@ -137,6 +137,16 @@ export class DrawingCanvas {
     window.addEventListener('themechange', onThemeChange);
     this.unsubs.push(() => window.removeEventListener('themechange', onThemeChange));
 
+    const onVisibilityChange = () => {
+      if (typeof document !== 'undefined' && document.hidden) {
+        this.pause();
+      } else {
+        this.resume();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    this.unsubs.push(() => document.removeEventListener('visibilitychange', onVisibilityChange));
+
     this.unsubs.push(
       events.on('track:select', () => this.markStaticDirty()),
       events.on('track:type-change', () => this.markStaticDirty()),

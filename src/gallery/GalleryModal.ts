@@ -34,7 +34,11 @@ export class GalleryModal {
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
             <span>Back</span>
           </button>
-          <a href="#/" class="header-title gallery-home-btn" id="gal-home-btn" aria-label="Instruversal, go to the start page">Instruversal</a>
+          <a href="#/" class="header-title gallery-home-btn" id="gal-home-btn" aria-label="Instruversal, go to the start page">
+            <img src="/icon.svg" alt="" class="header-brand-icon icon-light-mode" />
+            <img src="/icon-dark.svg" alt="" class="header-brand-icon icon-dark-mode" />
+            <span>Instruversal</span>
+          </a>
         </div>
         <span class="gallery-hint">Drag or swipe to browse</span>
       </div>

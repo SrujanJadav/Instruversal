@@ -28,11 +28,69 @@
   pointer-events: none;
 }
 
-.gate-theme-wrapper {
+.gate-topbar {
   position: absolute;
   top: var(--space-4);
   right: var(--space-4);
   z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.gate-theme-wrapper {
+  display: flex;
+  align-items: center;
+}
+
+.gate-brand-icon {
+  margin-bottom: var(--space-4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.gate-icon-img {
+  width: clamp(120px, 18vw, 150px);
+  height: clamp(120px, 18vw, 150px);
+  object-fit: contain;
+  filter: drop-shadow(0 4px 16px rgba(28, 26, 22, 0.12));
+  transition: transform var(--transition-normal);
+}
+
+.gate-icon-img:hover {
+  transform: scale(1.04);
+}
+
+.header-brand-icon {
+  width: 30px;
+  height: 30px;
+  object-fit: contain;
+  margin-right: 8px;
+  flex-shrink: 0;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+/* Light / Dark Mode Icon Switching */
+.icon-light-mode {
+  display: inline-block;
+}
+
+.icon-dark-mode {
+  display: none;
+}
+
+[data-theme="dark"] .icon-light-mode {
+  display: none !important;
+}
+
+[data-theme="dark"] .icon-dark-mode {
+  display: inline-block !important;
+}
+
+[data-theme="dark"] .gate-icon-img {
+  filter: drop-shadow(0 4px 20px rgba(0, 0, 0, 0.6));
 }
 
 .app-title {

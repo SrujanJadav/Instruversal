@@ -4,6 +4,7 @@ import './styles/app.css';
 import './styles/theme-toggle.css';
 import './styles/library.css';
 import './styles/gallery.css';
+import './styles/account.css';
 
 // MUST be first before any Tone.js module instantiates nodes
 import { initLowLatencyContext, logAudioLatencyInfo } from './audio/context';
@@ -29,9 +30,16 @@ import { getCreationManager } from './library/manager';
 import { getCreationStore } from './library/store';
 import { getLibraryModal } from './ui/Library';
 import { getGalleryModal } from './gallery/GalleryModal';
+import { handleAuthRedirect, onAuthStateChange, getCurrentUser } from './auth/auth';
+import { getAccountSheet } from './ui/AccountSheet';
+import { getMigrationSheet } from './ui/MigrationSheet';
+import { generateUuid } from './library/manager';
 
 // Initialize color theme system
 initTheme();
+
+// Handle incoming PKCE auth redirects (?code=...)
+handleAuthRedirect();
 
 // Check if visiting via a share link
 const hasShareLink = typeof window !== 'undefined' && window.location.hash.startsWith('#project=');
@@ -43,7 +51,14 @@ const app = document.querySelector<HTMLDivElement>('#app')!;
 
 app.innerHTML = `
   <section class="gate-screen" id="gate-screen">
-    <div class="gate-theme-wrapper" id="gate-theme-container"></div>
+    <div class="gate-topbar">
+      <div id="gate-account-container"></div>
+      <div class="gate-theme-wrapper" id="gate-theme-container"></div>
+    </div>
+    <div class="gate-brand-icon">
+      <img src="/icon.svg" alt="Instruversal Brand Icon" class="gate-icon-img icon-light-mode" />
+      <img src="/icon-dark.svg" alt="Instruversal Brand Icon" class="gate-icon-img icon-dark-mode" />
+    </div>
     <h1 class="app-title">${CONFIG.appName}</h1>
     <p class="app-subtitle">Draw strokes to compose. Notes loop in time.</p>
     <button class="start-btn" id="start-btn" type="button" aria-label="Start audio and enter Instruversal">
@@ -60,7 +75,11 @@ app.innerHTML = `
   <main class="main-view" id="main-view" aria-hidden="true" style="display: none;">
     <header class="app-header">
       <div class="header-left">
-        <a href="#/" class="header-title" id="header-home-btn" aria-label="Instruversal, go to the start page">${CONFIG.appName}</a>
+        <a href="#/" class="header-title" id="header-home-btn" aria-label="Instruversal, go to the start page">
+          <img src="/icon.svg" alt="" class="header-brand-icon icon-light-mode" />
+          <img src="/icon-dark.svg" alt="" class="header-brand-icon icon-dark-mode" />
+          <span>${CONFIG.appName}</span>
+        </a>
         <span class="header-divider-dot">·</span>
         <div class="creation-title-group">
           <input type="text" class="creation-title-input" id="creation-title" value="Untitled sketch" maxlength="80" aria-label="Creation title" />
@@ -348,6 +367,33 @@ if (gateThemeContainer) {
   gateThemeContainer.appendChild(gateToggle.element);
 }
 
+// Mount gate screen account button
+const gateAccountContainer = document.querySelector<HTMLElement>('#gate-account-container');
+function updateGateAccountButton() {
+  if (!gateAccountContainer) return;
+  const user = getCurrentUser();
+  if (user) {
+    const initial = (user.email || 'U')[0].toUpperCase();
+    const shortEmail = (user.email || '').split('@')[0];
+    gateAccountContainer.innerHTML = `
+      <button type="button" class="auth-pill-btn" id="gate-auth-btn" aria-label="Account: ${user.email}">
+        <span class="auth-avatar-circle">${initial}</span>
+        <span>${shortEmail}</span>
+      </button>
+    `;
+  } else {
+    gateAccountContainer.innerHTML = `
+      <button type="button" class="auth-pill-btn" id="gate-auth-btn" aria-label="Sign in to your account">
+        Sign in
+      </button>
+    `;
+  }
+  gateAccountContainer.querySelector('#gate-auth-btn')?.addEventListener('click', () => {
+    getAccountSheet().open();
+  });
+}
+onAuthStateChange(() => updateGateAccountButton());
+
 import { DRUM_KITS } from './audio/drums';
 
 function updateHeaderStatus() {
@@ -489,9 +535,70 @@ headerHomeBtn?.addEventListener('click', async (e) => {
   await goHome();
 });
 
+// Public shared sketch viewer (#/c/<slug>)
+async function handlePublicSharedRoute(slug: string) {
+  const store = getCreationStore();
+  if (!store.getPublicCreation) {
+    window.location.hash = '#/';
+    return;
+  }
+
+  const creation = await store.getPublicCreation(slug);
+  if (!creation) {
+    alert('This sketch was not found or the share link has been disabled.');
+    window.location.hash = '#/';
+    return;
+  }
+
+  closeAllOpenSheets();
+  await enterMainView(false);
+  await creationManager.openCreation(creation, false);
+
+  let banner = document.querySelector<HTMLElement>('#public-shared-banner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'public-shared-banner';
+    banner.className = 'public-shared-banner';
+    const mainView = document.querySelector<HTMLElement>('#main-view');
+    mainView?.insertBefore(banner, mainView.firstChild);
+  }
+
+  banner.innerHTML = `
+    <div class="public-shared-meta">
+      <span class="public-shared-badge">Shared Sketch</span>
+      <span class="public-shared-title">${creation.title}</span>
+    </div>
+    <div class="public-shared-actions">
+      <button type="button" class="public-action-btn primary" id="public-remix-btn">Remix</button>
+      <a class="public-action-btn report" href="mailto:abuse@instruversal.app?subject=Report%20creation%20${encodeURIComponent(slug)}" target="_blank" rel="noopener">Report</a>
+    </div>
+  `;
+
+  banner.querySelector('#public-remix-btn')?.addEventListener('click', async () => {
+    const clonedId = generateUuid();
+    const clonedCreation = {
+      ...creation,
+      id: clonedId,
+      title: `${creation.title} (remix)`.slice(0, 80),
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      isPublic: false,
+      publicSlug: null,
+    };
+    await store.save(clonedCreation);
+    banner?.remove();
+    window.location.hash = '#/app';
+    await creationManager.openCreation(clonedId, false);
+  });
+}
+
 // Global hash router
 async function handleHashChange() {
   const hash = window.location.hash;
+
+  if (!hash.startsWith('#/c/')) {
+    document.querySelector('#public-shared-banner')?.remove();
+  }
 
   if (hash === '#/' || hash === '' || hash === '#') {
     if (currentActiveScreen === 'editor') {
@@ -509,6 +616,9 @@ async function handleHashChange() {
     getGalleryModal().open();
   } else if (hash === '#/library') {
     getLibraryModal().open();
+  } else if (hash.startsWith('#/c/')) {
+    const slug = hash.slice(4).split('?')[0].trim();
+    await handlePublicSharedRoute(slug);
   }
 }
 
@@ -520,13 +630,23 @@ document.querySelector('#header-help-btn')?.addEventListener('click', () => {
   showFirstRunHintOverlay(true);
 });
 
+// Prompt migration on first login
+onAuthStateChange((user) => {
+  if (user) {
+    getMigrationSheet().checkAndPrompt();
+  }
+});
+
 // Initial boot route check
 async function handleInitialRoute() {
   await creationManager.init();
   await updateGateLoadButton();
 
   const hash = window.location.hash;
-  if (hash === '#/app') {
+  if (hash.startsWith('#/c/')) {
+    const slug = hash.slice(4).split('?')[0].trim();
+    await handlePublicSharedRoute(slug);
+  } else if (hash === '#/app') {
     const store = getCreationStore();
     const list = await store.list();
     if (list.length > 0) {

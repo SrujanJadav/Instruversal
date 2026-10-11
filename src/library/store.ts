@@ -348,12 +348,18 @@ export class LocalStore implements CreationStore {
   }
 }
 
+import { CloudStore } from './cloudStore';
+
 // Global default singleton store
 let sharedStore: CreationStore | null = null;
 
 export function getCreationStore(): CreationStore {
   if (!sharedStore) {
-    sharedStore = new LocalStore();
+    try {
+      sharedStore = new CloudStore();
+    } catch {
+      sharedStore = new LocalStore();
+    }
   }
   return sharedStore;
 }

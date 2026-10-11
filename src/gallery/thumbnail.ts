@@ -133,7 +133,7 @@ export function getCardDimensions(): { width: number; height: number } {
  * Renders a high-resolution portrait thumbnail canvas for a creation in full color.
  */
 export function renderThumbnailCanvas(
-  creation: Creation | CreationMeta,
+  creation: Creation | CreationMeta | (Partial<CreationMeta> & { preview?: any; strokes?: any }),
   customWidth?: number,
   customHeight?: number
 ): HTMLCanvasElement {
@@ -142,7 +142,7 @@ export function renderThumbnailCanvas(
   const width = customWidth || defaultW;
   const height = customHeight || defaultH;
 
-  const cacheKey = `${creation.id}_${creation.updatedAt}_${theme}_${width}x${height}`;
+  const cacheKey = `${creation.id || 'preview'}_${creation.updatedAt || 0}_${theme}_${width}x${height}`;
   const cached = thumbnailCache.get(cacheKey);
   if (cached) {
     return cached;
@@ -169,8 +169,8 @@ export function renderThumbnailCanvas(
     ctx.beginPath();
     ctx.moveTo(x, 0);
     ctx.lineTo(x, height);
-    ctx.stroke();
   }
+  ctx.stroke();
   ctx.restore();
 
   // 3. Hairline border & subtle inner edge
@@ -186,7 +186,11 @@ export function renderThumbnailCanvas(
 
   // 4. Extract strokes
   let rawStrokes: (Stroke | SimplifiedStroke)[] = [];
-  if ('simplifiedStrokes' in creation && Array.isArray(creation.simplifiedStrokes)) {
+  if ('strokes' in creation && Array.isArray((creation as any).strokes)) {
+    rawStrokes = (creation as any).strokes;
+  } else if ('preview' in creation && creation.preview && Array.isArray((creation.preview as any).strokes)) {
+    rawStrokes = (creation.preview as any).strokes;
+  } else if ('simplifiedStrokes' in creation && Array.isArray(creation.simplifiedStrokes)) {
     rawStrokes = creation.simplifiedStrokes;
   } else if ('project' in creation && Array.isArray(creation.project?.strokes)) {
     rawStrokes = creation.project.strokes;

@@ -274,11 +274,13 @@ class CreationManager {
   }
 
   public async openCreation(
-    id: string,
+    idOrCreation: string | Creation,
     startPlaying: boolean = false
   ): Promise<{ success: boolean; warnings?: string[] }> {
     try {
-      const creation = await this.store.get(id);
+      const creation = typeof idOrCreation === 'string'
+        ? await this.store.get(idOrCreation)
+        : idOrCreation;
       if (!creation) {
         return { success: false, warnings: ['Creation not found.'] };
       }

@@ -26,6 +26,7 @@
   "author": "Srujan Jadav",
   "license": "MIT",
   "dependencies": {
+    "@supabase/supabase-js": "^2.117.3",
     "ogl": "^1.0.11",
     "tone": "^15.1.22"
   },

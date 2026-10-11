@@ -13,6 +13,8 @@ export interface SimplifiedStroke {
   width: number;
 }
 
+export type SyncStatus = 'synced' | 'syncing' | 'local' | 'error';
+
 export interface CreationMeta {
   id: string;
   title: string;
@@ -25,6 +27,9 @@ export interface CreationMeta {
   trackColors: string[];
   strokeCount: number;
   simplifiedStrokes: SimplifiedStroke[];
+  syncStatus?: SyncStatus;
+  isPublic?: boolean;
+  publicSlug?: string | null;
 }
 
 export interface Creation {
@@ -34,6 +39,10 @@ export interface Creation {
   updatedAt: number;
   project: ProjectData;
   schemaVersion: number;
+  preview?: any;
+  syncStatus?: SyncStatus;
+  isPublic?: boolean;
+  publicSlug?: string | null;
 }
 
 export interface CreationStore {
@@ -43,4 +52,6 @@ export interface CreationStore {
   save(c: Creation): Promise<void>;
   remove(id: string): Promise<void>;
   getAllFull?(): Promise<Creation[]>;
+  setPublic?(id: string, isPublic: boolean): Promise<string | null>;
+  getPublicCreation?(slug: string): Promise<Creation | null>;
 }

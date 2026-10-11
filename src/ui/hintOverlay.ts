@@ -1,3 +1,6 @@
+import { getCurrentUser } from '../auth/auth';
+import { getAccountSheet } from './AccountSheet';
+
 const HINT_INTRO_KEY = 'instruversal:hint-intro';
 
 let overlayEl: HTMLElement | null = null;
@@ -12,6 +15,8 @@ export function isFirstRunHintNeeded(): boolean {
 export function showFirstRunHintOverlay(force = false): void {
   if (!force && !isFirstRunHintNeeded()) return;
   if (overlayEl) return;
+
+  const currentUser = getCurrentUser();
 
   overlayEl = document.createElement('div');
   overlayEl.className = 'hint-overlay-backdrop';
@@ -36,6 +41,14 @@ export function showFirstRunHintOverlay(force = false): void {
           <span class="hint-text"><strong>Colour is instrument.</strong> Beat colours become drums.</span>
         </li>
       </ul>
+      <div class="hint-account-section" style="margin-top: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: var(--space-2);">
+        <div>
+          <span style="font-weight: 500; font-size: 0.85rem;">Account</span>
+          <p style="margin: 0; font-size: 0.75rem; color: var(--ink-soft);" id="hint-user-lbl">${currentUser ? currentUser.email : 'Guest (local only)'}</p>
+        </div>
+        <button type="button" class="auth-pill-btn" id="hint-account-btn" style="flex-shrink: 0;">${currentUser ? 'Manage' : 'Sign in'}</button>
+      </div>
+
       <button type="button" class="hint-dismiss-btn" id="hint-got-it-btn">
         Got it
       </button>
@@ -43,6 +56,11 @@ export function showFirstRunHintOverlay(force = false): void {
   `;
 
   document.body.appendChild(overlayEl);
+
+  overlayEl.querySelector('#hint-account-btn')?.addEventListener('click', () => {
+    dismiss();
+    getAccountSheet().open();
+  });
 
   const dismiss = () => {
     try {

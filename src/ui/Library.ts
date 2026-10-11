@@ -3,6 +3,9 @@ import { getCreationStore } from '../library/store';
 import { getCreationManager, generateUuid } from '../library/manager';
 import { validateCreation } from '../library/validator';
 import { events } from '../state';
+import { getCurrentUser, onAuthStateChange } from '../auth/auth';
+import { getAccountSheet } from './AccountSheet';
+import { getShareModal } from './ShareModal';
 
 export class LibraryModal {
   private overlay: HTMLElement;
@@ -33,12 +36,17 @@ export class LibraryModal {
       <div class="library-modal">
         <header class="library-header">
           <div class="library-title-group" style="display: flex; align-items: center; gap: var(--space-2);">
-            <a href="#/" class="header-title library-home-btn" id="lib-home-btn" aria-label="Instruversal, go to the start page">Instruversal</a>
+            <a href="#/" class="header-title library-home-btn" id="lib-home-btn" aria-label="Instruversal, go to the start page">
+              <img src="/icon.svg" alt="" class="header-brand-icon icon-light-mode" />
+              <img src="/icon-dark.svg" alt="" class="header-brand-icon icon-dark-mode" />
+              <span>Instruversal</span>
+            </a>
             <span class="header-divider-dot">·</span>
             <h2 class="library-heading">My creations</h2>
             <span class="library-count-badge" id="lib-count-badge">0 saved</span>
           </div>
           <div class="library-header-actions">
+            <div id="lib-account-container" style="display: flex; align-items: center;"></div>
             <button type="button" class="library-btn library-btn-primary" id="lib-new-btn">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
               <span>New</span>
@@ -55,6 +63,14 @@ export class LibraryModal {
             </button>
           </div>
         </header>
+
+        <div id="lib-guest-prompt" style="display: none; padding: var(--space-2) var(--space-4); background-color: var(--paper-deep); border-bottom: 1px solid var(--line); font-size: 0.82rem; justify-content: space-between; align-items: center;">
+          <span>Sign in to keep your creations on every device.</span>
+          <div style="display: flex; gap: var(--space-2); align-items: center;">
+            <button type="button" class="auth-pill-btn" id="lib-prompt-signin-btn" style="height: 26px; font-size: 0.75rem;">Sign in</button>
+            <button type="button" class="account-link-btn" id="lib-prompt-dismiss-btn" style="font-size: 0.75rem;">Dismiss</button>
+          </div>
+        </div>
 
         <div class="library-subbar">
           <div class="library-search-wrapper">
@@ -115,6 +131,60 @@ export class LibraryModal {
       e.preventDefault();
       this.close(false);
       window.location.hash = '#/';
+    });
+
+    const accountContainer = this.overlay.querySelector<HTMLElement>('#lib-account-container');
+    const guestPrompt = this.overlay.querySelector<HTMLElement>('#lib-guest-prompt');
+    const DISMISS_KEY = 'instruversal:dismiss_cloud_prompt';
+
+    const updateAuthUI = () => {
+      const user = getCurrentUser();
+      if (accountContainer) {
+        if (user) {
+          const initial = (user.email || 'U')[0].toUpperCase();
+          const shortEmail = (user.email || '').split('@')[0];
+          accountContainer.innerHTML = `
+            <button type="button" class="auth-pill-btn" id="lib-auth-pill-btn" aria-label="Account: ${user.email}">
+              <span class="auth-avatar-circle">${initial}</span>
+              <span>${shortEmail}</span>
+            </button>
+          `;
+        } else {
+          accountContainer.innerHTML = `
+            <button type="button" class="auth-pill-btn" id="lib-auth-pill-btn" aria-label="Sign in to your account">
+              Sign in
+            </button>
+          `;
+        }
+        accountContainer.querySelector('#lib-auth-pill-btn')?.addEventListener('click', () => {
+          getAccountSheet().open();
+        });
+      }
+
+      if (guestPrompt) {
+        let dismissed = false;
+        try {
+          dismissed = localStorage.getItem(DISMISS_KEY) === 'true';
+        } catch {}
+        if (!user && !dismissed) {
+          guestPrompt.style.display = 'flex';
+        } else {
+          guestPrompt.style.display = 'none';
+        }
+      }
+    };
+
+    onAuthStateChange(() => updateAuthUI());
+
+    this.overlay.querySelector('#lib-prompt-signin-btn')?.addEventListener('click', () => {
+      getAccountSheet().open();
+    });
+
+    this.overlay.querySelector('#lib-prompt-dismiss-btn')?.addEventListener('click', () => {
+      try {
+        localStorage.setItem(DISMISS_KEY, 'true');
+      } catch {}
+      if (guestPrompt) guestPrompt.style.display = 'none';
     });
 
     this.overlay.addEventListener('click', (e) => {
@@ -322,6 +392,20 @@ export class LibraryModal {
     `;
   }
 
+  private renderSyncBadge(meta: CreationMeta): string {
+    const status = meta.syncStatus || 'local';
+    if (status === 'synced') {
+      return `<span class="card-sync-badge synced" title="Synced to cloud">Synced</span>`;
+    }
+    if (status === 'syncing') {
+      return `<span class="card-sync-badge syncing" title="Syncing to cloud">Syncing</span>`;
+    }
+    if (status === 'error') {
+      return `<span class="card-sync-badge error" title="Couldn't sync, will retry">Couldn't sync</span>`;
+    }
+    return `<span class="card-sync-badge local" title="Saved on this device only">This device</span>`;
+  }
+
   private renderGrid() {
     let items = [...this.creations];
 
@@ -380,6 +464,7 @@ export class LibraryModal {
 
           <div class="card-meta-row">
             <span class="card-date">${this.formatRelativeTime(meta.updatedAt)}</span>
+            ${this.renderSyncBadge(meta)}
           </div>
 
           <div class="card-tags">
@@ -395,6 +480,7 @@ export class LibraryModal {
           <div class="card-inline-menu" role="menu">
             <button type="button" class="card-inline-menu-item" data-action="rename" data-id="${meta.id}">Rename</button>
             <button type="button" class="card-inline-menu-item" data-action="duplicate" data-id="${meta.id}">Duplicate</button>
+            <button type="button" class="card-inline-menu-item" data-action="share" data-id="${meta.id}">Share link</button>
             <button type="button" class="card-inline-menu-item danger" data-action="delete" data-id="${meta.id}">Delete</button>
           </div>
         `
@@ -478,6 +564,13 @@ export class LibraryModal {
           e.stopPropagation();
           this.activeMenuCardId = null;
           await this.duplicateCreation(meta.id);
+        });
+
+        card.querySelector('[data-action="share"]')?.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.activeMenuCardId = null;
+          this.renderGrid();
+          getShareModal().open(meta.id, meta.title, meta.isPublic, meta.publicSlug);
         });
 
         card.querySelector('[data-action="delete"]')?.addEventListener('click', (e) => {
