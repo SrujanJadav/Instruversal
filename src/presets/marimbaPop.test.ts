@@ -14,7 +14,7 @@ describe('Marimba Pop Intro Hook - C# Natural Minor Specification and Round-Trip
   const song = MARIMBA_POP_INTRO_SPEC;
   const project = convertExampleSongToProject(song);
   const rootPitch = parseRootPitchClass(song.project.root);
-  const scaleNotes = buildScaleNotes(rootPitch, 'natural minor', 1, 6);
+  const scaleNotes = buildScaleNotes(rootPitch, 'natural minor', 3, 6);
 
   it('verifies 96 BPM tempo, C# minor key, 2-bar length, and effects configuration', () => {
     expect(song.project.tempoBpm).toBe(96);

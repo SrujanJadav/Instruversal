@@ -124,11 +124,11 @@ export const MARIMBA_POP_INTRO_SPEC: ExampleSongDef = {
       sound: "Round, deep sub-bass with tight releases; locks with the kick",
       defaultVelocity: 0.9,
       notes: [
-        // Root notes on downbeats: C#2 (37) -> F#2 (42) -> A2 (45) -> B2 (47)
-        { pitch: 37, startBeat: 0.00, duration: 1.50, velocity: 0.90 },
-        { pitch: 42, startBeat: 2.00, duration: 1.50, velocity: 0.90 },
-        { pitch: 45, startBeat: 4.00, duration: 1.50, velocity: 0.90 },
-        { pitch: 47, startBeat: 6.00, duration: 1.50, velocity: 0.90 }
+        // Root notes on downbeats: C#3 (49) -> F#3 (54) -> A3 (57) -> B3 (59)
+        { pitch: 49, startBeat: 0.00, duration: 1.50, velocity: 0.90 },
+        { pitch: 54, startBeat: 2.00, duration: 1.50, velocity: 0.90 },
+        { pitch: 57, startBeat: 4.00, duration: 1.50, velocity: 0.90 },
+        { pitch: 59, startBeat: 6.00, duration: 1.50, velocity: 0.90 }
       ]
     },
     {
@@ -206,7 +206,7 @@ export function convertExampleSongToProject(songDef: ExampleSongDef): ProjectDat
   const total16thSteps = songDef.project.lengthBars * 16;
   const rootPitch = parseRootPitchClass(songDef.project.root);
   const scaleName: ScaleName = 'natural minor';
-  const scaleNotes = buildScaleNotes(rootPitch, scaleName, 1, 6);
+  const scaleNotes = buildScaleNotes(rootPitch, scaleName, 3, 6);
   const strokes: Stroke[] = [];
 
   for (const track of songDef.tracks) {
