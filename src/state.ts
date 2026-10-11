@@ -1,4 +1,5 @@
 import { CONFIG } from './config';
+import { ScaleName } from './audio/scales';
 
 export type Pt = {
   x: number; // Normalized 0..1
@@ -13,7 +14,7 @@ export type Stroke = {
   width: number;
 };
 
-import { ScaleName } from './audio/scales';
+export type ToolMode = 'draw' | 'eraser';
 
 export type EventMap = {
   'audio:started': void;
@@ -22,6 +23,8 @@ export type EventMap = {
   'bpm:change': number;
   'scale:change': { rootNote: number; scaleName: ScaleName };
   'track:select': string;
+  'tool:change': ToolMode;
+  'history:change': { canUndo: boolean; canRedo: boolean };
   'note:hit': {
     strokeId?: string;
     trackId: string;
@@ -72,6 +75,7 @@ export interface AppState {
   selectedTrackId: string;
   rootNote: number;
   scaleName: ScaleName;
+  activeTool: ToolMode;
   strokes: Stroke[];
 }
 
@@ -83,7 +87,60 @@ export const state: AppState = {
   selectedTrackId: 'track-1',
   rootNote: 0, // C
   scaleName: 'major pentatonic',
+  activeTool: 'draw',
   strokes: [],
 };
 
 export const events = new TinyEmitter();
+
+// History stack (Undo / Redo)
+const MAX_HISTORY = 40;
+let undoStack: Stroke[][] = [];
+let redoStack: Stroke[][] = [];
+
+function emitHistoryChange() {
+  events.emit('history:change', { canUndo: undoStack.length > 0, canRedo: redoStack.length > 0 });
+}
+
+export function pushHistorySnapshot() {
+  undoStack.push(state.strokes.map((s) => ({ ...s, points: [...s.points] })));
+  if (undoStack.length > MAX_HISTORY) {
+    undoStack.shift();
+  }
+  redoStack = [];
+  emitHistoryChange();
+}
+
+export function undo() {
+  if (undoStack.length === 0) return;
+  redoStack.push(state.strokes.map((s) => ({ ...s, points: [...s.points] })));
+  const previous = undoStack.pop()!;
+  state.strokes = previous;
+  events.emit('strokes:updated', state.strokes);
+  emitHistoryChange();
+}
+
+export function redo() {
+  if (redoStack.length === 0) return;
+  undoStack.push(state.strokes.map((s) => ({ ...s, points: [...s.points] })));
+  const next = redoStack.pop()!;
+  state.strokes = next;
+  events.emit('strokes:updated', state.strokes);
+  emitHistoryChange();
+}
+
+export function clearStrokes() {
+  if (state.strokes.length === 0) return;
+  pushHistorySnapshot();
+  state.strokes = [];
+  events.emit('strokes:updated', state.strokes);
+  emitHistoryChange();
+}
+
+export function canUndo(): boolean {
+  return undoStack.length > 0;
+}
+
+export function canRedo(): boolean {
+  return redoStack.length > 0;
+}

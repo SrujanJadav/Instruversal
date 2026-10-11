@@ -72,22 +72,24 @@
   transform: scale(0.98);
 }
 
-/* Main Area (Placeholder for Canvas) */
+/* Main View */
 .main-view {
   flex: 1;
   display: flex;
   flex-direction: column;
-  padding: var(--space-3);
+  padding: var(--space-2) var(--space-3) var(--space-2);
   gap: var(--space-2);
   height: 100%;
+  overflow: hidden;
 }
 
 .app-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 var(--space-2);
-  height: 36px;
+  padding: 0 var(--space-1);
+  height: 32px;
+  flex-shrink: 0;
 }
 
 .header-title {
@@ -95,48 +97,17 @@
   font-size: 1.25rem;
   font-weight: 500;
   color: var(--ink);
+  letter-spacing: -0.01em;
 }
 
-.header-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.play-toggle-btn {
-  appearance: none;
-  background-color: var(--ink);
-  color: var(--paper);
-  border: 1px solid var(--ink);
-  font-family: var(--font-ui);
-  font-size: 0.82rem;
-  font-weight: 500;
+.header-status {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--ink-soft);
   letter-spacing: 0.02em;
-  padding: 6px 14px;
-  min-height: 34px;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  transition: background-color var(--transition-fast), transform var(--transition-fast);
-  touch-action: manipulation;
 }
 
-.play-toggle-btn:hover {
-  background-color: #2b2823;
-}
-
-.play-toggle-btn:active {
-  transform: scale(0.97);
-}
-
-.play-toggle-btn.playing {
-  background-color: #26241f;
-  border-color: var(--ink-soft);
-}
-
-.canvas-placeholder-container,
+/* Canvas Container: Hero element */
 .canvas-container {
   flex: 1;
   display: flex;
@@ -147,57 +118,249 @@
   overflow: hidden;
   touch-action: none;
   -webkit-touch-callout: none;
+  min-height: 0;
 }
 
-/* Temporary Track Dots Row (Step 4) */
-.track-dot-row {
+/* Toolbar: Bottom dock on mobile, central calm dock on desktop */
+.instruversal-toolbar {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: center;
+  padding-bottom: max(var(--space-1), env(safe-area-inset-bottom, 0px));
+  padding-top: var(--space-1);
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+.toolbar-inner {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: var(--space-3);
-  padding: var(--space-2) 0;
+  gap: var(--space-2);
+  background-color: var(--paper-deep);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 4px 8px;
+  box-shadow: 0 1px 3px rgba(28, 26, 22, 0.05);
+  overflow-x: auto;
+  max-width: 100%;
+  -webkit-overflow-scrolling: touch;
 }
 
-.track-dot-btn {
+.toolbar-divider {
+  width: 1px;
+  height: 24px;
+  background-color: var(--line);
+  flex-shrink: 0;
+}
+
+/* Toolbar Buttons */
+.toolbar-btn {
   appearance: none;
-  border: none;
+  border: 1px solid transparent;
   background: transparent;
+  color: var(--ink);
   width: 44px;
   height: 44px;
+  min-width: 44px;
+  min-height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
+  border-radius: var(--radius-md);
   cursor: pointer;
+  transition: background-color var(--transition-fast), transform var(--transition-fast), color var(--transition-fast);
   touch-action: manipulation;
   padding: 0;
 }
 
-.track-dot-circle {
-  width: 22px;
-  height: 22px;
+.toolbar-btn:hover:not(:disabled) {
+  background-color: rgba(28, 26, 22, 0.06);
+}
+
+.toolbar-btn:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+.toolbar-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* Play/Pause primary button */
+.toolbar-btn-play {
+  background-color: var(--ink);
+  color: var(--paper);
+  border-color: var(--ink);
+}
+
+.toolbar-btn-play:hover:not(:disabled) {
+  background-color: #2b2823;
+  color: var(--paper);
+}
+
+.toolbar-btn-play.playing {
+  background-color: #26241f;
+  color: var(--paper);
+}
+
+/* Tool toggle: active state */
+.tool-btn.active {
+  background-color: rgba(28, 26, 22, 0.12);
+  border-color: rgba(28, 26, 22, 0.2);
+}
+
+/* BPM Stepper */
+.toolbar-stepper {
+  display: flex;
+  align-items: center;
+  background-color: rgba(28, 26, 22, 0.04);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  height: 40px;
+  padding: 0 4px;
+  gap: 2px;
+}
+
+.stepper-btn {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--ink);
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  padding: 0;
+  transition: background-color var(--transition-fast);
+}
+
+.stepper-btn:hover {
+  background-color: rgba(28, 26, 22, 0.08);
+}
+
+.bpm-display {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--ink);
+  display: flex;
+  align-items: baseline;
+  gap: 3px;
+  padding: 0 6px;
+  min-width: 58px;
+  justify-content: center;
+  user-select: none;
+}
+
+.bpm-num {
+  font-weight: 500;
+  font-size: 0.85rem;
+}
+
+.bpm-lbl {
+  font-size: 0.68rem;
+  color: var(--ink-soft);
+}
+
+/* Track Palette Dots in Toolbar */
+.toolbar-palette {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.palette-dot-btn {
+  appearance: none;
+  border: none;
+  background: transparent;
+  width: 36px;
+  height: 40px;
+  min-width: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  touch-action: manipulation;
+}
+
+.palette-dot {
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
   border: 1px solid rgba(28, 26, 22, 0.2);
   transition: transform var(--transition-fast), box-shadow var(--transition-fast);
 }
 
-.track-dot-btn:hover .track-dot-circle {
-  transform: scale(1.1);
+.palette-dot-btn:hover .palette-dot {
+  transform: scale(1.12);
 }
 
-.track-dot-btn.active .track-dot-circle {
-  transform: scale(1.15);
-  box-shadow: 0 0 0 2px var(--paper), 0 0 0 3.5px var(--ink);
+.palette-dot-btn.active .palette-dot {
+  transform: scale(1.18);
+  box-shadow: 0 0 0 2px var(--paper-deep), 0 0 0 3.5px var(--ink);
 }
 
-.track-dot-label {
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  color: var(--ink-soft);
-  margin-left: var(--space-1);
+/* Inline Clear Confirmation */
+.toolbar-clear-wrapper {
+  display: flex;
+  align-items: center;
 }
 
-.placeholder-note {
-  font-family: var(--font-mono);
-  font-size: 0.8rem;
-  color: var(--ink-soft);
+.inline-confirm {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  background-color: rgba(210, 67, 42, 0.08);
+  border: 1px solid rgba(210, 67, 42, 0.25);
+  border-radius: var(--radius-md);
+  height: 38px;
+  animation: fadeIn 150ms ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.confirm-query {
+  font-family: var(--font-ui);
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--vermilion);
+}
+
+.confirm-btn {
+  appearance: none;
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
+  font-weight: 500;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  touch-action: manipulation;
+  border: 1px solid transparent;
+}
+
+.confirm-yes {
+  background-color: var(--vermilion);
+  color: #fff;
+}
+
+.confirm-yes:hover {
+  background-color: #b83620;
+}
+
+.confirm-no {
+  background-color: transparent;
+  color: var(--ink);
+  border-color: var(--line);
+}
+
+.confirm-no:hover {
+  background-color: rgba(28, 26, 22, 0.06);
 }

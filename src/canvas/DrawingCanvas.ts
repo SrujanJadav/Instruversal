@@ -1,4 +1,4 @@
-import { Stroke, state, events } from '../state';
+import { Stroke, state, events, pushHistorySnapshot } from '../state';
 import {
   buildScaleNotes,
   yToMidi,
@@ -16,6 +16,51 @@ interface HitRipple {
   duration: number;
 }
 
+function distToSegmentSquared(
+  px: number,
+  py: number,
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number
+): number {
+  const l2 = (x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1);
+  if (l2 === 0) return (px - x1) * (px - x1) + (py - y1) * (py - y1);
+  let t = ((px - x1) * (x2 - x1) + (py - y1) * (y2 - y1)) / l2;
+  t = Math.max(0, Math.min(1, t));
+  const projX = x1 + t * (x2 - x1);
+  const projY = y1 + t * (y2 - y1);
+  return (px - projX) * (px - projX) + (py - projY) * (py - projY);
+}
+
+function strokeHitTest(
+  stroke: Stroke,
+  px: number,
+  py: number,
+  tolerancePx: number,
+  width: number,
+  height: number
+): boolean {
+  const tolSq = tolerancePx * tolerancePx;
+  const pts = stroke.points;
+  if (pts.length === 0) return false;
+  if (pts.length === 1) {
+    const sx = pts[0].x * width;
+    const sy = pts[0].y * height;
+    return (px - sx) * (px - sx) + (py - sy) * (py - sy) <= tolSq;
+  }
+  for (let i = 0; i < pts.length - 1; i++) {
+    const x1 = pts[i].x * width;
+    const y1 = pts[i].y * height;
+    const x2 = pts[i + 1].x * width;
+    const y2 = pts[i + 1].y * height;
+    if (distToSegmentSquared(px, py, x1, y1, x2, y2) <= tolSq) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export class DrawingCanvas {
   private container: HTMLElement;
   private canvas: HTMLCanvasElement;
@@ -31,6 +76,10 @@ export class DrawingCanvas {
   private strokeStartTime: number = 0;
   private lastPointTime: number = 0;
   private lastPointPos: { x: number; y: number } | null = null;
+
+  // Eraser state
+  private eraserDidRemove: boolean = false;
+  private eraserPos: { x: number; y: number } | null = null;
 
   // Live pitch preview & readout
   private lastPreviewMidi: number | null = null;
@@ -89,6 +138,8 @@ export class DrawingCanvas {
   private setupAppListeners() {
     this.unsubs.push(
       events.on('track:select', () => this.redraw()),
+      events.on('tool:change', () => this.updateCursor()),
+      events.on('strokes:updated', () => this.redraw()),
       events.on('transport:play', () => this.startAnimation()),
       events.on('transport:pause', () => this.redraw()),
       events.on('note:hit', (hit) => {
@@ -108,6 +159,11 @@ export class DrawingCanvas {
     );
   }
 
+  private updateCursor() {
+    this.canvas.style.cursor = state.activeTool === 'eraser' ? 'crosshair' : 'default';
+    this.redraw();
+  }
+
   private startAnimation() {
     if (this.animFrameId === null) {
       this.renderLoop();
@@ -119,8 +175,9 @@ export class DrawingCanvas {
 
     const hasActiveRipples = this.hitRipples.length > 0;
     const isDrawing = this.currentStroke !== null;
+    const isErasing = this.eraserPos !== null;
 
-    if (state.isPlaying || hasActiveRipples || isDrawing) {
+    if (state.isPlaying || hasActiveRipples || isDrawing || isErasing) {
       this.animFrameId = requestAnimationFrame(this.renderLoop);
     } else {
       this.animFrameId = null;
@@ -196,6 +253,23 @@ export class DrawingCanvas {
     }
   }
 
+  private eraseAt(rawX: number, rawY: number) {
+    const tolerance = 14; // pixels
+    const initialCount = state.strokes.length;
+    const remaining = state.strokes.filter(
+      (s) => !strokeHitTest(s, rawX, rawY, tolerance, this.width, this.height)
+    );
+
+    if (remaining.length !== initialCount) {
+      if (!this.eraserDidRemove) {
+        pushHistorySnapshot();
+        this.eraserDidRemove = true;
+      }
+      state.strokes = remaining;
+      events.emit('strokes:updated', state.strokes);
+    }
+  }
+
   private onPointerDown = (e: PointerEvent) => {
     // Ignore secondary pointers to prevent multi-touch interference
     if (this.activePointerId !== null) return;
@@ -207,6 +281,14 @@ export class DrawingCanvas {
     const rect = this.canvas.getBoundingClientRect();
     const rawX = e.clientX - rect.left;
     const rawY = e.clientY - rect.top;
+
+    if (state.activeTool === 'eraser') {
+      this.eraserDidRemove = false;
+      this.eraserPos = { x: rawX, y: rawY };
+      this.eraseAt(rawX, rawY);
+      this.startAnimation();
+      return;
+    }
 
     const normX = Math.max(0, Math.min(1, rawX / this.width));
     const normY = Math.max(0, Math.min(1, rawY / this.height));
@@ -232,11 +314,20 @@ export class DrawingCanvas {
   };
 
   private onPointerMove = (e: PointerEvent) => {
-    if (e.pointerId !== this.activePointerId || !this.currentStroke) return;
+    if (e.pointerId !== this.activePointerId) return;
 
     const rect = this.canvas.getBoundingClientRect();
     const rawX = e.clientX - rect.left;
     const rawY = e.clientY - rect.top;
+
+    if (state.activeTool === 'eraser') {
+      this.eraserPos = { x: rawX, y: rawY };
+      this.eraseAt(rawX, rawY);
+      this.startAnimation();
+      return;
+    }
+
+    if (!this.currentStroke) return;
 
     const normX = Math.max(0, Math.min(1, rawX / this.width));
     const normY = Math.max(0, Math.min(1, rawY / this.height));
@@ -289,8 +380,10 @@ export class DrawingCanvas {
     this.activePointerId = null;
     this.activeNoteDisplay = null;
     this.lastPreviewMidi = null;
+    this.eraserPos = null;
 
     if (this.currentStroke && this.currentStroke.points.length > 0) {
+      pushHistorySnapshot();
       state.strokes.push(this.currentStroke);
       events.emit('stroke:added', this.currentStroke);
       events.emit('strokes:updated', state.strokes);
@@ -309,6 +402,7 @@ export class DrawingCanvas {
       this.activePointerId = null;
       this.activeNoteDisplay = null;
       this.lastPreviewMidi = null;
+      this.eraserPos = null;
       this.currentStroke = null;
       this.lastPointPos = null;
       this.redraw();
@@ -341,6 +435,11 @@ export class DrawingCanvas {
     // Draw active floating note badge
     if (this.activeNoteDisplay) {
       this.drawNoteBadge(this.activeNoteDisplay);
+    }
+
+    // Draw eraser cursor circle
+    if (state.activeTool === 'eraser' && this.eraserPos) {
+      this.drawEraserRing(this.eraserPos.x, this.eraserPos.y);
     }
   }
 
@@ -497,6 +596,17 @@ export class DrawingCanvas {
       ctx.stroke();
       ctx.restore();
     }
+  }
+
+  private drawEraserRing(x: number, y: number) {
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.beginPath();
+    ctx.strokeStyle = 'rgba(28, 26, 22, 0.4)';
+    ctx.lineWidth = 1.5;
+    ctx.arc(x, y, 14, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
   }
 
   private drawNoteBadge(display: { name: string; x: number; y: number }) {
