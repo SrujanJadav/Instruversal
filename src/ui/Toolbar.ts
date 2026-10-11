@@ -16,6 +16,7 @@ import { DEFAULT_TRACK_CONFIGS, getTrackManager, Track } from '../audio/tracks';
 import { INSTRUMENTS_MAP } from '../audio/instruments';
 import { DRUM_KITS, DrumKitId } from '../audio/drums';
 import { BeatRate } from '../audio/beatSchedule';
+import { triggerHaptic } from './haptics';
 
 // 1.5px stroke custom inline SVGs (strictly matching design system)
 const ICONS = {
@@ -98,22 +99,33 @@ export class Toolbar {
 
             <div class="toolbar-divider" aria-hidden="true"></div>
 
-            <!-- 3. Context Controls: Flow/Notes + Glide (Melodic) OR Kit + Rate + Swing + Human (Beat) -->
-            <div class="toolbar-context-container" id="tb-context-container"></div>
+            <!-- 3. Tool Selection: Pencil & Eraser side-by-side segmented -->
+            <div class="toolbar-tool-toggle" role="group" aria-label="Tool selection">
+              <button type="button" class="tool-seg-btn ${state.activeTool === 'draw' ? 'active' : ''}" id="tb-tool-draw" aria-label="Pencil tool" tabindex="0">
+                ${ICONS.pen}
+              </button>
+              <button type="button" class="tool-seg-btn ${state.activeTool === 'eraser' ? 'active' : ''}" id="tb-tool-eraser" aria-label="Eraser tool" tabindex="0">
+                ${ICONS.eraser}
+              </button>
+            </div>
 
             <div class="toolbar-divider" aria-hidden="true"></div>
 
-            <!-- 4. Tool Selection: Pencil & Eraser side-by-side segmented + Undo + Redo + Clear -->
-            <div class="toolbar-tool-group" role="group" aria-label="Drawing tools and history">
-              <div class="toolbar-tool-toggle" role="group" aria-label="Tool selection">
-                <button type="button" class="tool-seg-btn ${state.activeTool === 'draw' ? 'active' : ''}" id="tb-tool-draw" aria-label="Pencil tool" tabindex="0">
-                  ${ICONS.pen}
+            <!-- 4. Track Pigment Palette Dots -->
+            <div class="toolbar-palette" role="group" aria-label="Track pigment selection">
+              ${DEFAULT_TRACK_CONFIGS.map(
+                (t) => `
+                <button type="button" class="palette-dot-btn ${t.id === state.selectedTrackId ? 'active' : ''}" data-track-id="${t.id}" aria-label="Select ${t.name}" tabindex="0">
+                  <span class="palette-dot" style="background-color: ${t.colorHex}"></span>
                 </button>
-                <button type="button" class="tool-seg-btn ${state.activeTool === 'eraser' ? 'active' : ''}" id="tb-tool-eraser" aria-label="Eraser tool" tabindex="0">
-                  ${ICONS.eraser}
-                </button>
-              </div>
+              `
+              ).join('')}
+            </div>
 
+            <div class="toolbar-divider" aria-hidden="true"></div>
+
+            <!-- 5. History: Undo + Redo + Clear -->
+            <div class="toolbar-tool-group" role="group" aria-label="History and clear">
               <div class="toolbar-history-sub" role="group" aria-label="History">
                 <button type="button" class="toolbar-btn tool-icon-btn" id="tb-undo-btn" aria-label="Undo" ${canUndo() ? '' : 'disabled'} tabindex="0">
                   ${ICONS.undo}
@@ -132,16 +144,8 @@ export class Toolbar {
 
             <div class="toolbar-divider" aria-hidden="true"></div>
 
-            <!-- 5. Track Pigment Palette Dots -->
-            <div class="toolbar-palette" role="group" aria-label="Track pigment selection">
-              ${DEFAULT_TRACK_CONFIGS.map(
-                (t) => `
-                <button type="button" class="palette-dot-btn ${t.id === state.selectedTrackId ? 'active' : ''}" data-track-id="${t.id}" aria-label="Select ${t.name}" tabindex="0">
-                  <span class="palette-dot" style="background-color: ${t.colorHex}"></span>
-                </button>
-              `
-              ).join('')}
-            </div>
+            <!-- 5. Context Controls: Flow/Notes + Glide (Melodic) OR Kit + Rate + Swing + Human (Beat) -->
+            <div class="toolbar-context-container" id="tb-context-container"></div>
 
             <div class="toolbar-divider" aria-hidden="true"></div>
 
@@ -275,6 +279,7 @@ export class Toolbar {
     const playBtn = this.element.querySelector<HTMLButtonElement>('#tb-play-btn')!;
     playBtn.addEventListener('click', async () => {
       if (this.hasDragged) return;
+      triggerHaptic(8);
       const transport = getTransport();
       await transport.toggle();
     });
@@ -286,6 +291,7 @@ export class Toolbar {
 
     decBtn.addEventListener('click', () => {
       if (this.hasDragged) return;
+      triggerHaptic(4);
       const transport = getTransport();
       const nextBpm = transport.getBpm() - 5;
       transport.setBpm(nextBpm);
@@ -294,6 +300,7 @@ export class Toolbar {
 
     incBtn.addEventListener('click', () => {
       if (this.hasDragged) return;
+      triggerHaptic(4);
       const transport = getTransport();
       const nextBpm = transport.getBpm() + 5;
       transport.setBpm(nextBpm);
@@ -309,11 +316,13 @@ export class Toolbar {
 
     drawBtn.addEventListener('click', () => {
       if (this.hasDragged) return;
+      triggerHaptic(6);
       this.setTool('draw');
     });
 
     eraserBtn.addEventListener('click', () => {
       if (this.hasDragged) return;
+      triggerHaptic(6);
       this.setTool('eraser');
     });
 
@@ -325,6 +334,7 @@ export class Toolbar {
         const trackId = btn.dataset.trackId;
         if (!trackId) return;
 
+        triggerHaptic(8);
         state.selectedTrackId = trackId;
         dotBtns.forEach((b) => b.classList.toggle('active', b.dataset.trackId === trackId));
 
@@ -364,11 +374,13 @@ export class Toolbar {
 
     undoBtn.addEventListener('click', () => {
       if (this.hasDragged) return;
+      triggerHaptic(6);
       undo();
     });
 
     redoBtn.addEventListener('click', () => {
       if (this.hasDragged) return;
+      triggerHaptic(6);
       redo();
     });
 

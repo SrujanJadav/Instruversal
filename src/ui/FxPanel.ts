@@ -30,6 +30,7 @@ export class FxPanel {
 
     this.panel.innerHTML = `
       <div class="panel-header">
+        <div class="panel-drag-handle" aria-hidden="true"></div>
         <h3 class="panel-title">Effects Rack</h3>
         <button type="button" class="panel-close-btn" id="fx-close-btn" aria-label="Close Effects Rack">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
@@ -499,10 +500,48 @@ export class FxPanel {
         this.close();
       }
     });
+
+    let startY = 0;
+    let isTracking = false;
+
+    this.panel.addEventListener(
+      'touchstart',
+      (e: TouchEvent) => {
+        const target = e.target as HTMLElement;
+        if (target.closest('.panel-header') || target.closest('.panel-drag-handle')) {
+          startY = e.touches[0].clientY;
+          isTracking = true;
+        }
+      },
+      { passive: true }
+    );
+
+    this.panel.addEventListener(
+      'touchmove',
+      (e: TouchEvent) => {
+        if (!isTracking) return;
+        const currentY = e.touches[0].clientY;
+        const dy = currentY - startY;
+        if (dy > 65) {
+          isTracking = false;
+          this.close();
+        }
+      },
+      { passive: true }
+    );
+
+    this.panel.addEventListener(
+      'touchend',
+      () => {
+        isTracking = false;
+      },
+      { passive: true }
+    );
   }
 
   public open() {
     this.isOpen = true;
+    document.body.style.overflow = 'hidden';
     this.panel.classList.add('open');
     this.backdrop.classList.add('open');
     this.panel.setAttribute('aria-hidden', 'false');
@@ -511,6 +550,7 @@ export class FxPanel {
 
   public close() {
     this.isOpen = false;
+    document.body.style.overflow = '';
     this.panel.classList.remove('open');
     this.backdrop.classList.remove('open');
     this.panel.setAttribute('aria-hidden', 'true');

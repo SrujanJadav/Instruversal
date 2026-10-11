@@ -454,6 +454,15 @@ export class DrawingCanvas {
       this.activeNoteDisplay = null;
       this.lastPreviewMidi = null;
       this.eraserPos = null;
+
+      // Palm rejection: If user was drawing and OS cancelled, save if valid stroke
+      if (this.currentStroke && this.currentStroke.points.length > 1) {
+        pushHistorySnapshot();
+        state.strokes.push(this.currentStroke);
+        events.emit('stroke:added', this.currentStroke);
+        events.emit('strokes:updated', state.strokes);
+      }
+
       this.currentStroke = null;
       this.lastPointPos = null;
       this.markStaticDirty();
@@ -615,9 +624,12 @@ export class DrawingCanvas {
       ctx.textBaseline = "middle";
       ctx.fillText(meta.shortLabel, 10, yTop + laneHeight / 2);
 
-      ctx.font = '500 11px "Instrument Sans", sans-serif';
-      ctx.fillStyle = isFlow ? "rgba(28, 26, 22, 0.12)" : "rgba(28, 26, 22, 0.45)";
-      ctx.fillText(meta.name, 36, yTop + laneHeight / 2);
+      // On narrow screens (<600px), only show 2-letter code to keep lanes readable
+      if (this.width >= 600) {
+        ctx.font = '500 11px "Instrument Sans", sans-serif';
+        ctx.fillStyle = isFlow ? "rgba(28, 26, 22, 0.12)" : "rgba(28, 26, 22, 0.45)";
+        ctx.fillText(meta.name, 36, yTop + laneHeight / 2);
+      }
       ctx.restore();
     }
 

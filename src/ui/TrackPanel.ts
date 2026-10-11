@@ -6,6 +6,8 @@ import { SCALES, ScaleName } from '../audio/scales';
 import { getTotalAudioLatencySeconds } from '../audio/context';
 import { getTransport } from '../audio/transport';
 import { getPreviewEngine, getAuditionEnabled, setAuditionEnabled } from '../audio/preview';
+import { triggerHaptic } from './haptics';
+import { getLightMode, setLightMode } from '../audio/lifecycle';
 
 const ROOT_NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
@@ -33,12 +35,53 @@ export class TrackPanel {
 
     this.render();
     this.setupListeners();
+    this.setupSwipeToDismiss();
+  }
+
+  private setupSwipeToDismiss() {
+    let startY = 0;
+    let isTracking = false;
+
+    this.panel.addEventListener(
+      'touchstart',
+      (e: TouchEvent) => {
+        const target = e.target as HTMLElement;
+        if (target.closest('.panel-header') || target.closest('.panel-drag-handle')) {
+          startY = e.touches[0].clientY;
+          isTracking = true;
+        }
+      },
+      { passive: true }
+    );
+
+    this.panel.addEventListener(
+      'touchmove',
+      (e: TouchEvent) => {
+        if (!isTracking) return;
+        const currentY = e.touches[0].clientY;
+        const dy = currentY - startY;
+        if (dy > 65) {
+          isTracking = false;
+          this.close();
+        }
+      },
+      { passive: true }
+    );
+
+    this.panel.addEventListener(
+      'touchend',
+      () => {
+        isTracking = false;
+      },
+      { passive: true }
+    );
   }
 
   public open(tab: 'tracks' | 'key' = 'tracks') {
     this.currentTab = tab;
     this.activeInstrumentPickerTrackId = null;
     this.render();
+    document.body.style.overflow = 'hidden';
     this.overlay.classList.remove('hidden');
     this.overlay.removeAttribute('aria-hidden');
     this.panel.classList.remove('hidden');
@@ -48,6 +91,7 @@ export class TrackPanel {
   public close() {
     getPreviewEngine().cancelPreview();
     this.activeInstrumentPickerTrackId = null;
+    document.body.style.overflow = '';
     this.panel.classList.remove('visible');
     this.overlay.classList.add('hidden');
     this.overlay.setAttribute('aria-hidden', 'true');
@@ -356,6 +400,10 @@ export class TrackPanel {
             <input type="checkbox" class="panel-checkbox" id="toggle-hit-notes" ${state.showHitNotes ? 'checked' : ''} tabindex="0" />
             <span class="checkbox-label">Show note names on playhead hit</span>
           </label>
+          <label class="panel-checkbox-row">
+            <input type="checkbox" class="panel-checkbox" id="toggle-light-mode" ${getLightMode() ? 'checked' : ''} tabindex="0" />
+            <span class="checkbox-label">Light mode (saves battery & CPU)</span>
+          </label>
         </div>
       </div>
     `;
@@ -516,6 +564,7 @@ export class TrackPanel {
       btn.addEventListener('click', () => {
         const trackId = btn.dataset.selectId;
         if (trackId) {
+          triggerHaptic(8);
           state.selectedTrackId = trackId;
           const track = tm.getTrack(trackId);
           track?.audition();
@@ -579,6 +628,7 @@ export class TrackPanel {
     const rootBtns = this.panel.querySelectorAll<HTMLButtonElement>('.root-note-btn');
     rootBtns.forEach((btn) => {
       const handleRootClick = () => {
+        triggerHaptic(8);
         const idx = parseInt(btn.dataset.rootIdx || '0', 10);
         state.rootNote = idx;
         events.emit('scale:change', { rootNote: state.rootNote, scaleName: state.scaleName });
@@ -608,6 +658,7 @@ export class TrackPanel {
     const scaleBtns = this.panel.querySelectorAll<HTMLButtonElement>('.scale-pill-btn');
     scaleBtns.forEach((btn) => {
       const handleScaleClick = () => {
+        triggerHaptic(8);
         const scaleName = btn.dataset.scaleName as ScaleName;
         if (scaleName) {
           state.scaleName = scaleName;
@@ -657,6 +708,11 @@ export class TrackPanel {
     const hitNotesToggle = this.panel.querySelector<HTMLInputElement>('#toggle-hit-notes');
     hitNotesToggle?.addEventListener('change', () => {
       state.showHitNotes = hitNotesToggle.checked;
+    });
+
+    const lightModeToggle = this.panel.querySelector<HTMLInputElement>('#toggle-light-mode');
+    lightModeToggle?.addEventListener('change', () => {
+      setLightMode(lightModeToggle.checked);
     });
 
     // Sync calibration slider in Mixer

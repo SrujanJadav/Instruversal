@@ -17,6 +17,8 @@ import { TrackPanel } from './ui/TrackPanel';
 import { FxPanel } from './ui/FxPanel';
 import { SyncSettingsPill } from './ui/SyncSettingsPill';
 import { loadSavedProject, initProjectAutosave } from './audio/projectState';
+import { initAudioLifecycle } from './audio/lifecycle';
+import { showFirstRunHintOverlay } from './ui/hintOverlay';
 
 // Restore any saved project from share link or localStorage
 loadSavedProject();
@@ -37,6 +39,9 @@ app.innerHTML = `
     <header class="app-header">
       <h2 class="header-title">${CONFIG.appName}</h2>
       <div class="header-actions">
+        <button type="button" class="header-btn" id="header-help-btn" aria-label="How Instruversal works">
+          How it works
+        </button>
         <button type="button" class="header-btn" id="header-fx-btn" aria-label="Open effects rack">
           Effects
         </button>
@@ -133,6 +138,17 @@ async function handleStart() {
       if (headerActionsEl) {
         new SyncSettingsPill(headerActionsEl);
       }
+
+      // Initialize audio interruptions, wake lock & lifecycle
+      initAudioLifecycle();
+
+      // "How it works" button
+      document.querySelector('#header-help-btn')?.addEventListener('click', () => {
+        showFirstRunHintOverlay(true);
+      });
+
+      // Show first-run hint overlay if user is visiting for the first time
+      showFirstRunHintOverlay(false);
     }, 220);
   } catch (err) {
     console.error('Audio initialization error:', err);
