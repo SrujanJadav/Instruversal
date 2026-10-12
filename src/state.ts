@@ -1,10 +1,18 @@
 import { CONFIG } from './config';
-import { ScaleName } from './audio/scales';
+import { ScaleName, KeyMode, MusicalKey } from './audio/scales';
 
 export type Pt = {
   x: number; // Normalized 0..1
   y: number; // Normalized 0..1
   t: number; // ms since stroke start
+};
+export type Point = Pt;
+
+export type PolyphonyCap = 'low' | 'medium' | 'high';
+export const POLYPHONY_VOICE_COUNTS: Record<PolyphonyCap, number> = {
+  low: 4,
+  medium: 8,
+  high: 12,
 };
 
 export type Stroke = {
@@ -42,12 +50,23 @@ export const DEFAULT_FX_CONFIG: FxConfig = {
   drive: { amount: 0, tone: 4000, bypassed: true },
 };
 
+export interface KeyStateSnapshot {
+  keyMode: KeyMode;
+  baseRoot: number;
+  baseScale: ScaleName;
+  trackKeys: Record<string, MusicalKey | undefined>;
+}
+
 export type EventMap = {
   'audio:started': void;
   'transport:play': void;
   'transport:pause': void;
   'bpm:change': number;
+  'bars:change': number;
   'scale:change': { rootNote: number; scaleName: ScaleName };
+  'key-mode:change': KeyMode;
+  'track:key-change': { trackId: string; key: MusicalKey };
+  'key-state:restore': KeyStateSnapshot;
   'track:select': string;
   'track:update': string;
   'ui:open-mixer': 'tracks' | 'key' | undefined;
@@ -85,6 +104,8 @@ export type EventMap = {
   'eraser:radius-change': number;
   'eraser:mode-change': 'part' | 'stroke';
   'eraser:track-only-change': boolean;
+  'polyphony:change': PolyphonyCap;
+  'polyphony:thinned': boolean;
   'app:start': { startAudio?: boolean } | undefined;
 };
 
@@ -127,6 +148,7 @@ export interface AppState {
   selectedTrackId: string;
   rootNote: number;
   scaleName: ScaleName;
+  keyMode: KeyMode;
   activeTool: ToolMode;
   eraserRadius: number; // radius in canvas px, 6..40
   eraserMode: 'part' | 'stroke';
@@ -137,8 +159,11 @@ export interface AppState {
   syncOffsetMs: number; // user-calibrated latency offset in ms, stored in localStorage
   kickDucking: number; // 0 to 40 (%)
   fx: FxConfig;
+  polyphony: PolyphonyCap;
+  isThinned: boolean;
   strokes: Stroke[];
 }
+
 
 // Persisted sync offset
 const SYNC_STORAGE_KEY = 'instruversal:sync';
@@ -155,6 +180,26 @@ function loadSyncOffset(): number {
 export function saveSyncOffset(ms: number): void {
   try {
     localStorage.setItem(SYNC_STORAGE_KEY, String(ms));
+  } catch {}
+}
+
+// Persisted polyphony cap
+const POLYPHONY_STORAGE_KEY = 'instruversal:polyphony';
+export function loadPolyphony(): PolyphonyCap {
+  try {
+    const saved = localStorage.getItem(POLYPHONY_STORAGE_KEY);
+    if (saved === 'low' || saved === 'medium' || saved === 'high') {
+      return saved;
+    }
+  } catch {}
+  if (typeof navigator !== 'undefined' && navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4) {
+    return 'low';
+  }
+  return 'medium';
+}
+export function savePolyphony(cap: PolyphonyCap): void {
+  try {
+    localStorage.setItem(POLYPHONY_STORAGE_KEY, cap);
   } catch {}
 }
 
@@ -216,14 +261,52 @@ export function saveEraserTrackOnly(val: boolean): void {
   } catch {}
 }
 
+// Device key defaults persistence under 'instruversal:defaults'
+const DEFAULTS_STORAGE_KEY = 'instruversal:defaults';
+
+export interface DeviceKeyDefaults {
+  keyMode: KeyMode;
+  rootNote: number;
+  scaleName: ScaleName;
+}
+
+export function loadDeviceKeyDefaults(): DeviceKeyDefaults {
+  try {
+    const raw = localStorage.getItem(DEFAULTS_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      const keyMode: KeyMode = parsed.keyMode === 'perColour' ? 'perColour' : 'linked';
+      const rootNote = typeof parsed.rootNote === 'number' ? ((Math.round(parsed.rootNote) % 12) + 12) % 12 : 0;
+      const scaleName: ScaleName = parsed.scaleName || 'major pentatonic';
+      return { keyMode, rootNote, scaleName };
+    }
+  } catch {}
+  return { keyMode: 'linked', rootNote: 0, scaleName: 'major pentatonic' };
+}
+
+export function saveDeviceKeyDefaults(defaults: Partial<DeviceKeyDefaults>): void {
+  try {
+    const current = loadDeviceKeyDefaults();
+    const updated: DeviceKeyDefaults = {
+      keyMode: defaults.keyMode || current.keyMode,
+      rootNote: defaults.rootNote !== undefined ? ((Math.round(defaults.rootNote) % 12) + 12) % 12 : current.rootNote,
+      scaleName: defaults.scaleName || current.scaleName,
+    };
+    localStorage.setItem(DEFAULTS_STORAGE_KEY, JSON.stringify(updated));
+  } catch {}
+}
+
+const initialKeyDefaults = loadDeviceKeyDefaults();
+
 export const state: AppState = {
   audioStarted: false,
   isPlaying: false,
   bpm: CONFIG.defaultBpm,
   bars: CONFIG.defaultBars,
   selectedTrackId: 'track-1',
-  rootNote: 0, // C
-  scaleName: 'major pentatonic',
+  rootNote: initialKeyDefaults.rootNote,
+  scaleName: initialKeyDefaults.scaleName,
+  keyMode: initialKeyDefaults.keyMode,
   activeTool: 'draw',
   eraserRadius: loadEraserSize(),
   eraserMode: loadEraserMode(),
@@ -234,6 +317,8 @@ export const state: AppState = {
   kickDucking: 0,
   showHitNotes: true,
   fx: { ...DEFAULT_FX_CONFIG },
+  polyphony: loadPolyphony(),
+  isThinned: false,
   strokes: [],
 };
 
@@ -253,6 +338,18 @@ export type HistoryEntry =
       type: 'delta';
       before: HistoryDeltaItem[];
       after: HistoryDeltaItem[];
+    }
+  | {
+      type: 'key-state';
+      before: KeyStateSnapshot;
+      after: KeyStateSnapshot;
+      trackId?: string;
+      timestamp: number;
+    }
+  | {
+      type: 'bars';
+      before: number;
+      after: number;
     };
 
 // History stack (Undo / Redo)
@@ -303,6 +400,59 @@ export function recordDeltaHistory(
   emitHistoryChange();
 }
 
+/**
+ * Record key state change (mode, root, scale, copy to all, match project).
+ * Rapid clicks on the same colour within 600ms are merged into ONE undo step.
+ */
+export function recordKeyStateHistory(
+  before: KeyStateSnapshot,
+  after: KeyStateSnapshot,
+  trackId?: string
+) {
+  const now = Date.now();
+  if (undoStack.length > 0) {
+    const top = undoStack[undoStack.length - 1];
+    if (
+      top.type === 'key-state' &&
+      top.trackId === trackId &&
+      now - top.timestamp <= 600
+    ) {
+      top.after = after;
+      top.timestamp = now;
+      redoStack = [];
+      emitHistoryChange();
+      return;
+    }
+  }
+
+  undoStack.push({
+    type: 'key-state',
+    before,
+    after,
+    trackId,
+    timestamp: now,
+  });
+  if (undoStack.length > MAX_HISTORY) {
+    undoStack.shift();
+  }
+  redoStack = [];
+  emitHistoryChange();
+}
+
+export function recordBarsHistory(before: number, after: number) {
+  if (before === after) return;
+  undoStack.push({
+    type: 'bars',
+    before,
+    after,
+  });
+  if (undoStack.length > MAX_HISTORY) {
+    undoStack.shift();
+  }
+  redoStack = [];
+  emitHistoryChange();
+}
+
 export function undo() {
   if (undoStack.length === 0) return;
   const entry = undoStack.pop()!;
@@ -313,7 +463,8 @@ export function undo() {
       strokes: state.strokes.map((s) => ({ ...s, points: [...s.points] })),
     });
     state.strokes = entry.strokes;
-  } else {
+    events.emit('strokes:updated', state.strokes);
+  } else if (entry.type === 'delta') {
     // Delta undo: Remove 'after' fragments and re-insert 'before' original strokes
     redoStack.push(entry);
     const afterIds = new Set(entry.after.map((a) => a.stroke.id));
@@ -329,9 +480,19 @@ export function undo() {
       });
     }
     state.strokes = remaining;
+    events.emit('strokes:updated', state.strokes);
+  } else if (entry.type === 'key-state') {
+    redoStack.push(entry);
+    state.keyMode = entry.before.keyMode;
+    state.rootNote = entry.before.baseRoot;
+    state.scaleName = entry.before.baseScale;
+    events.emit('key-state:restore', entry.before);
+  } else if (entry.type === 'bars') {
+    redoStack.push(entry);
+    state.bars = entry.before;
+    events.emit('bars:change', entry.before);
   }
 
-  events.emit('strokes:updated', state.strokes);
   emitHistoryChange();
 }
 
@@ -345,7 +506,8 @@ export function redo() {
       strokes: state.strokes.map((s) => ({ ...s, points: [...s.points] })),
     });
     state.strokes = entry.strokes;
-  } else {
+    events.emit('strokes:updated', state.strokes);
+  } else if (entry.type === 'delta') {
     // Delta redo: Remove 'before' original strokes and re-insert 'after' fragments
     undoStack.push(entry);
     const beforeIds = new Set(entry.before.map((b) => b.stroke.id));
@@ -360,11 +522,22 @@ export function redo() {
       });
     }
     state.strokes = remaining;
+    events.emit('strokes:updated', state.strokes);
+  } else if (entry.type === 'key-state') {
+    undoStack.push(entry);
+    state.keyMode = entry.after.keyMode;
+    state.rootNote = entry.after.baseRoot;
+    state.scaleName = entry.after.baseScale;
+    events.emit('key-state:restore', entry.after);
+  } else if (entry.type === 'bars') {
+    undoStack.push(entry);
+    state.bars = entry.after;
+    events.emit('bars:change', entry.after);
   }
 
-  events.emit('strokes:updated', state.strokes);
   emitHistoryChange();
 }
+
 
 export function clearStrokes() {
   if (state.strokes.length === 0) return;

@@ -11,6 +11,8 @@ import {
   yToMidi,
   midiToNoteName,
   isRootNote,
+  effectiveKey,
+  MusicalKey,
 } from '../audio/scales';
 import { getTrackManager } from '../audio/tracks';
 import { getTransport } from '../audio/transport';
@@ -19,6 +21,7 @@ import { getThemeTokens, getTrackThemeColor, getTheme } from '../ui/theme';
 import { eraseStrokes, Capsule, Point2D } from './eraser';
 import { getFlowVoicePool } from '../audio/voicePool';
 import { getBeatFlowVoicePool } from '../audio/beatFlowVoices';
+import { getStrokeBranches, interpolateBranchY } from '../audio/branches';
 
 interface HitEffect {
   x: number;
@@ -77,6 +80,19 @@ export class DrawingCanvas {
 
   // Event cleanup
   private unsubs: (() => void)[] = [];
+
+  // Guide cross-fade transition state
+  private lastSelectedTrackId: string = state.selectedTrackId;
+  private guideTransition: {
+    fromTrackId: string;
+    fromKey: MusicalKey | null;
+    fromIsBeat: boolean;
+    toTrackId: string;
+    toKey: MusicalKey | null;
+    toIsBeat: boolean;
+    startTime: number;
+    duration: number;
+  } | null = null;
 
   // Dynamic theme-aware line styling
   private get lineColor(): string {
@@ -148,15 +164,18 @@ export class DrawingCanvas {
     this.unsubs.push(() => document.removeEventListener('visibilitychange', onVisibilityChange));
 
     this.unsubs.push(
-      events.on('track:select', () => this.markStaticDirty()),
+      events.on('track:select', (trackId) => this.handleTrackSelect(trackId)),
       events.on('track:type-change', () => this.markStaticDirty()),
       events.on('track:beat-param-change', () => this.markStaticDirty()),
       events.on('scale:change', () => this.markStaticDirty()),
+      events.on('key-mode:change', () => this.markStaticDirty()),
+      events.on('track:key-change', () => this.markStaticDirty()),
       events.on('tool:change', () => this.updateCursor()),
       events.on('eraser:radius-change', () => this.redraw()),
       events.on('eraser:mode-change', () => this.redraw()),
       events.on('strokes:updated', () => this.markStaticDirty()),
       events.on('stroke:added', () => this.markStaticDirty()),
+      events.on('bars:change', () => this.markStaticDirty()),
       events.on('transport:play', () => this.startAnimation()),
       events.on('transport:pause', () => this.redraw()),
       events.on('note:hit', (hit) => {
@@ -175,10 +194,50 @@ export class DrawingCanvas {
         });
         if (hit.strokeId) {
           this.strokeHighlights.set(hit.strokeId, performance.now() + 200);
+          const dashB = hit.strokeId.lastIndexOf('-b');
+          if (dashB > 0) {
+            this.strokeHighlights.set(hit.strokeId.substring(0, dashB), performance.now() + 200);
+          }
         }
         this.startAnimation();
       })
     );
+  }
+
+  private handleTrackSelect(trackId: string) {
+    const tm = getTrackManager();
+    const prevTrack = tm.getTrack(this.lastSelectedTrackId);
+    const nextTrack = tm.getTrack(trackId);
+    this.lastSelectedTrackId = trackId;
+
+    const prefersReducedMotion = typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    if (state.keyMode === 'perColour' && !prefersReducedMotion && prevTrack && nextTrack) {
+      const prevKey = prevTrack.trackType === 'beat' ? null : effectiveKey(prevTrack, state);
+      const nextKey = nextTrack.trackType === 'beat' ? null : effectiveKey(nextTrack, state);
+      const isDiff = prevTrack.trackType !== nextTrack.trackType ||
+        (prevKey && nextKey && (prevKey.root !== nextKey.root || prevKey.scale !== nextKey.scale));
+
+      if (isDiff) {
+        this.guideTransition = {
+          fromTrackId: prevTrack.id,
+          fromKey: prevKey,
+          fromIsBeat: prevTrack.trackType === 'beat',
+          toTrackId: nextTrack.id,
+          toKey: nextKey,
+          toIsBeat: nextTrack.trackType === 'beat',
+          startTime: performance.now(),
+          duration: 150,
+        };
+        this.markStaticDirty();
+        this.startAnimation();
+        return;
+      }
+    }
+
+    this.guideTransition = null;
+    this.markStaticDirty();
   }
 
   private get isEraserActive(): boolean {
@@ -208,8 +267,9 @@ export class DrawingCanvas {
     const isDrawing = this.currentStroke !== null;
     const isErasing = this.eraserPos !== null;
     const isPlaying = state.isPlaying;
+    const hasTransition = this.guideTransition !== null;
 
-    if (isPlaying || hasActiveHits || isDrawing || isErasing) {
+    if (isPlaying || hasActiveHits || isDrawing || isErasing || hasTransition) {
       this.animFrameId = requestAnimationFrame(this.renderLoop);
     } else {
       this.animFrameId = null;
@@ -337,7 +397,8 @@ export class DrawingCanvas {
       return;
     }
 
-    const scaleNotes = buildScaleNotes(state.rootNote, state.scaleName, 3, 6);
+    const key = effectiveKey(track, state);
+    const scaleNotes = buildScaleNotes(key.root, key.scale, 3, 6);
     const midi = yToMidi(normY, scaleNotes);
     const noteName = midiToNoteName(midi);
 
@@ -728,16 +789,8 @@ export class DrawingCanvas {
     }
   }
 
-  private drawBackgroundGuides(ctx: CanvasRenderingContext2D) {
-    const tm = getTrackManager();
-    const track = tm.getTrack(state.selectedTrackId);
-    if (track && track.trackType === 'beat') {
-      this.drawDrumLanes(ctx);
-      this.drawBeatMarkers(ctx);
-      return;
-    }
-
-    const scaleNotes = buildScaleNotes(state.rootNote, state.scaleName, 3, 6);
+  private drawMelodicGuides(ctx: CanvasRenderingContext2D, key: MusicalKey) {
+    const scaleNotes = buildScaleNotes(key.root, key.scale, 3, 6);
     const noteCount = scaleNotes.length;
 
     // Pitch guide lines
@@ -745,7 +798,7 @@ export class DrawingCanvas {
       const midi = scaleNotes[i];
       const yNorm = 1 - i / (noteCount - 1);
       const y = Math.round(yNorm * this.height);
-      const isRoot = isRootNote(midi, state.rootNote);
+      const isRoot = isRootNote(midi, key.root);
 
       ctx.beginPath();
       ctx.lineWidth = isRoot ? 1.2 : 0.8;
@@ -769,17 +822,77 @@ export class DrawingCanvas {
     this.drawBeatMarkers(ctx);
   }
 
+  private drawBackgroundGuides(ctx: CanvasRenderingContext2D) {
+    if (this.guideTransition) {
+      const now = performance.now();
+      const elapsed = now - this.guideTransition.startTime;
+      const progress = Math.min(1, elapsed / this.guideTransition.duration);
+
+      // Outgoing guides
+      ctx.save();
+      ctx.globalAlpha = 1 - progress;
+      if (this.guideTransition.fromIsBeat) {
+        this.drawDrumLanes(ctx);
+        this.drawBeatMarkers(ctx);
+      } else if (this.guideTransition.fromKey) {
+        this.drawMelodicGuides(ctx, this.guideTransition.fromKey);
+      }
+      ctx.restore();
+
+      // Incoming guides
+      ctx.save();
+      ctx.globalAlpha = progress;
+      if (this.guideTransition.toIsBeat) {
+        this.drawDrumLanes(ctx);
+        this.drawBeatMarkers(ctx);
+      } else if (this.guideTransition.toKey) {
+        this.drawMelodicGuides(ctx, this.guideTransition.toKey);
+      }
+      ctx.restore();
+
+      if (progress < 1) {
+        this.staticLayerDirty = true;
+      } else {
+        this.guideTransition = null;
+      }
+      return;
+    }
+
+    const tm = getTrackManager();
+    const track = tm.getTrack(state.selectedTrackId);
+    if (track && track.trackType === 'beat') {
+      this.drawDrumLanes(ctx);
+      this.drawBeatMarkers(ctx);
+      return;
+    }
+
+    const key = effectiveKey(track, state);
+    this.drawMelodicGuides(ctx, key);
+  }
+
   private drawBeatMarkers(ctx: CanvasRenderingContext2D) {
-    const totalBeats = 8;
+    const bars = Math.max(1, state.bars || 2);
+    const totalBeats = bars * 4;
     for (let i = 1; i < totalBeats; i++) {
       const x = Math.round((i / totalBeats) * this.width);
       ctx.beginPath();
-      const isBarBoundary = i === totalBeats / 2;
-      ctx.lineWidth = 1;
+      const isBarBoundary = i % 4 === 0;
+      ctx.lineWidth = isBarBoundary ? 1.2 : 0.8;
       ctx.strokeStyle = isBarBoundary ? this.lineColor : this.lineSubtleColor;
       ctx.moveTo(x + 0.5, 0);
       ctx.lineTo(x + 0.5, this.height);
       ctx.stroke();
+
+      if (isBarBoundary) {
+        ctx.save();
+        ctx.font = '500 9px "DM Mono", monospace';
+        ctx.fillStyle = getThemeTokens().inkSoft;
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'top';
+        const barNum = Math.floor(i / 4) + 1;
+        ctx.fillText(`| ${barNum}`, x + 3, 4);
+        ctx.restore();
+      }
     }
   }
 
@@ -1014,73 +1127,50 @@ export class DrawingCanvas {
         if (state.playbackMode !== 'flow') continue;
       }
 
-      const pts = stroke.points;
-      if (pts.length === 0) continue;
+      const branches = getStrokeBranches(stroke);
+      if (branches.length === 0) continue;
 
-      let minX = Infinity;
-      let maxX = -Infinity;
-      for (const p of pts) {
-        if (p.x < minX) minX = p.x;
-        if (p.x > maxX) maxX = p.x;
-      }
-
-      const isNearVertical = (maxX - minX) < 0.03;
-      const effectiveMinX = isNearVertical ? Math.max(0, minX - 0.015) : minX;
-      const effectiveMaxX = isNearVertical ? Math.min(1, maxX + 0.015) : maxX;
-
-      if (progress < effectiveMinX || progress > effectiveMaxX) continue;
-
-      let interpY: number | null = null;
-      if (pts.length === 1 || isNearVertical) {
-        interpY = pts[0].y;
-      } else {
-        for (let k = 0; k < pts.length - 1; k++) {
-          const p1 = pts[k];
-          const p2 = pts[k + 1];
-          const segMinX = Math.min(p1.x, p2.x);
-          const segMaxX = Math.max(p1.x, p2.x);
-          if (progress >= segMinX && progress <= segMaxX) {
-            const dx = p2.x - p1.x;
-            const t = Math.abs(dx) > 0.00001 ? (progress - p1.x) / dx : 0.5;
-            interpY = p1.y + t * (p2.y - p1.y);
-            break;
-          }
-        }
-        if (interpY === null) {
-          let closestDist = Infinity;
-          for (const p of pts) {
-            const d = Math.abs(p.x - progress);
-            if (d < closestDist) {
-              closestDist = d;
-              interpY = p.y;
-            }
-          }
-        }
-      }
-
-      if (interpY === null) continue;
-
-      const px = progress * this.width;
-      const py = interpY * this.height;
       const color = this.getTrackColor(stroke.trackId);
-
       const pulse = Math.sin(now * 0.007) * 0.6;
       const radius = 4.8 + pulse;
 
-      ctx.save();
-      ctx.beginPath();
-      ctx.fillStyle = color;
-      ctx.arc(px, py, radius, 0, Math.PI * 2);
-      ctx.fill();
+      let isStrokeActive = false;
 
-      ctx.beginPath();
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 1;
-      ctx.globalAlpha = 0.45 + pulse * 0.15;
-      ctx.arc(px, py, radius + 2.5, 0, Math.PI * 2);
-      ctx.stroke();
+      for (const branch of branches) {
+        const isNearVertical = (branch.xEnd - branch.xStart) < 0.03;
+        const effectiveMinX = isNearVertical ? Math.max(0, branch.xStart - 0.015) : branch.xStart;
+        const effectiveMaxX = isNearVertical ? Math.min(1, branch.xEnd + 0.015) : branch.xEnd;
 
-      ctx.restore();
+        if (progress < effectiveMinX || progress > effectiveMaxX) continue;
+
+        const interpY = interpolateBranchY(branch, progress);
+        if (interpY === null || isNaN(interpY)) continue;
+
+        isStrokeActive = true;
+
+        const px = progress * this.width;
+        const py = interpY * this.height;
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.fillStyle = color;
+        ctx.arc(px, py, radius, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1;
+        ctx.globalAlpha = 0.45 + pulse * 0.15;
+        ctx.arc(px, py, radius + 2.5, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.restore();
+      }
+
+      if (isStrokeActive) {
+        // Brighten stroke slightly while any of its branches is sounding
+        this.strokeHighlights.set(stroke.id, now + 120);
+      }
     }
   }
 

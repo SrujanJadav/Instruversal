@@ -1,8 +1,24 @@
-import { state, events } from '../state';
+import {
+  state,
+  events,
+  saveDeviceKeyDefaults,
+  recordKeyStateHistory,
+  recordBarsHistory,
+  KeyStateSnapshot,
+  savePolyphony,
+  PolyphonyCap,
+  POLYPHONY_VOICE_COUNTS,
+} from '../state';
 import { getTrackManager, auditionInstrument, auditionKit, Track } from '../audio/tracks';
 import { INSTRUMENT_METAS } from '../audio/instruments';
 import { DRUM_KITS, DrumKitId } from '../audio/drums';
-import { SCALES, ScaleName } from '../audio/scales';
+import {
+  SCALES,
+  ScaleName,
+  MusicalKey,
+  effectiveKey,
+  formatShortKeyLabel,
+} from '../audio/scales';
 import { getTotalAudioLatencySeconds } from '../audio/context';
 import { getTransport } from '../audio/transport';
 import { getPreviewEngine, getAuditionEnabled, setAuditionEnabled } from '../audio/preview';
@@ -12,12 +28,27 @@ import { getTrackThemeColor } from './theme';
 
 const ROOT_NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
+function captureCurrentKeyState(): KeyStateSnapshot {
+  const tm = getTrackManager();
+  const trackKeys: Record<string, MusicalKey | undefined> = {};
+  for (const track of tm.getAllTracks()) {
+    trackKeys[track.id] = track.key ? { root: track.key.root, scale: track.key.scale } : undefined;
+  }
+  return {
+    keyMode: state.keyMode,
+    baseRoot: state.rootNote,
+    baseScale: state.scaleName,
+    trackKeys,
+  };
+}
+
 export class TrackPanel {
   private overlay: HTMLElement;
   private panel: HTMLElement;
   private currentTab: 'tracks' | 'key' = 'tracks';
   private activeInstrumentPickerTrackId: string | null = null;
   private pickerTab: 'melodic' | 'beats' = 'melodic';
+  private openerElement: HTMLElement | null = null;
   private unsubs: (() => void)[] = [];
 
   constructor(container: HTMLElement) {
@@ -79,6 +110,7 @@ export class TrackPanel {
   }
 
   public open(tab: 'tracks' | 'key' = 'tracks') {
+    this.openerElement = (document.activeElement as HTMLElement) || null;
     this.currentTab = tab;
     this.activeInstrumentPickerTrackId = null;
     this.render();
@@ -98,6 +130,14 @@ export class TrackPanel {
     this.overlay.setAttribute('aria-hidden', 'true');
     window.setTimeout(() => {
       this.panel.classList.add('hidden');
+      if (
+        this.openerElement &&
+        typeof this.openerElement.focus === 'function' &&
+        document.body.contains(this.openerElement)
+      ) {
+        this.openerElement.focus();
+      }
+      this.openerElement = null;
     }, 180);
   }
 
@@ -116,6 +156,9 @@ export class TrackPanel {
   }
 
   public openInstrumentPicker(trackId?: string) {
+    if (!this.isOpen()) {
+      this.openerElement = (document.activeElement as HTMLElement) || null;
+    }
     this.currentTab = 'tracks';
     const targetId = trackId || state.selectedTrackId;
     this.activeInstrumentPickerTrackId = targetId;
@@ -137,12 +180,27 @@ export class TrackPanel {
 
     this.unsubs.push(
       events.on('track:select', () => {
-        if (this.isOpen() && this.currentTab === 'tracks') {
+        if (this.isOpen()) {
           this.render();
         }
       }),
       events.on('scale:change', () => {
         if (this.isOpen() && this.currentTab === 'key') {
+          this.render();
+        }
+      }),
+      events.on('key-mode:change', () => {
+        if (this.isOpen()) {
+          this.render();
+        }
+      }),
+      events.on('track:key-change', () => {
+        if (this.isOpen()) {
+          this.render();
+        }
+      }),
+      events.on('bars:change', () => {
+        if (this.isOpen()) {
           this.render();
         }
       }),
@@ -157,6 +215,12 @@ export class TrackPanel {
       }),
       events.on('ui:open-instruments', (trackId) => {
         this.openInstrumentPicker(trackId);
+      }),
+      events.on('polyphony:thinned', (isThinned) => {
+        const hintEl = this.panel.querySelector<HTMLElement>('#mixer-thinned-hint');
+        if (hintEl) {
+          hintEl.style.display = isThinned ? 'block' : 'none';
+        }
       })
     );
 
@@ -167,6 +231,15 @@ export class TrackPanel {
     };
     window.addEventListener('themechange', onThemeChange);
     this.unsubs.push(() => window.removeEventListener('themechange', onThemeChange));
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && this.isOpen()) {
+        e.stopPropagation();
+        this.close();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    this.unsubs.push(() => window.removeEventListener('keydown', onKeyDown));
   }
 
   private render() {
@@ -207,7 +280,8 @@ export class TrackPanel {
         <div class="instrument-picker-view">
           <div class="picker-header">
             <button type="button" class="picker-back-btn" id="picker-back-btn">
-              ← Back to tracks
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+              <span>Back to tracks</span>
             </button>
             <span class="picker-title">
               <span class="palette-dot-small" style="background-color: var(${track.colorVar})"></span>
@@ -235,7 +309,8 @@ export class TrackPanel {
                       ${isSelected ? '<span class="inst-badge">Active</span>' : ''}
                     </button>
                     <button type="button" class="inst-audition-btn" data-audition-id="${meta.id}" aria-label="Audition ${meta.name}">
-                      ▶ Test
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="6 3 20 12 6 21 6 3"/></svg>
+                      <span>Test</span>
                     </button>
                   </li>
                 `;
@@ -255,7 +330,8 @@ export class TrackPanel {
                       ${isSelected ? '<span class="inst-badge">Active</span>' : ''}
                     </button>
                     <button type="button" class="kit-audition-btn" data-audition-kit="${kit.id}" aria-label="Audition ${kit.name}">
-                      ▶ Test
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="6 3 20 12 6 21 6 3"/></svg>
+                      <span>Test</span>
                     </button>
                   </li>
                 `;
@@ -267,7 +343,32 @@ export class TrackPanel {
     }
 
     const hwMs = Math.round(getTotalAudioLatencySeconds() * 1000);
+    const currentBars = getTransport().getBars();
     return `
+      <!-- Loop Length Control -->
+      <div class="mixer-loop-section">
+        <div class="mixer-loop-header">
+          <span class="section-title">Loop Length</span>
+          <span class="loop-bars-display" id="mixer-loop-val">${currentBars} bar${currentBars === 1 ? '' : 's'} (4/4)</span>
+        </div>
+        <p class="loop-hint">Stretches the drawing in time. Beat grid and tempo stretch with it.</p>
+        <div class="loop-mode-toggle" role="radiogroup" aria-label="Loop length in bars">
+          ${([1, 2, 4, 8] as const).map((b) => {
+            const isSel = currentBars === b;
+            return `
+              <button type="button"
+                class="mode-pill-btn ${isSel ? 'active' : ''}"
+                data-loop-bars="${b}"
+                role="radio"
+                aria-checked="${isSel}"
+                tabindex="${isSel ? '0' : '-1'}">
+                ${b} bar${b === 1 ? '' : 's'}
+              </button>
+            `;
+          }).join('')}
+        </div>
+      </div>
+
       <ul class="track-list">
         ${tracks.map((t) => this.renderTrackRow(t)).join('')}
       </ul>
@@ -304,6 +405,39 @@ export class TrackPanel {
           <span class="sync-val-display" id="panel-sync-val">${state.syncOffsetMs >= 0 ? '+' : ''}${state.syncOffsetMs}ms</span>
         </div>
       </div>
+
+      <!-- Voice Polyphony Cap -->
+      <div class="mixer-sync-section">
+        <div class="mixer-sync-header">
+          <span class="section-title">Voice Polyphony Cap</span>
+          <span class="sync-val-display" id="mixer-polyphony-val">${state.polyphony.charAt(0).toUpperCase() + state.polyphony.slice(1)} (${POLYPHONY_VOICE_COUNTS[state.polyphony]} voices)</span>
+        </div>
+        <p class="sync-hint">Maximum simultaneous voices. Lower values protect battery and older phones.</p>
+        <div class="loop-mode-toggle" role="radiogroup" aria-label="Simultaneous polyphony cap">
+          <button type="button"
+            class="mode-pill-btn ${state.polyphony === 'low' ? 'active' : ''}"
+            data-polyphony="low"
+            role="radio"
+            aria-checked="${state.polyphony === 'low'}">
+            Low (4)
+          </button>
+          <button type="button"
+            class="mode-pill-btn ${state.polyphony === 'medium' ? 'active' : ''}"
+            data-polyphony="medium"
+            role="radio"
+            aria-checked="${state.polyphony === 'medium'}">
+            Medium (8)
+          </button>
+          <button type="button"
+            class="mode-pill-btn ${state.polyphony === 'high' ? 'active' : ''}"
+            data-polyphony="high"
+            role="radio"
+            aria-checked="${state.polyphony === 'high'}">
+            High (12)
+          </button>
+        </div>
+        <p class="thinned-hint" id="mixer-thinned-hint" style="color: var(--vermilion); font-size: 0.8rem; margin-top: 6px; ${state.isThinned ? '' : 'display: none;'}">Some lines were thinned to keep the sound smooth.</p>
+      </div>
     `;
   }
 
@@ -317,17 +451,25 @@ export class TrackPanel {
       instName = instMeta ? instMeta.name : track.instrumentId;
     }
 
+    const keyDesc = track.trackType === 'beat' ? 'Drums' : formatShortKeyLabel(effectiveKey(track, state));
+    const keyTag =
+      state.keyMode === 'perColour' && track.trackType === 'melodic'
+        ? `<button type="button" class="track-key-tag" data-key-track="${track.id}" aria-label="Key for ${track.name}: ${formatShortKeyLabel(effectiveKey(track, state))}">${formatShortKeyLabel(effectiveKey(track, state))}</button>`
+        : '';
+
     return `
       <li class="track-row ${isSelected ? 'selected' : ''}" data-track-id="${track.id}">
-        <button type="button" class="track-select-lead" data-select-id="${track.id}" aria-label="Select ${track.name} track for drawing">
+        <button type="button" class="track-select-lead" data-select-id="${track.id}" aria-label="Select ${track.name} track (${keyDesc}) for drawing">
           <span class="track-dot-indicator" style="background-color: var(${track.colorVar})"></span>
           <span class="track-name-lbl">${track.name}</span>
         </button>
 
-        <button type="button" class="track-inst-btn" data-picker-track="${track.id}" aria-label="Change instrument for ${track.name}">
+        <button type="button" class="track-inst-btn" data-picker-track="${track.id}" aria-label="Change instrument for ${track.name} (currently ${instName})">
           <span class="inst-label">${instName}</span>
-          <span class="chevron-icon">▾</span>
+          <svg class="chevron-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
         </button>
+
+        ${keyTag}
 
         <div class="track-controls">
           <button type="button" class="track-toggle-btn mute-btn ${track.muted ? 'active' : ''}" data-mute-id="${track.id}" aria-label="Mute ${track.name}">
@@ -345,13 +487,17 @@ export class TrackPanel {
   }
 
   private renderKeyTab(): string {
-    const currentRoot = state.rootNote;
-    const currentScale = state.scaleName;
-    const scaleKeys = Object.keys(SCALES) as ScaleName[];
-
     const tm = getTrackManager();
+    const tracks = tm.getAllTracks();
     const selTrack = tm.getTrack(state.selectedTrackId);
     const isBeat = selTrack?.trackType === 'beat';
+
+    const activeKey = isBeat
+      ? { root: state.rootNote, scale: state.scaleName }
+      : effectiveKey(selTrack, state);
+    const currentRoot = activeKey.root;
+    const currentScale = activeKey.scale;
+    const scaleKeys = Object.keys(SCALES) as ScaleName[];
 
     const intervals = SCALES[currentScale] || SCALES['major pentatonic'];
     const stripNotes = intervals.map((semi) => ROOT_NOTE_NAMES[(currentRoot + semi) % 12]);
@@ -359,11 +505,63 @@ export class TrackPanel {
 
     return `
       <div class="key-picker-container">
+        <!-- Segmented Mode Toggle -->
+        <div class="key-mode-section">
+          <div class="key-mode-toggle" role="radiogroup" aria-label="Key link mode">
+            <button type="button" class="mode-pill-btn ${state.keyMode === 'linked' ? 'active' : ''}" id="key-mode-linked" role="radio" aria-checked="${state.keyMode === 'linked'}" tabindex="${state.keyMode === 'linked' ? '0' : '-1'}">
+              One key for all
+            </button>
+            <button type="button" class="mode-pill-btn ${state.keyMode === 'perColour' ? 'active' : ''}" id="key-mode-per-colour" role="radio" aria-checked="${state.keyMode === 'perColour'}" tabindex="${state.keyMode === 'perColour' ? '0' : '-1'}">
+              Key per colour
+            </button>
+          </div>
+          <p class="key-mode-hint" id="key-mode-hint">
+            ${state.keyMode === 'linked' ? 'Changes apply to the whole drawing' : 'Each color has its own root and scale'}
+          </p>
+        </div>
+
+        ${state.keyMode === 'perColour' ? `
+          <!-- Row of 6 color dots -->
+          <div class="key-section">
+            <span class="section-title">Color Key Settings</span>
+            <div class="key-colour-picker-row" role="radiogroup" aria-label="Select color to edit key">
+              ${tracks.map((tr) => {
+                const isSel = tr.id === state.selectedTrackId;
+                const trIsBeat = tr.trackType === 'beat';
+                const trKey = effectiveKey(tr, state);
+                const shortLabel = trIsBeat ? 'Drums' : formatShortKeyLabel(trKey);
+                const trInstName = trIsBeat
+                  ? (DRUM_KITS[tr.kitId as DrumKitId]?.name || 'Drums')
+                  : (INSTRUMENT_METAS.find((m) => m.id === tr.instrumentId)?.name || 'Synth');
+                const trKeyDesc = trIsBeat ? 'Drums (no key)' : `${ROOT_NOTE_NAMES[trKey.root]} ${trKey.scale}`;
+                return `
+                  <button type="button"
+                    class="key-colour-dot-btn ${isSel ? 'active' : ''} ${trIsBeat ? 'is-beat' : ''}"
+                    data-track-dot-id="${tr.id}"
+                    role="radio"
+                    aria-checked="${isSel}"
+                    tabindex="${isSel ? '0' : '-1'}"
+                    aria-label="${tr.name}, ${trInstName}, ${trKeyDesc}">
+                    <span class="palette-dot-large" style="background-color: var(${tr.colorVar})"></span>
+                    <span class="colour-dot-label">${shortLabel}</span>
+                  </button>
+                `;
+              }).join('')}
+            </div>
+          </div>
+        ` : ''}
+
+        ${isBeat && state.keyMode === 'perColour' ? `
+          <div class="beat-key-disabled-banner">
+            <p>Drums have no key. Select a melody color above to set its key.</p>
+          </div>
+        ` : ''}
+
         <div class="key-section">
           <span class="section-title">Root Key</span>
-          <div class="root-note-grid">
+          <div class="root-note-grid ${isBeat && state.keyMode === 'perColour' ? 'disabled-grid' : ''}" ${isBeat && state.keyMode === 'perColour' ? 'aria-disabled="true"' : ''}>
             ${ROOT_NOTE_NAMES.map((name, idx) => `
-              <button type="button" class="root-note-btn ${currentRoot === idx ? 'active' : ''}" data-root-idx="${idx}" tabindex="0">
+              <button type="button" class="root-note-btn ${currentRoot === idx ? 'active' : ''}" data-root-idx="${idx}" tabindex="0" ${isBeat && state.keyMode === 'perColour' ? 'disabled' : ''}>
                 ${name}
               </button>
             `).join('')}
@@ -372,31 +570,40 @@ export class TrackPanel {
 
         <div class="key-section">
           <span class="section-title">Musical Scale</span>
-          <div class="scale-list-grid">
+          <div class="scale-list-grid ${isBeat && state.keyMode === 'perColour' ? 'disabled-grid' : ''}" ${isBeat && state.keyMode === 'perColour' ? 'aria-disabled="true"' : ''}>
             ${scaleKeys.map((scaleName) => `
-              <button type="button" class="scale-pill-btn ${currentScale === scaleName ? 'active' : ''}" data-scale-name="${scaleName}" tabindex="0">
+              <button type="button" class="scale-pill-btn ${currentScale === scaleName ? 'active' : ''}" data-scale-name="${scaleName}" tabindex="0" ${isBeat && state.keyMode === 'perColour' ? 'disabled' : ''}>
                 ${scaleName.replace(/\b\w/g, (c) => c.toUpperCase())}
               </button>
             `).join('')}
           </div>
 
-          ${
-            isBeat
-              ? `<p class="scale-beat-note" id="scale-beat-note">Beat track selected, previewing with Keys.</p>`
-              : ''
-          }
+          ${isBeat && state.keyMode === 'linked' ? `
+            <p class="scale-beat-note" id="scale-beat-note">Beat track selected, previewing with Keys.</p>
+          ` : ''}
 
           <!-- Scale Strip with note names and Replay button -->
-          <div class="scale-strip-row" aria-label="Scale note sequence">
+          <div class="scale-strip-row ${isBeat && state.keyMode === 'perColour' ? 'disabled-grid' : ''}" aria-label="Scale note sequence">
             <div class="scale-strip" id="scale-strip">
               ${stripNotes.map((name, idx) => `
                 <span class="scale-strip-note" data-strip-idx="${idx}">${name}</span>
               `).join('')}
             </div>
-            <button type="button" class="scale-replay-btn" id="scale-replay-btn" aria-label="Replay scale audition" tabindex="0">
+            <button type="button" class="scale-replay-btn" id="scale-replay-btn" aria-label="Replay scale audition" tabindex="0" ${isBeat && state.keyMode === 'perColour' ? 'disabled' : ''}>
               Play
             </button>
           </div>
+
+          ${state.keyMode === 'perColour' && !isBeat ? `
+            <div class="per-colour-actions-row">
+              <button type="button" class="panel-secondary-btn" id="btn-copy-key-all" aria-label="Copy this key to all colours">
+                Copy this key to all colours
+              </button>
+              <button type="button" class="panel-secondary-btn" id="btn-match-project-key" aria-label="Match project key">
+                Match project key
+              </button>
+            </div>
+          ` : ''}
         </div>
 
         <div class="key-section">
@@ -631,14 +838,196 @@ export class TrackPanel {
       });
     });
 
+    // Loop Length buttons
+    const loopBtns = this.panel.querySelectorAll<HTMLButtonElement>('[data-loop-bars]');
+    const loopBtnList = Array.from(loopBtns);
+    loopBtnList.forEach((btn, idx) => {
+      btn.addEventListener('click', () => {
+        const barsVal = parseInt(btn.dataset.loopBars || '2', 10);
+        const transport = getTransport();
+        const before = transport.getBars();
+        if (before !== barsVal) {
+          triggerHaptic(8);
+          recordBarsHistory(before, barsVal);
+          transport.setBars(barsVal);
+          this.render();
+        }
+      });
+
+      btn.addEventListener('keydown', (e: KeyboardEvent) => {
+        if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+          e.preventDefault();
+          const next = loopBtnList[(idx + 1) % loopBtnList.length];
+          next.focus();
+          next.click();
+        } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+          e.preventDefault();
+          const prev = loopBtnList[(idx - 1 + loopBtnList.length) % loopBtnList.length];
+          prev.focus();
+          prev.click();
+        }
+      });
+    });
+
+    // Key tag click triggers in Mixer rows
+    const keyTags = this.panel.querySelectorAll<HTMLButtonElement>('.track-key-tag');
+    keyTags.forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const trackId = btn.dataset.keyTrack;
+        if (trackId) {
+          triggerHaptic(8);
+          state.selectedTrackId = trackId;
+          events.emit('track:select', trackId);
+          this.currentTab = 'key';
+          this.render();
+        }
+      });
+    });
+
+    // Key link mode switches
+    const btnLinked = this.panel.querySelector<HTMLButtonElement>('#key-mode-linked');
+    const btnPerColour = this.panel.querySelector<HTMLButtonElement>('#key-mode-per-colour');
+
+    btnLinked?.addEventListener('click', () => {
+      if (state.keyMode !== 'linked') {
+        triggerHaptic(8);
+        const before = captureCurrentKeyState();
+        state.keyMode = 'linked';
+        saveDeviceKeyDefaults({ keyMode: 'linked' });
+        events.emit('key-mode:change', 'linked');
+        const after = captureCurrentKeyState();
+        recordKeyStateHistory(before, after);
+        this.render();
+      }
+    });
+
+    btnPerColour?.addEventListener('click', () => {
+      if (state.keyMode !== 'perColour') {
+        triggerHaptic(8);
+        const before = captureCurrentKeyState();
+        state.keyMode = 'perColour';
+        saveDeviceKeyDefaults({ keyMode: 'perColour' });
+        events.emit('key-mode:change', 'perColour');
+        const after = captureCurrentKeyState();
+        recordKeyStateHistory(before, after);
+        this.render();
+      }
+    });
+
+    const modeBtns = [btnLinked, btnPerColour].filter(Boolean) as HTMLButtonElement[];
+    modeBtns.forEach((btn, idx) => {
+      btn.addEventListener('keydown', (e: KeyboardEvent) => {
+        if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+          e.preventDefault();
+          const next = modeBtns[(idx + 1) % modeBtns.length];
+          next.focus();
+          next.click();
+        } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+          e.preventDefault();
+          const prev = modeBtns[(idx - 1 + modeBtns.length) % modeBtns.length];
+          prev.focus();
+          prev.click();
+        }
+      });
+    });
+
+    // Color dot buttons in perColour mode
+    const dotBtns = this.panel.querySelectorAll<HTMLButtonElement>('[data-track-dot-id]');
+    const dotBtnList = Array.from(dotBtns);
+    dotBtnList.forEach((btn, idx) => {
+      btn.addEventListener('click', () => {
+        const trId = btn.dataset.trackDotId;
+        if (trId) {
+          triggerHaptic(8);
+          state.selectedTrackId = trId;
+          events.emit('track:select', trId);
+          const tr = tm.getTrack(trId);
+          tr?.audition();
+          this.render();
+        }
+      });
+
+      btn.addEventListener('keydown', (e: KeyboardEvent) => {
+        if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+          e.preventDefault();
+          const next = dotBtnList[(idx + 1) % dotBtnList.length];
+          next.focus();
+          next.click();
+        } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+          e.preventDefault();
+          const prev = dotBtnList[(idx - 1 + dotBtnList.length) % dotBtnList.length];
+          prev.focus();
+          prev.click();
+        }
+      });
+    });
+
+    const selTrack = tm.getTrack(state.selectedTrackId);
+
+    // Copy this key to all colours
+    const copyBtn = this.panel.querySelector<HTMLButtonElement>('#btn-copy-key-all');
+    copyBtn?.addEventListener('click', () => {
+      if (selTrack && selTrack.trackType === 'melodic') {
+        triggerHaptic(8);
+        const before = captureCurrentKeyState();
+        const srcKey = effectiveKey(selTrack, state);
+        state.rootNote = srcKey.root;
+        state.scaleName = srcKey.scale;
+        saveDeviceKeyDefaults({ rootNote: srcKey.root, scaleName: srcKey.scale });
+        for (const tr of tm.getAllTracks()) {
+          if (tr.trackType === 'melodic') {
+            tr.setKey({ root: srcKey.root, scale: srcKey.scale });
+            events.emit('track:key-change', { trackId: tr.id, key: { root: srcKey.root, scale: srcKey.scale } });
+          }
+        }
+        events.emit('scale:change', { rootNote: state.rootNote, scaleName: state.scaleName });
+        const after = captureCurrentKeyState();
+        recordKeyStateHistory(before, after);
+        this.render();
+      }
+    });
+
+    // Match project key
+    const matchBtn = this.panel.querySelector<HTMLButtonElement>('#btn-match-project-key');
+    matchBtn?.addEventListener('click', () => {
+      if (selTrack && selTrack.trackType === 'melodic') {
+        triggerHaptic(8);
+        const before = captureCurrentKeyState();
+        const matchKey: MusicalKey = { root: state.rootNote, scale: state.scaleName };
+        selTrack.setKey(matchKey);
+        events.emit('track:key-change', { trackId: selTrack.id, key: matchKey });
+        const after = captureCurrentKeyState();
+        recordKeyStateHistory(before, after, selTrack.id);
+        this.render();
+      }
+    });
+
     // Key & Root Note selection with audition
     const rootBtns = this.panel.querySelectorAll<HTMLButtonElement>('.root-note-btn');
     rootBtns.forEach((btn) => {
       const handleRootClick = () => {
+        if (state.keyMode === 'perColour' && selTrack?.trackType === 'beat') return;
         triggerHaptic(8);
         const idx = parseInt(btn.dataset.rootIdx || '0', 10);
-        state.rootNote = idx;
-        events.emit('scale:change', { rootNote: state.rootNote, scaleName: state.scaleName });
+        const before = captureCurrentKeyState();
+
+        if (state.keyMode === 'linked') {
+          state.rootNote = idx;
+          saveDeviceKeyDefaults({ rootNote: idx });
+          events.emit('scale:change', { rootNote: state.rootNote, scaleName: state.scaleName });
+          const after = captureCurrentKeyState();
+          recordKeyStateHistory(before, after);
+        } else {
+          if (selTrack && selTrack.trackType === 'melodic') {
+            const curK = effectiveKey(selTrack, state);
+            const newKey: MusicalKey = { root: idx, scale: curK.scale };
+            selTrack.setKey(newKey);
+            events.emit('track:key-change', { trackId: selTrack.id, key: newKey });
+            const after = captureCurrentKeyState();
+            recordKeyStateHistory(before, after, selTrack.id);
+          }
+        }
         this.render();
 
         if (getAuditionEnabled()) {
@@ -647,8 +1036,9 @@ export class TrackPanel {
           activeBtn?.classList.add('audition-pressed');
           window.setTimeout(() => activeBtn?.classList.remove('audition-pressed'), 350);
 
-          const curIntervals = SCALES[state.scaleName] || SCALES['major pentatonic'];
-          previewEngine.previewRoot(idx, undefined, (step) => this.handleHighlight(step, curIntervals));
+          const curScaleName = state.keyMode === 'linked' ? state.scaleName : (effectiveKey(selTrack, state).scale);
+          const curIntervals = SCALES[curScaleName] || SCALES['major pentatonic'];
+          previewEngine.previewRoot(idx, selTrack, (step) => this.handleHighlight(step, curIntervals));
         }
       };
 
@@ -665,24 +1055,41 @@ export class TrackPanel {
     const scaleBtns = this.panel.querySelectorAll<HTMLButtonElement>('.scale-pill-btn');
     scaleBtns.forEach((btn) => {
       const handleScaleClick = () => {
+        if (state.keyMode === 'perColour' && selTrack?.trackType === 'beat') return;
         triggerHaptic(8);
         const scaleName = btn.dataset.scaleName as ScaleName;
-        if (scaleName) {
+        if (!scaleName) return;
+
+        const before = captureCurrentKeyState();
+        if (state.keyMode === 'linked') {
           state.scaleName = scaleName;
+          saveDeviceKeyDefaults({ scaleName });
           events.emit('scale:change', { rootNote: state.rootNote, scaleName: state.scaleName });
-          this.render();
-
-          if (getAuditionEnabled()) {
-            const previewEngine = getPreviewEngine();
-            const activeBtn = this.panel.querySelector<HTMLButtonElement>(`[data-scale-name="${scaleName}"]`);
-            activeBtn?.classList.add('audition-pressed');
-            window.setTimeout(() => activeBtn?.classList.remove('audition-pressed'), 450);
-
-            const curIntervals = SCALES[state.scaleName] || SCALES['major pentatonic'];
-            previewEngine.previewScale(state.rootNote, state.scaleName, undefined, (step) =>
-              this.handleHighlight(step, curIntervals)
-            );
+          const after = captureCurrentKeyState();
+          recordKeyStateHistory(before, after);
+        } else {
+          if (selTrack && selTrack.trackType === 'melodic') {
+            const curK = effectiveKey(selTrack, state);
+            const newKey: MusicalKey = { root: curK.root, scale: scaleName };
+            selTrack.setKey(newKey);
+            events.emit('track:key-change', { trackId: selTrack.id, key: newKey });
+            const after = captureCurrentKeyState();
+            recordKeyStateHistory(before, after, selTrack.id);
           }
+        }
+        this.render();
+
+        if (getAuditionEnabled()) {
+          const previewEngine = getPreviewEngine();
+          const activeBtn = this.panel.querySelector<HTMLButtonElement>(`[data-scale-name="${scaleName}"]`);
+          activeBtn?.classList.add('audition-pressed');
+          window.setTimeout(() => activeBtn?.classList.remove('audition-pressed'), 450);
+
+          const curRoot = state.keyMode === 'linked' ? state.rootNote : (effectiveKey(selTrack, state).root);
+          const curIntervals = SCALES[scaleName] || SCALES['major pentatonic'];
+          previewEngine.previewScale(curRoot, scaleName, selTrack, (step) =>
+            this.handleHighlight(step, curIntervals)
+          );
         }
       };
 
@@ -699,8 +1106,10 @@ export class TrackPanel {
     const replayBtn = this.panel.querySelector<HTMLButtonElement>('#scale-replay-btn');
     replayBtn?.addEventListener('click', () => {
       const previewEngine = getPreviewEngine();
-      const curIntervals = SCALES[state.scaleName] || SCALES['major pentatonic'];
-      previewEngine.previewScale(state.rootNote, state.scaleName, undefined, (step) =>
+      const curRoot = state.keyMode === 'linked' ? state.rootNote : (effectiveKey(selTrack, state).root);
+      const curScaleName = state.keyMode === 'linked' ? state.scaleName : (effectiveKey(selTrack, state).scale);
+      const curIntervals = SCALES[curScaleName] || SCALES['major pentatonic'];
+      previewEngine.previewScale(curRoot, curScaleName, selTrack, (step) =>
         this.handleHighlight(step, curIntervals)
       );
     });
@@ -738,6 +1147,21 @@ export class TrackPanel {
       const val = parseInt(duckSlider.value, 10);
       state.kickDucking = val;
       if (duckValDisplay) duckValDisplay.textContent = `${val}%`;
+    });
+
+    // Polyphony cap toggle buttons in Mixer
+    const polyBtns = this.panel.querySelectorAll<HTMLButtonElement>('[data-polyphony]');
+    polyBtns.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const capVal = btn.dataset.polyphony as PolyphonyCap;
+        if (capVal && capVal !== state.polyphony) {
+          triggerHaptic(8);
+          state.polyphony = capVal;
+          savePolyphony(capVal);
+          events.emit('polyphony:change', capVal);
+          this.render();
+        }
+      });
     });
   }
 

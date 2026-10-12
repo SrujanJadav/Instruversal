@@ -64,4 +64,29 @@ describe('Loop event generator', () => {
   it('returns empty array when no strokes provided', () => {
     expect(generateEventsFromStrokes([], 2, scaleNotes)).toEqual([]);
   });
+
+  it('folded shape (cone): schedules crossings as simultaneous chord notes at the same step', () => {
+    // Cone: drawn from left (0.2, 0.8) to peak (0.6, 0.2), then back left (0.2, 0.4)
+    const coneStroke: Stroke = {
+      id: 'cone-notes',
+      trackId: 'track-1',
+      points: [
+        { x: 0.2, y: 0.8, t: 0 },
+        { x: 0.4, y: 0.5, t: 100 },
+        { x: 0.6, y: 0.2, t: 200 },
+        { x: 0.4, y: 0.3, t: 300 },
+        { x: 0.2, y: 0.4, t: 400 },
+      ],
+      width: 2.0,
+    };
+
+    const events = generateEventsFromStrokes([coneStroke], 2, scaleNotes);
+    // Across 32 steps (2 bars), steps between 0.2 and 0.6 have 2 crossings!
+    // Check step around x=0.4 (bar 0, beat 3, sixteenth 1 approx -> step 13)
+    const step13Events = events.filter((e) => (e.time as string).startsWith('0:3:'));
+    expect(step13Events.length).toBeGreaterThanOrEqual(2);
+    // Distinct pitches for top and bottom branches
+    const midis = step13Events.map((e) => e.midi);
+    expect(new Set(midis).size).toBeGreaterThanOrEqual(2);
+  });
 });

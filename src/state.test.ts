@@ -9,7 +9,22 @@ import {
   canUndo,
   canRedo,
   Stroke,
+  savePolyphony,
+  loadPolyphony,
+  POLYPHONY_VOICE_COUNTS,
 } from './state';
+
+if (typeof globalThis.localStorage === 'undefined') {
+  const store = new Map<string, string>();
+  globalThis.localStorage = {
+    getItem: (key: string) => store.get(key) ?? null,
+    setItem: (key: string, val: string) => store.set(key, String(val)),
+    removeItem: (key: string) => store.delete(key),
+    clear: () => store.clear(),
+    key: (index: number) => Array.from(store.keys())[index] ?? null,
+    length: 0,
+  } as Storage;
+}
 
 describe('State & History stack', () => {
   beforeEach(() => {
@@ -102,5 +117,65 @@ describe('State & History stack', () => {
     expect(state.strokes[2].id).toBe('f2b');
     expect(state.strokes[3].id).toBe('s3');
   });
+
+  it('merges key-state history changes on the same track within 600ms into a single undo step', async () => {
+    const { recordKeyStateHistory, events } = await import('./state');
+
+    const snap0 = {
+      keyMode: 'perColour' as const,
+      baseRoot: 0,
+      baseScale: 'major pentatonic' as const,
+      trackKeys: { 'track-1': { root: 0, scale: 'major pentatonic' as const } },
+    };
+    const snap1 = {
+      keyMode: 'perColour' as const,
+      baseRoot: 0,
+      baseScale: 'major pentatonic' as const,
+      trackKeys: { 'track-1': { root: 2, scale: 'major pentatonic' as const } },
+    };
+    const snap2 = {
+      keyMode: 'perColour' as const,
+      baseRoot: 0,
+      baseScale: 'major pentatonic' as const,
+      trackKeys: { 'track-1': { root: 4, scale: 'major pentatonic' as const } },
+    };
+
+    // First change at t=0
+    recordKeyStateHistory(snap0, snap1, 'track-1');
+    expect(canUndo()).toBe(true);
+
+    // Rapid second change on same track <600ms later
+    recordKeyStateHistory(snap1, snap2, 'track-1');
+
+    let restored: any = null;
+    const unsub = events.on('key-state:restore', (s) => {
+      restored = s;
+    });
+
+    // Undo should directly revert from snap2 back to snap0 (single merged undo step!)
+    undo();
+    expect(restored).not.toBeNull();
+    expect(restored.trackKeys['track-1']?.root).toBe(0);
+    expect(canUndo()).toBe(false);
+
+    // Redo should restore snap2
+    redo();
+    expect(restored.trackKeys['track-1']?.root).toBe(4);
+
+    unsub();
+  });
+
+  it('supports polyphony cap configuration and persistence', () => {
+    expect(POLYPHONY_VOICE_COUNTS.low).toBe(4);
+    expect(POLYPHONY_VOICE_COUNTS.medium).toBe(8);
+    expect(POLYPHONY_VOICE_COUNTS.high).toBe(12);
+
+    savePolyphony('high');
+    expect(loadPolyphony()).toBe('high');
+
+    savePolyphony('low');
+    expect(loadPolyphony()).toBe('low');
+  });
 });
+
 

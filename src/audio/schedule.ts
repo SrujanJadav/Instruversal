@@ -1,7 +1,8 @@
 import * as Tone from 'tone';
-import { Stroke, state, events } from '../state';
-import { buildScaleNotes, yToMidi } from './scales';
+import { Stroke, state, events, POLYPHONY_VOICE_COUNTS } from '../state';
+import { buildScaleNotes, yToMidi, effectiveKey } from './scales';
 import { getTrackManager } from './tracks';
+import { getStrokeBranches, interpolateBranchY, StrokeBranch } from './branches';
 
 export interface NoteEvent {
   time: string | number;
@@ -103,41 +104,53 @@ export function generateEventsFromStrokes(
         });
       }
     } else {
-      // Normal stroke: check intersection with each grid step
+      // Normal stroke: extract branches and find crossings per step
+      const branches = getStrokeBranches(stroke);
       for (let s = 0; s < totalSteps; s++) {
         const stepX = (s + 0.5) / totalSteps;
         if (stepX < minX || stepX > maxX) continue;
 
-        // Find segments that cross stepX
-        for (let k = 0; k < pts.length - 1; k++) {
-          const p1 = pts[k];
-          const p2 = pts[k + 1];
-          const segMinX = Math.min(p1.x, p2.x);
-          const segMaxX = Math.max(p1.x, p2.x);
-
-          if (stepX >= segMinX && stepX <= segMaxX) {
-            const dx = p2.x - p1.x;
-            const t = Math.abs(dx) > 0.0001 ? (stepX - p1.x) / dx : 0.5;
-            const interpY = Math.max(0, Math.min(1, p1.y + t * (p2.y - p1.y)));
+        const branchHits: { midi: number; branch: StrokeBranch; interpY: number }[] = [];
+        for (const branch of branches) {
+          if (stepX >= branch.xStart && stepX <= branch.xEnd) {
+            const interpY = interpolateBranchY(branch, stepX);
             const midi = yToMidi(interpY, scaleNotes);
-
-            const bar = Math.floor(s / 16);
-            const beat = Math.floor((s % 16) / 4);
-            const sixteenth = s % 4;
-            const timeStr = `${bar}:${beat}:${sixteenth}`;
-
-            rawEvents.push({
-              time: timeStr,
-              midi,
-              duration: '16n',
-              velocity: baseVelocity,
-              trackId: stroke.trackId,
-              strokeId: stroke.id,
-              normX: stepX,
-              normY: interpY,
-            });
-            break; // One note per stroke per step
+            // Deduplicate same pitch within the same step
+            if (!branchHits.some((h) => h.midi === midi)) {
+              branchHits.push({ midi, branch, interpY });
+            }
           }
+        }
+
+        // Cap at 6 notes per step, prioritizing longest/highest-priority branches
+        branchHits.sort((a, b) => b.branch.priority - a.branch.priority);
+        const cappedHits = branchHits.slice(0, 6);
+
+        const bar = Math.floor(s / 16);
+        const beat = Math.floor((s % 16) / 4);
+        const sixteenth = s % 4;
+        const timeStr = `${bar}:${beat}:${sixteenth}`;
+        const stepDuration = 60 / (90 * 4);
+        const baseStepTime = s * stepDuration;
+
+        for (let j = 0; j < cappedHits.length; j++) {
+          const hit = cappedHits[j];
+          const strokeEventId = branches.length === 1 ? stroke.id : hit.branch.id;
+          // Stagger by 15ms if 3 or more simultaneous notes for a natural strum
+          const stagger = cappedHits.length >= 3 ? j * 0.015 : 0;
+          const finalTime = stagger > 0 ? baseStepTime + stagger : timeStr;
+
+          rawEvents.push({
+            time: finalTime,
+            timeSeconds: baseStepTime + stagger,
+            midi: hit.midi,
+            duration: '16n',
+            velocity: Math.max(0.4, baseVelocity - j * 0.03),
+            trackId: stroke.trackId,
+            strokeId: strokeEventId,
+            normX: stepX,
+            normY: hit.interpY,
+          });
         }
       }
     }
@@ -158,7 +171,7 @@ export function generateEventsFromStrokes(
   return finalEvents;
 }
 
-import { generateFlowEventsFromStrokes } from './flowScheduler';
+import { generateFlowEventsFromStrokes, thinFlowEvents, FlowStrokeEvent } from './flowScheduler';
 import { getFlowVoicePool } from './voicePool';
 import { generateBeatEventsFromStrokes, BeatHitEvent } from './beatSchedule';
 import { generateBeatFlowEventsFromStrokes, BeatFlowStrokeEvent } from './beatFlowSchedule';
@@ -212,8 +225,24 @@ export class LoopScheduler {
         this.debouncedRebuild();
       }),
       events.on('scale:change', () => {
-        getFlowVoicePool().releaseAll(0.02);
-        this.debouncedRebuild();
+        if (state.keyMode === 'linked') {
+          const tm = getTrackManager();
+          const baseScaleNotes = buildScaleNotes(state.rootNote, state.scaleName, 3, 6);
+          for (const track of tm.getAllTracks()) {
+            if (track.trackType !== 'beat') {
+              getFlowVoicePool().retuneActiveTrackVoices(track.id, baseScaleNotes, 0.045);
+            }
+          }
+        }
+        this.debouncedRebuild(150);
+      }),
+      events.on('key-mode:change', () => {
+        this.debouncedRebuild(150);
+      }),
+      events.on('track:key-change', ({ trackId, key }) => {
+        const newScaleNotes = buildScaleNotes(key.root, key.scale, 3, 6);
+        getFlowVoicePool().retuneActiveTrackVoices(trackId, newScaleNotes, 0.045);
+        this.debouncedRebuild(150);
       }),
       events.on('bpm:change', () => this.debouncedRebuild()),
       events.on('playback-mode:change', () => {
@@ -230,21 +259,30 @@ export class LoopScheduler {
         getBeatFlowVoicePool().releaseAll(0.02);
         this.debouncedRebuild();
       }),
+      events.on('bars:change', () => {
+        getFlowVoicePool().releaseAll(0.02);
+        getBeatFlowVoicePool().releaseAll(0.02);
+        this.rebuild();
+      }),
       events.on('transport:pause', () => {
         getFlowVoicePool().releaseAll(0.02);
         getBeatFlowVoicePool().releaseAll(0.02);
+      }),
+      events.on('polyphony:change', () => {
+        getFlowVoicePool().setCap(POLYPHONY_VOICE_COUNTS[state.polyphony]);
+        this.debouncedRebuild();
       })
     );
   }
 
-  public debouncedRebuild() {
+  public debouncedRebuild(delayMs: number = 40) {
     if (this.rebuildTimer !== null) {
       window.clearTimeout(this.rebuildTimer);
     }
     this.rebuildTimer = window.setTimeout(() => {
       this.rebuildTimer = null;
       this.rebuild();
-    }, 40);
+    }, delayMs);
   }
 
   public rebuild() {
@@ -534,17 +572,35 @@ export class LoopScheduler {
       return;
     }
 
-    const scaleNotes = buildScaleNotes(state.rootNote, state.scaleName, 3, 6);
     const voicePool = getFlowVoicePool();
+    const melodicTracks = trackManager.getAllTracks().filter((t) => t.trackType !== 'beat');
 
     if (state.playbackMode === 'flow') {
-      const flowEvents = generateFlowEventsFromStrokes(
-        melodicStrokes,
-        state.bars,
-        state.bpm,
-        scaleNotes,
-        state.glide
-      );
+      let flowEvents: FlowStrokeEvent[] = [];
+      for (const track of melodicTracks) {
+        const trackStrokes = melodicStrokes.filter((s) => s.trackId === track.id);
+        if (trackStrokes.length === 0) continue;
+        const key = effectiveKey(track, state);
+        const trackScaleNotes = buildScaleNotes(key.root, key.scale, 3, 6);
+        const evs = generateFlowEventsFromStrokes(
+          trackStrokes,
+          state.bars,
+          state.bpm,
+          trackScaleNotes,
+          state.glide
+        );
+        flowEvents.push(...evs);
+      }
+
+      // Thin flow events if simultaneous active voices exceed polyphony cap
+      const polyphonyLimit = POLYPHONY_VOICE_COUNTS[state.polyphony] || 8;
+      const thinningResult = thinFlowEvents(flowEvents, polyphonyLimit);
+      flowEvents = thinningResult.kept;
+
+      if (state.isThinned !== thinningResult.isThinned) {
+        state.isThinned = thinningResult.isThinned;
+        events.emit('polyphony:thinned', thinningResult.isThinned);
+      }
 
       if (flowEvents.length === 0) {
         if (oldMelodicPart) {
@@ -668,7 +724,16 @@ export class LoopScheduler {
       }
     } else {
       // Notes mode: stepped 16th-note grid
-      const noteEvents = generateEventsFromStrokes(melodicStrokes, state.bars, scaleNotes);
+      const noteEvents: NoteEvent[] = [];
+      for (const track of melodicTracks) {
+        const trackStrokes = melodicStrokes.filter((s) => s.trackId === track.id);
+        if (trackStrokes.length === 0) continue;
+        const key = effectiveKey(track, state);
+        const trackScaleNotes = buildScaleNotes(key.root, key.scale, 3, 6);
+        const evs = generateEventsFromStrokes(trackStrokes, state.bars, trackScaleNotes);
+        noteEvents.push(...evs);
+      }
+
       if (noteEvents.length === 0) {
         if (oldMelodicPart) {
           oldMelodicPart.dispose();
@@ -676,6 +741,7 @@ export class LoopScheduler {
         }
         return;
       }
+
 
       const newPart = new Tone.Part((time, note: NoteEvent) => {
         trackManager.triggerNoteOnTrack(

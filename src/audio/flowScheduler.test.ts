@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { generateFlowEventsFromStrokes } from './flowScheduler';
+import { generateFlowEventsFromStrokes, thinFlowEvents, FlowStrokeEvent } from './flowScheduler';
 import { buildScaleNotes } from './scales';
 import { Stroke } from '../state';
 
@@ -193,5 +193,115 @@ describe('generateFlowEventsFromStrokes', () => {
     expect(events[0].endTime).toBeCloseTo(0.25 * loopDuration, 4);
     expect(events[1].startTime).toBeCloseTo(0.25 * loopDuration, 4);
     expect(events[1].endTime).toBeCloseTo(0.5 * loopDuration, 4);
+  });
+
+  it('folded shape (cone): schedules two simultaneous overlapping flow events that release together at the peak', () => {
+    // Cone: drawn from left (0.2, 0.8) to peak (0.6, 0.2), then back left (0.2, 0.4)
+    const coneStroke: Stroke = {
+      id: 'stroke-cone-test',
+      trackId: 'track-1',
+      points: [
+        { x: 0.2, y: 0.8, t: 0 },
+        { x: 0.4, y: 0.5, t: 100 },
+        { x: 0.6, y: 0.2, t: 200 }, // Peak
+        { x: 0.4, y: 0.3, t: 300 },
+        { x: 0.2, y: 0.4, t: 400 },
+      ],
+      width: 2.5,
+    };
+
+    const loopDuration = 2 * 4 * (60 / 90); // 5.333s
+    const events = generateFlowEventsFromStrokes([coneStroke], 2, 90, scaleNotes, 20);
+
+    // Must schedule BOTH branches as independent voices!
+    expect(events.length).toBe(2);
+
+    // Both start around 0.2 * loopDuration and release together around 0.6 * loopDuration
+    expect(events[0].startTime).toBeCloseTo(0.2 * loopDuration, 3);
+    expect(events[0].endTime).toBeCloseTo(0.6 * loopDuration, 3);
+
+    expect(events[1].startTime).toBeCloseTo(0.2 * loopDuration, 3);
+    expect(events[1].endTime).toBeCloseTo(0.6 * loopDuration, 3);
+
+    // Initial MIDI pitches correspond to their respective starting Y values
+    expect(events[0].initialMidi).not.toBe(events[1].initialMidi);
+  });
+
+  it('folded shape (circle): schedules two concurrent flow events covering the shape diameter', () => {
+    const circlePoints: { x: number; y: number; t: number }[] = [];
+    for (let i = 0; i <= 32; i++) {
+      const angle = (i / 32) * 2 * Math.PI;
+      circlePoints.push({
+        x: 0.5 + 0.2 * Math.cos(angle),
+        y: 0.5 + 0.2 * Math.sin(angle),
+        t: i * 20,
+      });
+    }
+
+    const circleStroke: Stroke = {
+      id: 'stroke-circle-flow',
+      trackId: 'track-2',
+      points: circlePoints,
+      width: 2.0,
+    };
+
+    const events = generateFlowEventsFromStrokes([circleStroke], 2, 90, scaleNotes, 20);
+    expect(events.length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe('thinFlowEvents', () => {
+  const dummyEvent = (id: string, start: number, end: number, priority: number): FlowStrokeEvent => ({
+    strokeId: id,
+    trackId: 'track-1',
+    startTime: start,
+    endTime: end,
+    initialMidi: 60,
+    initialFreq: 261.63,
+    velocity: 0.8,
+    startX: start / 4,
+    startY: 0.5,
+    priority,
+    breakpoints: [],
+  });
+
+  it('keeps all events when count <= maxVoices', () => {
+    const events = [
+      dummyEvent('ev-1', 0.0, 1.0, 10),
+      dummyEvent('ev-2', 0.5, 1.5, 10),
+    ];
+    const { kept, isThinned } = thinFlowEvents(events, 4);
+    expect(kept.length).toBe(2);
+    expect(isThinned).toBe(false);
+  });
+
+  it('drops lowest priority event when simultaneous voices exceed maxVoices', () => {
+    // 5 simultaneously overlapping events at t = 0.5s with maxVoices = 4
+    const events = [
+      dummyEvent('high-1', 0.0, 1.0, 50),
+      dummyEvent('high-2', 0.0, 1.0, 40),
+      dummyEvent('high-3', 0.0, 1.0, 30),
+      dummyEvent('high-4', 0.0, 1.0, 20),
+      dummyEvent('low-5', 0.0, 1.0, 5), // lowest priority
+    ];
+    const { kept, isThinned } = thinFlowEvents(events, 4);
+    expect(kept.length).toBe(4);
+    expect(isThinned).toBe(true);
+    expect(kept.some((e) => e.strokeId === 'low-5')).toBe(false);
+  });
+
+  it('does not drop sequential non-overlapping events', () => {
+    // 6 sequential events with maxVoices = 4
+    const events = [
+      dummyEvent('seq-1', 0.0, 0.5, 10),
+      dummyEvent('seq-2', 0.6, 1.0, 10),
+      dummyEvent('seq-3', 1.1, 1.5, 10),
+      dummyEvent('seq-4', 1.6, 2.0, 10),
+      dummyEvent('seq-5', 2.1, 2.5, 10),
+      dummyEvent('seq-6', 2.6, 3.0, 10),
+    ];
+    const { kept, isThinned } = thinFlowEvents(events, 4);
+    expect(kept.length).toBe(6);
+    expect(isThinned).toBe(false);
   });
 });

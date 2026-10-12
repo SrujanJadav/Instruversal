@@ -1,5 +1,8 @@
 import * as Tone from 'tone';
 import { SustainedVoice, createSustainedVoice } from './sustainedVoices';
+import { state, POLYPHONY_VOICE_COUNTS } from '../state';
+import { yToMidi } from './scales';
+
 
 interface PoolItem {
   voice: SustainedVoice;
@@ -11,12 +14,21 @@ interface PoolItem {
 }
 
 export class FlowVoicePool {
-  private static readonly MAX_SIMULTANEOUS_VOICES = 8;
+  private maxSimultaneousVoices: number = POLYPHONY_VOICE_COUNTS[state.polyphony] || 8;
   private pool: PoolItem[] = [];
+
+  public setCap(cap: number): void {
+    this.maxSimultaneousVoices = cap;
+    this.pruneUnused(cap);
+  }
+
+  public getCap(): number {
+    return this.maxSimultaneousVoices;
+  }
 
   /**
    * Acquire a monophonic sustained voice for a stroke.
-   * If total in-use voices reaches the cap (8), the oldest voice is stolen with a smooth fade.
+   * If total in-use voices reaches the cap, the oldest voice is stolen with a smooth fade.
    */
   public acquireVoice(
     strokeId: string,
@@ -44,9 +56,9 @@ export class FlowVoicePool {
       return idleSameType.voice;
     }
 
-    // 3. Check if we have room under the 8-voice limit
+    // 3. Check if we have room under the dynamic voice limit
     const inUseCount = this.pool.filter((item) => item.inUse).length;
-    if (inUseCount < FlowVoicePool.MAX_SIMULTANEOUS_VOICES) {
+    if (inUseCount < this.maxSimultaneousVoices) {
       const newVoice = createSustainedVoice(instrumentId, destination);
       const item: PoolItem = {
         voice: newVoice,
@@ -146,6 +158,29 @@ export class FlowVoicePool {
       item.strokeId = null;
     }
   }
+
+  /**
+   * Smoothly retunes active voices for a track over glideSeconds (default 45ms) without retriggering.
+   */
+  public retuneActiveTrackVoices(
+    trackId: string,
+    newScaleNotes: number[],
+    glideSeconds: number = 0.045
+  ) {
+    const now = Tone.now();
+    for (const item of this.pool) {
+      if (item.inUse && item.trackId === trackId && item.strokeId) {
+        const stroke = state.strokes.find((s) => s.id === item.strokeId);
+        if (stroke && stroke.points.length > 0) {
+          const midY = stroke.points[Math.floor(stroke.points.length / 2)].y;
+          const newMidi = yToMidi(midY, newScaleNotes);
+          const newFreq = 440 * Math.pow(2, (newMidi - 69) / 12);
+          item.voice.setNote(newFreq, now, glideSeconds);
+        }
+      }
+    }
+  }
+
 
   public pruneUnused(keepMax: number = 8) {
     const active = this.pool.filter((i) => i.inUse);
