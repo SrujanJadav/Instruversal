@@ -36,7 +36,7 @@ This document tracks progress across all steps of Instruversal, including founda
 | Step | Phase | Status | Date | Commit | Notes |
 |---|---|---|---|---|---|
 | **0: Verify starting point & PROGRESS.md** | Gate | Done | 2026-10-12 | `4244cad` | Verified 15 subsystem items. Confirmed tsc clean & 115 tests pass. Found copyrighted songs to remove in Step 1 and missing folded shape multi-branch playback. |
-| **1: Try-yourself examples** | Editor features | Queued | - | - | Public domain & original examples only (remove copyrighted songs). |
+| **1: Try-yourself examples** | Editor features | Done | 2026-10-12 | `b9a9928` | 3 lazy-loaded examples (Ode to Joy, Marimba Pop (original), Dreamy Arpeggio (original)), notesToStrokes converter, 1ms round-trip tests, dev midi parser, start page carousel. Zero copyrighted content. |
 | **2: Lasso select, move, duplicate, snap** | Editor features | Queued | - | - | Third tool in dock, multi-selection, snap to grid/scale. |
 | **3: MIDI export (single drawing)** | Editor features | Queued | - | - | Standard MIDI File 1 writer, multi-track, drum channel 10. |
 | **4: Practice aids (drone, metronome, count-in)** | Editor features | Queued | - | - | Mixer sheet practice section, transport metronome, root pad drone. |

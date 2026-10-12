@@ -16,6 +16,7 @@ import { state, events } from './state';
 import { DrawingCanvas } from './canvas/DrawingCanvas';
 import { getTrackManager } from './audio/tracks';
 import { getLoopScheduler } from './audio/schedule';
+import { effectiveKey, formatShortKeyLabel } from './audio/scales';
 import { Toolbar } from './ui/Toolbar';
 import { TrackPanel } from './ui/TrackPanel';
 import { FxPanel } from './ui/FxPanel';
@@ -30,6 +31,8 @@ import { getCreationManager } from './library/manager';
 import { getCreationStore } from './library/store';
 import { getLibraryModal } from './ui/Library';
 import { getGalleryModal } from './gallery/GalleryModal';
+import { getExportModal } from './ui/ExportModal';
+import { Creation } from './library/types';
 import { handleAuthRedirect, onAuthStateChange, getCurrentUser } from './auth/auth';
 import { getAccountSheet } from './ui/AccountSheet';
 import { getMigrationSheet } from './ui/MigrationSheet';
@@ -74,15 +77,27 @@ app.innerHTML = `
       </button>
       <span class="load-count-badge" id="gate-load-count">0 saved</span>
     </div>
-    <div class="gate-corner-demo" id="gate-corner-demo">
-      <button type="button" class="gate-demo-btn" id="gate-demo-btn" aria-label="Try yourself: Marimba Pop — Marimba Pop (Original)">
-        <div class="gate-demo-header">
-          <span class="gate-demo-pill">Try yourself</span>
-          <span class="gate-demo-credit">Original</span>
-        </div>
-        <span class="gate-demo-title">Marimba Pop</span>
-        <span class="gate-demo-hint">Marimba Pop · Tap to play</span>
-      </button>
+    <div class="try-yourself-section" id="try-yourself-section">
+      <div class="try-yourself-row" id="try-yourself-row" role="region" aria-label="Try yourself examples">
+        <button type="button" class="try-yourself-card" data-example-id="example-ode-to-joy" aria-label="Try yourself: Ode to Joy — Ludwig van Beethoven">
+          <span class="try-yourself-tag">TRY YOURSELF</span>
+          <span class="try-yourself-title">Ode to Joy</span>
+          <span class="try-yourself-subtitle">Tap to play and explore</span>
+          <span class="try-yourself-credit">Ludwig van Beethoven</span>
+        </button>
+        <button type="button" class="try-yourself-card" data-example-id="example-marimba-pop" aria-label="Try yourself: Marimba Pop (original) — Original">
+          <span class="try-yourself-tag">TRY YOURSELF</span>
+          <span class="try-yourself-title">Marimba Pop</span>
+          <span class="try-yourself-subtitle">Tap to play and explore</span>
+          <span class="try-yourself-credit">Original</span>
+        </button>
+        <button type="button" class="try-yourself-card" data-example-id="example-dreamy-arpeggio" aria-label="Try yourself: Dreamy Arpeggio — Original">
+          <span class="try-yourself-tag">TRY YOURSELF</span>
+          <span class="try-yourself-title">Dreamy Arpeggio</span>
+          <span class="try-yourself-subtitle">Tap to play and explore</span>
+          <span class="try-yourself-credit">Original</span>
+        </button>
+      </div>
     </div>
   </section>
 
@@ -105,6 +120,10 @@ app.innerHTML = `
           <span class="hdr-text-long">Library</span>
           <span class="hdr-text-short">Lib</span>
         </button>
+        <button type="button" class="header-btn" id="header-export-btn" aria-label="Export audio as WAV or compressed">
+          <span class="hdr-text-long">Export</span>
+          <span class="hdr-text-short">WAV</span>
+        </button>
         <button type="button" class="header-btn" id="header-fx-btn" aria-label="Open effects rack">
           <span class="hdr-text-long">Effects</span>
           <span class="hdr-text-short">FX</span>
@@ -118,7 +137,12 @@ app.innerHTML = `
       </div>
     </header>
 
-    <div class="canvas-container" id="canvas-container"></div>
+    <div class="canvas-container" id="canvas-container">
+      <button type="button" class="canvas-key-chip" id="canvas-key-chip" aria-label="Selected track key">
+        <span class="canvas-key-dot" id="canvas-key-dot"></span>
+        <span class="canvas-key-text" id="canvas-key-text"></span>
+      </button>
+    </div>
 
     <div id="toolbar-container"></div>
   </main>
@@ -497,6 +521,8 @@ export async function enterMainView(startAudio: boolean = true) {
     headerActionsEl.insertBefore(headerThemeToggle.element, headerActionsEl.firstChild);
   }
 
+  updateCanvasKeyChip();
+
   currentActiveScreen = 'editor';
   if (window.location.hash !== '#/app') {
     window.location.hash = '#/app';
@@ -520,33 +546,47 @@ async function handleStart() {
 
 startBtn.addEventListener('click', handleStart);
 
-const gateDemoBtn = document.querySelector<HTMLButtonElement>('#gate-demo-btn');
-gateDemoBtn?.addEventListener('click', async () => {
-  if (gateDemoBtn.disabled) return;
-  gateDemoBtn.disabled = true;
-  try {
-    // 1. Audio unlock within user gesture
-    if (Tone.context.state !== 'running') {
-      try {
-        await Tone.start();
-        state.audioStarted = true;
-        events.emit('audio:started', undefined);
-      } catch {}
+const tryCards = document.querySelectorAll<HTMLButtonElement>('.try-yourself-card');
+tryCards.forEach((card) => {
+  card.addEventListener('click', async () => {
+    const exampleId = card.dataset.exampleId;
+    if (!exampleId || card.disabled) return;
+    tryCards.forEach((c) => (c.disabled = true));
+    try {
+      // 1. Audio unlock within user gesture
+      if (Tone.context.state !== 'running') {
+        try {
+          await Tone.start();
+          state.audioStarted = true;
+          events.emit('audio:started', undefined);
+        } catch {}
+      }
+
+      // 2. Transition gate -> editor
+      await enterMainView(true);
+
+      // 3. Dynamically load example project
+      const { loadExampleProject } = await import('./examples');
+      const { project, song } = await loadExampleProject(exampleId);
+
+      // 4. Open as a NEW UNSAVED creation (like a share link) and start playing
+      const newId = `creation-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      const creation: Creation = {
+        id: newId,
+        title: song.title,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        schemaVersion: 2,
+        project,
+      };
+
+      await creationManager.openCreation(creation, true);
+    } catch (err) {
+      console.error('Failed to load example:', err);
+    } finally {
+      tryCards.forEach((c) => (c.disabled = false));
     }
-
-    // 2. Transition gate -> editor
-    await enterMainView(true);
-
-    // 3. Dynamically import and load the Marimba Pop preset
-    const { MARIMBA_POP_CREATION } = await import('./presets/marimbaPop');
-    const store = getCreationStore();
-    await store.save(MARIMBA_POP_CREATION);
-    await creationManager.openCreation(MARIMBA_POP_CREATION, true);
-  } catch (err) {
-    console.error('Failed to load demo preset:', err);
-  } finally {
-    gateDemoBtn.disabled = false;
-  }
+  });
 });
 
 events.on('app:start', (opts) => enterMainView(opts?.startAudio));
@@ -563,9 +603,55 @@ fxBtn.addEventListener('click', () => {
   }
 });
 
-events.on('track:select', () => updateHeaderStatus());
-events.on('track:type-change', () => updateHeaderStatus());
-events.on('track:update', () => updateHeaderStatus());
+const exportBtn = document.querySelector<HTMLButtonElement>('#header-export-btn');
+exportBtn?.addEventListener('click', () => {
+  getExportModal().open(titleInput?.value);
+});
+
+function updateCanvasKeyChip() {
+  const chip = document.querySelector<HTMLButtonElement>('#canvas-key-chip');
+  const dot = document.querySelector<HTMLElement>('#canvas-key-dot');
+  const text = document.querySelector<HTMLElement>('#canvas-key-text');
+  if (!chip || !dot || !text) return;
+
+  const tm = getTrackManager();
+  const selTrack = tm.getTrack(state.selectedTrackId);
+  if (!selTrack) return;
+
+  dot.style.backgroundColor = `var(${selTrack.colorVar})`;
+  if (selTrack.trackType === 'beat') {
+    text.textContent = 'Drums';
+    chip.setAttribute('aria-label', `Track ${selTrack.name}: Drums (no key)`);
+  } else {
+    const key = effectiveKey(selTrack, state);
+    const label = formatShortKeyLabel(key);
+    text.textContent = label;
+    chip.setAttribute('aria-label', `Track ${selTrack.name} key: ${label}. Tap to change.`);
+  }
+}
+
+const canvasKeyChip = document.querySelector<HTMLButtonElement>('#canvas-key-chip');
+canvasKeyChip?.addEventListener('click', () => {
+  if (trackPanel) {
+    trackPanel.open('key');
+  }
+});
+
+events.on('track:select', () => {
+  updateHeaderStatus();
+  updateCanvasKeyChip();
+});
+events.on('track:type-change', () => {
+  updateHeaderStatus();
+  updateCanvasKeyChip();
+});
+events.on('track:update', () => {
+  updateHeaderStatus();
+  updateCanvasKeyChip();
+});
+events.on('scale:change', () => updateCanvasKeyChip());
+events.on('key-mode:change', () => updateCanvasKeyChip());
+events.on('track:key-change', () => updateCanvasKeyChip());
 events.on('ui:open-fx', () => {
   if (fxPanel) {
     fxPanel.toggle();

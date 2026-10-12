@@ -6,6 +6,7 @@ import { events } from '../state';
 import { getCurrentUser, onAuthStateChange } from '../auth/auth';
 import { getAccountSheet } from './AccountSheet';
 import { getShareModal } from './ShareModal';
+import { getExportModal } from './ExportModal';
 
 export class LibraryModal {
   private overlay: HTMLElement;
@@ -101,7 +102,7 @@ export class LibraryModal {
             <div class="library-empty-title">Nothing saved yet</div>
             <div class="library-empty-desc">Draw something and it shows up here, or explore our demo song.</div>
             <button type="button" class="library-btn library-btn-primary" id="lib-empty-demo-btn" style="margin-top: var(--space-3);">
-              Try: Marimba Pop (Marimba Pop)
+              Try: Marimba Pop (original)
             </button>
           </div>
         </div>
@@ -221,10 +222,18 @@ export class LibraryModal {
 
     // Empty state demo button
     this.overlay.querySelector('#lib-empty-demo-btn')?.addEventListener('click', async () => {
-      const { MARIMBA_POP_CREATION } = await import('../presets/marimbaPop');
-      const store = getCreationStore();
-      await store.save(MARIMBA_POP_CREATION);
-      await getCreationManager().openCreation(MARIMBA_POP_CREATION, true);
+      const { loadExampleProject } = await import('../examples');
+      const { project, song } = await loadExampleProject('example-marimba-pop');
+      const newId = `creation-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      const creation: Creation = {
+        id: newId,
+        title: song.title,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        schemaVersion: 2,
+        project,
+      };
+      await getCreationManager().openCreation(creation, true);
       this.close();
     });
 
@@ -488,6 +497,7 @@ export class LibraryModal {
 
           <div class="card-tags">
             <span class="card-tag">${meta.bpm} BPM</span>
+            <span class="card-tag">${meta.bars || 2} bar${(meta.bars || 2) === 1 ? '' : 's'}</span>
             <span class="card-tag">${meta.keyLabel || 'C Major Pentatonic'}</span>
             ${meta.strokeCount > 0 ? `<span class="card-tag">${meta.strokeCount} stroke${meta.strokeCount === 1 ? '' : 's'}</span>` : ''}
           </div>
@@ -500,6 +510,7 @@ export class LibraryModal {
             <button type="button" class="card-inline-menu-item" data-action="rename" data-id="${meta.id}">Rename</button>
             <button type="button" class="card-inline-menu-item" data-action="duplicate" data-id="${meta.id}">Duplicate</button>
             <button type="button" class="card-inline-menu-item" data-action="share" data-id="${meta.id}">Share link</button>
+            <button type="button" class="card-inline-menu-item" data-action="export-audio" data-id="${meta.id}">Export audio</button>
             <button type="button" class="card-inline-menu-item danger" data-action="delete" data-id="${meta.id}">Delete</button>
           </div>
         `
@@ -590,6 +601,18 @@ export class LibraryModal {
           this.activeMenuCardId = null;
           this.renderGrid();
           getShareModal().open(meta.id, meta.title, meta.isPublic, meta.publicSlug);
+        });
+
+        card.querySelector('[data-action="export-audio"]')?.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          this.activeMenuCardId = null;
+          this.renderGrid();
+          if (getCreationManager().getCurrentId() !== meta.id) {
+            await this.openCreationAndClose(meta.id, false);
+          } else {
+            this.close();
+          }
+          getExportModal().open(meta.title);
         });
 
         card.querySelector('[data-action="delete"]')?.addEventListener('click', (e) => {

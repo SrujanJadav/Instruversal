@@ -83,7 +83,7 @@ export function generateFlowEventsFromStrokes(
       return sorted[0].y;
     };
 
-    const isNearVertical = (xMax - xMin) < 0.03;
+    const isNearVertical = (xMax - xMin) < 0.03 && (yMax - yMin) > 0.06;
     const minSweepDuration = 0.12; // 120ms minimum duration
 
     let startTime: number;
