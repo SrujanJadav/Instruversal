@@ -22,6 +22,7 @@ import {
   BeatRollVoice,
   BeatSweepCharacter,
 } from '../state';
+import { getGridEnabled, toggleGrid } from '../canvas/gridSettings';
 import { getTransport } from '../audio/transport';
 import { DEFAULT_TRACK_CONFIGS, getTrackManager, Track } from '../audio/tracks';
 import { INSTRUMENTS_MAP } from '../audio/instruments';
@@ -92,6 +93,9 @@ export class Toolbar {
 
   private render() {
     const instName = this.getCurrentInstrumentName();
+    const tm = getTrackManager();
+    const currentTrack = tm.getTrack(state.selectedTrackId);
+    const isGridOn = getGridEnabled(currentTrack?.trackType === 'beat' ? 'beat' : 'melodic');
 
     this.element.innerHTML = `
       <div class="dock-wrapper">
@@ -188,7 +192,19 @@ export class Toolbar {
 
             <div class="toolbar-divider" aria-hidden="true"></div>
 
-            <!-- 4. Track Pigment Palette Dots -->
+            <!-- 4. History: Undo + Redo -->
+            <div class="toolbar-history-sub" role="group" aria-label="History">
+              <button type="button" class="toolbar-btn tool-icon-btn" id="tb-undo-btn" aria-label="Undo" ${canUndo() ? '' : 'disabled'} tabindex="0">
+                ${ICONS.undo}
+              </button>
+              <button type="button" class="toolbar-btn tool-icon-btn" id="tb-redo-btn" aria-label="Redo" ${canRedo() ? '' : 'disabled'} tabindex="0">
+                ${ICONS.redo}
+              </button>
+            </div>
+
+            <div class="toolbar-divider" aria-hidden="true"></div>
+
+            <!-- 5. Track Pigment Palette Dots -->
             <div class="toolbar-palette" role="group" aria-label="Track pigment selection">
               ${DEFAULT_TRACK_CONFIGS.map(
                 (t) => `
@@ -201,32 +217,37 @@ export class Toolbar {
 
             <div class="toolbar-divider" aria-hidden="true"></div>
 
-            <!-- 5. History: Undo + Redo + Clear -->
-            <div class="toolbar-tool-group" role="group" aria-label="History and clear">
-              <div class="toolbar-history-sub" role="group" aria-label="History">
-                <button type="button" class="toolbar-btn tool-icon-btn" id="tb-undo-btn" aria-label="Undo" ${canUndo() ? '' : 'disabled'} tabindex="0">
-                  ${ICONS.undo}
-                </button>
-                <button type="button" class="toolbar-btn tool-icon-btn" id="tb-redo-btn" aria-label="Redo" ${canRedo() ? '' : 'disabled'} tabindex="0">
-                  ${ICONS.redo}
-                </button>
-              </div>
+            <!-- 6. Grid Switch -->
+            <button type="button" class="toolbar-btn grid-switch-btn ${isGridOn ? 'active' : ''}" id="tb-grid-switch" role="switch" aria-checked="${String(isGridOn)}" aria-label="Grid" title="Toggle pitch/beat grid (G)" tabindex="0">
+              <span class="grid-switch-track">
+                <span class="grid-switch-icon" aria-hidden="true">
+                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="0.5" y="0.5" width="3.5" height="3.5" fill="currentColor"/>
+                    <rect x="5.5" y="0.5" width="3.5" height="3.5" fill="currentColor"/>
+                    <rect x="0.5" y="5.5" width="3.5" height="3.5" fill="currentColor"/>
+                    <rect x="5.5" y="5.5" width="3.5" height="3.5" fill="currentColor"/>
+                  </svg>
+                </span>
+                <span class="grid-switch-thumb"></span>
+              </span>
+              <span class="dock-btn-text grid-switch-label">Grid</span>
+            </button>
 
-              <div class="toolbar-clear-wrapper" id="tb-clear-wrapper">
-                <button type="button" class="toolbar-btn tool-icon-btn toolbar-btn-clear" id="tb-clear-btn" aria-label="Clear drawing" tabindex="0">
-                  ${ICONS.trash}
-                </button>
-              </div>
+            <!-- 7. Clear drawing (trash) -->
+            <div class="toolbar-clear-wrapper" id="tb-clear-wrapper">
+              <button type="button" class="toolbar-btn tool-icon-btn toolbar-btn-clear" id="tb-clear-btn" aria-label="Clear drawing" tabindex="0">
+                ${ICONS.trash}
+              </button>
             </div>
 
             <div class="toolbar-divider" aria-hidden="true"></div>
 
-            <!-- 5. Context Controls: Flow/Notes + Glide (Melodic) OR Kit + Rate + Swing + Human (Beat) -->
+            <!-- 8. Context Controls: Flow/Notes + Glide (Melodic) OR Kit + Rate + Swing + Human (Beat) -->
             <div class="toolbar-context-container" id="tb-context-container"></div>
 
             <div class="toolbar-divider" aria-hidden="true"></div>
 
-            <!-- 6. Instrument button: opens instrument picker for selected track -->
+            <!-- 9. Instrument button: opens instrument picker for selected track -->
             <button type="button" class="toolbar-dock-btn" id="tb-inst-btn" aria-label="Choose instrument for track" tabindex="0">
               <span class="dock-btn-text" id="tb-inst-name">${instName}</span>
               <span class="dock-btn-chevron" aria-hidden="true">${ICONS.chevron}</span>
@@ -583,6 +604,18 @@ export class Toolbar {
       if (this.hasDragged) return;
       triggerHaptic(6);
       redo();
+    });
+
+    // Grid Switch Click
+    const gridSwitch = this.element.querySelector<HTMLButtonElement>('#tb-grid-switch');
+    gridSwitch?.addEventListener('click', () => {
+      if (this.hasDragged) return;
+      triggerHaptic(8);
+      const tm = getTrackManager();
+      const tr = tm.getTrack(state.selectedTrackId);
+      const mode = (tr && tr.trackType === 'beat') ? 'beat' : 'melodic';
+      toggleGrid(mode);
+      this.updateGridSwitchState();
     });
 
     // Clear with inline confirmation
@@ -1084,10 +1117,15 @@ export class Toolbar {
         dotBtns.forEach((b) => b.classList.toggle('active', b.dataset.trackId === trackId));
         this.updateInstrumentButton();
         this.renderContextControls();
+        this.updateGridSwitchState();
       }),
       events.on('track:type-change', () => {
         this.updateInstrumentButton();
         this.renderContextControls();
+        this.updateGridSwitchState();
+      }),
+      events.on('grid:change', () => {
+        this.updateGridSwitchState();
       }),
       events.on('track:update', () => {
         this.updateInstrumentButton();
@@ -1163,6 +1201,17 @@ export class Toolbar {
     playBtn.setAttribute('aria-label', isPlaying ? 'Pause loop' : 'Play loop');
   }
 
+  private updateGridSwitchState() {
+    const gridSwitch = this.element.querySelector<HTMLButtonElement>('#tb-grid-switch');
+    if (!gridSwitch) return;
+    const tm = getTrackManager();
+    const tr = tm.getTrack(state.selectedTrackId);
+    const mode = (tr && tr.trackType === 'beat') ? 'beat' : 'melodic';
+    const on = getGridEnabled(mode);
+    gridSwitch.setAttribute('aria-checked', String(on));
+    gridSwitch.classList.toggle('active', on);
+  }
+
   private setupKeyboardShortcuts() {
     window.addEventListener('keydown', this.onKeyDown);
   }
@@ -1214,6 +1263,17 @@ export class Toolbar {
     // B or D: Brush/Draw tool
     if ((e.key.toLowerCase() === 'b' || e.key.toLowerCase() === 'd') && !e.ctrlKey && !e.metaKey) {
       this.setTool('draw');
+      return;
+    }
+
+    // G: Toggle pitch/beat grid
+    if ((e.key === 'g' || e.key === 'G') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      e.preventDefault();
+      const tm = getTrackManager();
+      const tr = tm.getTrack(state.selectedTrackId);
+      const mode = (tr && tr.trackType === 'beat') ? 'beat' : 'melodic';
+      toggleGrid(mode);
+      this.updateGridSwitchState();
       return;
     }
 

@@ -33,6 +33,7 @@ import { getCreationStore } from './library/store';
 import { getLibraryModal } from './ui/Library';
 import { getGalleryModal } from './gallery/GalleryModal';
 import { getExportModal } from './ui/ExportModal';
+import { getHeaderMoreSheet } from './ui/HeaderMoreSheet';
 import { Creation } from './library/types';
 import { handleAuthRedirect, onAuthStateChange, getCurrentUser } from './auth/auth';
 import { getAccountSheet } from './ui/AccountSheet';
@@ -156,6 +157,9 @@ app.innerHTML = `
         <button type="button" class="header-btn" id="header-mixer-btn" aria-label="Open track mixer and key panel">
           <span class="hdr-text-long">Mixer · Key</span>
           <span class="hdr-text-short">Mixer</span>
+        </button>
+        <button type="button" class="header-btn header-more-btn" id="header-more-btn" aria-label="More options" aria-haspopup="dialog">
+          <span class="hdr-text-short">More</span>
         </button>
         <span class="header-status" id="header-status">AUDIO READY</span>
         <button type="button" class="header-help-circle-btn" id="header-help-btn" aria-label="How it works">?</button>
@@ -347,6 +351,7 @@ function closeAllOpenSheets() {
   syncPill?.close();
   getLibraryModal().close(false);
   getGalleryModal().close(false);
+  getHeaderMoreSheet(() => {}).close();
   document.querySelector('.first-run-hint-overlay')?.remove();
 }
 
@@ -801,6 +806,13 @@ fxBtn.addEventListener('click', () => {
 const exportBtn = document.querySelector<HTMLButtonElement>('#header-export-btn');
 exportBtn?.addEventListener('click', () => {
   getExportModal().open(titleInput?.value);
+});
+
+const headerMoreBtn = document.querySelector<HTMLButtonElement>('#header-more-btn');
+headerMoreBtn?.addEventListener('click', () => {
+  getHeaderMoreSheet(() => {
+    getExportModal().open(titleInput?.value);
+  }).open(headerMoreBtn);
 });
 
 function updateCanvasKeyChip() {

@@ -22,6 +22,7 @@ import {
 import { getTrackManager } from '../audio/tracks';
 import { getTransport } from '../audio/transport';
 import { DRUM_LANES } from '../audio/drums';
+import { getGridEnabled } from './gridSettings';
 import { getThemeTokens, getTrackThemeColor, getTheme } from '../ui/theme';
 import { eraseStrokes, Capsule, Point2D } from './eraser';
 import { getFlowVoicePool } from '../audio/voicePool';
@@ -258,6 +259,7 @@ export class DrawingCanvas {
 
     this.unsubs.push(
       events.on('track:select', (trackId) => this.handleTrackSelect(trackId)),
+      events.on('grid:change', () => this.markStaticDirty()),
       events.on('track:type-change', () => this.markStaticDirty()),
       events.on('track:beat-param-change', () => this.markStaticDirty()),
       events.on('scale:change', () => this.markStaticDirty()),
@@ -1311,20 +1313,23 @@ export class DrawingCanvas {
   private drawMelodicGuides(ctx: CanvasRenderingContext2D, key: MusicalKey) {
     const scaleNotes = buildScaleNotes(key.root, key.scale, 3, 6);
     const noteCount = scaleNotes.length;
+    const isGridOn = getGridEnabled('melodic');
 
-    // Pitch guide lines
+    // Pitch guide lines and note names
     for (let i = 0; i < noteCount; i++) {
       const midi = scaleNotes[i];
       const yNorm = 1 - i / (noteCount - 1);
       const y = Math.round(yNorm * this.height);
       const isRoot = isRootNote(midi, key.root);
 
-      ctx.beginPath();
-      ctx.lineWidth = isRoot ? 1.2 : 0.8;
-      ctx.strokeStyle = isRoot ? this.lineRootColor : this.lineSubtleColor;
-      ctx.moveTo(0, y + 0.5);
-      ctx.lineTo(this.width, y + 0.5);
-      ctx.stroke();
+      if (isGridOn) {
+        ctx.beginPath();
+        ctx.lineWidth = isRoot ? 0.9 : 0.5;
+        ctx.strokeStyle = isRoot ? this.lineRootColor : this.lineSubtleColor;
+        ctx.moveTo(0, y + 0.5);
+        ctx.lineTo(this.width, y + 0.5);
+        ctx.stroke();
+      }
 
       if (isRoot) {
         ctx.save();
@@ -1338,7 +1343,9 @@ export class DrawingCanvas {
       }
     }
 
-    this.drawBeatMarkers(ctx);
+    if (isGridOn) {
+      this.drawBeatMarkers(ctx);
+    }
   }
 
   private drawBackgroundGuides(ctx: CanvasRenderingContext2D) {
@@ -1352,7 +1359,9 @@ export class DrawingCanvas {
       ctx.globalAlpha = 1 - progress;
       if (this.guideTransition.fromIsBeat) {
         this.drawDrumLanes(ctx);
-        this.drawBeatMarkers(ctx);
+        if (getGridEnabled('beat')) {
+          this.drawBeatMarkers(ctx);
+        }
       } else if (this.guideTransition.fromKey) {
         this.drawMelodicGuides(ctx, this.guideTransition.fromKey);
       }
@@ -1363,7 +1372,9 @@ export class DrawingCanvas {
       ctx.globalAlpha = progress;
       if (this.guideTransition.toIsBeat) {
         this.drawDrumLanes(ctx);
-        this.drawBeatMarkers(ctx);
+        if (getGridEnabled('beat')) {
+          this.drawBeatMarkers(ctx);
+        }
       } else if (this.guideTransition.toKey) {
         this.drawMelodicGuides(ctx, this.guideTransition.toKey);
       }
@@ -1381,7 +1392,9 @@ export class DrawingCanvas {
     const track = tm.getTrack(state.selectedTrackId);
     if (track && track.trackType === 'beat') {
       this.drawDrumLanes(ctx);
-      this.drawBeatMarkers(ctx);
+      if (getGridEnabled('beat')) {
+        this.drawBeatMarkers(ctx);
+      }
       return;
     }
 
@@ -1396,7 +1409,7 @@ export class DrawingCanvas {
       const x = Math.round((i / totalBeats) * this.width);
       ctx.beginPath();
       const isBarBoundary = i % 4 === 0;
-      ctx.lineWidth = isBarBoundary ? 1.2 : 0.8;
+      ctx.lineWidth = isBarBoundary ? 0.9 : 0.5;
       ctx.strokeStyle = isBarBoundary ? this.lineColor : this.lineSubtleColor;
       ctx.moveTo(x + 0.5, 0);
       ctx.lineTo(x + 0.5, this.height);
@@ -1422,85 +1435,52 @@ export class DrawingCanvas {
     const flowStyle = selTrack?.beatFlowStyle || 'glide';
     const isDark = getTheme() === 'dark';
     const tokens = getThemeTokens();
+    const isGridOn = getGridEnabled('beat');
 
     const laneHeight = this.height / 8;
     for (let i = 0; i < 8; i++) {
       const meta = DRUM_LANES[i];
       const yTop = i * laneHeight;
-      if (i % 2 === 1) {
-        ctx.fillStyle = isDark ? "rgba(237, 229, 211, 0.035)" : "rgba(28, 26, 22, 0.025)";
-        ctx.fillRect(0, yTop, this.width, laneHeight);
-      }
-      ctx.beginPath();
-      ctx.lineWidth = 0.8;
-      ctx.strokeStyle = this.lineSubtleColor;
-      ctx.moveTo(0, Math.round(yTop) + 0.5);
-      ctx.lineTo(this.width, Math.round(yTop) + 0.5);
-      ctx.stroke();
 
+      if (isGridOn) {
+        if (i % 2 === 1) {
+          ctx.fillStyle = isDark ? "rgba(237, 229, 211, 0.035)" : "rgba(28, 26, 22, 0.025)";
+          ctx.fillRect(0, yTop, this.width, laneHeight);
+        }
+        ctx.beginPath();
+        ctx.lineWidth = 0.6;
+        ctx.strokeStyle = this.lineSubtleColor;
+        ctx.moveTo(0, Math.round(yTop) + 0.5);
+        ctx.lineTo(this.width, Math.round(yTop) + 0.5);
+        ctx.stroke();
+      }
+
+      // Plain text drum name on the left in ink-soft token (no boxes, no outlines)
       ctx.save();
-      ctx.font = '600 10px "DM Mono", monospace';
+      ctx.font = '500 11px "Instrument Sans", sans-serif';
       ctx.fillStyle = isFlow
-        ? (isDark ? "rgba(163, 155, 136, 0.22)" : "rgba(91, 85, 74, 0.18)")
+        ? (isDark ? "rgba(163, 155, 136, 0.45)" : "rgba(91, 85, 74, 0.45)")
         : tokens.inkSoft;
       ctx.textAlign = "left";
       ctx.textBaseline = "middle";
-      ctx.fillText(meta.shortLabel, 10, yTop + laneHeight / 2);
-
-      // On narrow screens (<600px), only show 2-letter code to keep lanes readable
-      if (this.width >= 600) {
-        ctx.font = '500 11px "Instrument Sans", sans-serif';
-        ctx.fillStyle = isFlow
-          ? (isDark ? "rgba(237, 229, 211, 0.14)" : "rgba(28, 26, 22, 0.12)")
-          : (isDark ? "rgba(237, 229, 211, 0.55)" : "rgba(28, 26, 22, 0.45)");
-        ctx.fillText(meta.name, 36, yTop + laneHeight / 2);
-      }
+      ctx.fillText(meta.name, 10, yTop + laneHeight / 2);
       ctx.restore();
     }
 
-    // In Flow mode, draw left edge axis hint describing what height means
+    // In Flow mode, draw left edge axis hints cleanly without box outlines
     if (isFlow) {
       ctx.save();
       const axisName = flowStyle === 'glide' ? 'Pitch' : flowStyle === 'roll' ? 'Intensity' : 'Brightness';
       const topDesc = flowStyle === 'glide' ? '▲ High (C4)' : flowStyle === 'roll' ? '▲ 1/64 Rate' : '▲ 10 kHz';
       const botDesc = flowStyle === 'glide' ? '▼ Low (C1)' : flowStyle === 'roll' ? '▼ 1/8 Rate' : '▼ 400 Hz';
 
-      // Left axis pill indicator
-      ctx.fillStyle = isDark ? 'rgba(35, 32, 26, 0.92)' : 'rgba(233, 223, 203, 0.9)';
-      ctx.strokeStyle = tokens.line;
-      ctx.lineWidth = 1;
-
-      // Small top hint badge
-      ctx.beginPath();
-      ctx.roundRect(8, 8, 86, 20, 4);
-      ctx.fill();
-      ctx.stroke();
-      ctx.font = '600 9.5px "DM Mono", monospace';
-      ctx.fillStyle = tokens.ink;
+      ctx.font = '500 10px "DM Mono", monospace';
+      ctx.fillStyle = tokens.inkSoft;
       ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';
-      ctx.fillText(topDesc, 14, 18);
-
-      // Center axis title tag
-      ctx.fillStyle = isDark ? 'rgba(237, 229, 211, 0.08)' : 'rgba(28, 26, 22, 0.08)';
-      ctx.beginPath();
-      ctx.roundRect(8, this.height / 2 - 12, 104, 24, 4);
-      ctx.fill();
-      ctx.stroke();
-      ctx.font = '600 10px "DM Mono", monospace';
-      ctx.fillStyle = tokens.ink;
+      ctx.fillText(topDesc, 14, 16);
       ctx.fillText(`Axis: ${axisName}`, 14, this.height / 2);
-
-      // Small bottom hint badge
-      ctx.fillStyle = isDark ? 'rgba(35, 32, 26, 0.92)' : 'rgba(233, 223, 203, 0.9)';
-      ctx.beginPath();
-      ctx.roundRect(8, this.height - 28, 86, 20, 4);
-      ctx.fill();
-      ctx.stroke();
-      ctx.font = '600 9.5px "DM Mono", monospace';
-      ctx.fillStyle = tokens.ink;
-      ctx.fillText(botDesc, 14, this.height - 18);
-
+      ctx.fillText(botDesc, 14, this.height - 16);
       ctx.restore();
     }
   }

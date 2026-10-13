@@ -4,12 +4,13 @@
    ========================================================================== */
 
 .theme-switch-btn {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   min-width: 44px;
   min-height: 44px;
-  padding: 0;
+  padding: 0 2px;
   margin: 0;
   background: transparent;
   border: none;
@@ -18,8 +19,20 @@
   touch-action: manipulation;
 }
 
+.theme-switch-btn::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  min-width: 44px;
+  min-height: 44px;
+  width: 100%;
+  height: 100%;
+}
+
 .theme-switch {
-  --toggle-size: 13px;
+  --toggle-size: 16px;
   --container-width: 5.625em;
   --container-height: 2.5em;
   --container-radius: 6.25em;
@@ -46,15 +59,15 @@
   -webkit-user-select: none;
 }
 
-@media (min-width: 641px) {
+@media (min-width: 601px) {
   .theme-switch {
-    --toggle-size: 15px;
+    --toggle-size: 16px;
   }
 }
 
 @media (max-width: 600px) {
   .theme-switch {
-    --toggle-size: 11px;
+    --toggle-size: 10.5px;
   }
 }
 
