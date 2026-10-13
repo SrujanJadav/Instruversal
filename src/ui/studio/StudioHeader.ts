@@ -12,6 +12,8 @@ export interface StudioHeaderCallbacks {
   onBack: () => void;
   onUndo: () => void;
   onRedo: () => void;
+  onFollowToggle?: (enabled: boolean) => void;
+  onMetronomeToggle?: () => void;
 }
 
 export class StudioHeader {
@@ -49,6 +51,9 @@ export class StudioHeader {
           <button type="button" class="studio-btn studio-btn-primary studio-btn-icon" id="studio-play-btn" aria-label="Play song">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" id="studio-play-icon"><polygon points="5 3 19 12 5 21 5 3"/></svg>
           </button>
+          <button type="button" class="studio-btn studio-btn-icon" id="studio-metro-btn" title="Metronome" aria-label="Toggle metronome">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L6 22h12L12 2z"/><line x1="12" y1="12" x2="18" y2="8"/></svg>
+          </button>
           <span class="studio-readout" id="studio-time-readout">1.1 · 00:00</span>
         </div>
       </div>
@@ -62,6 +67,10 @@ export class StudioHeader {
 
         <button type="button" class="studio-btn studio-btn-icon" id="studio-zoom-out" aria-label="Zoom out timeline">−</button>
         <button type="button" class="studio-btn studio-btn-icon" id="studio-zoom-in" aria-label="Zoom in timeline">+</button>
+
+        <button type="button" class="studio-btn active" id="studio-follow-btn" title="Follow playhead during playback" aria-pressed="true">
+          <span>Follow</span>
+        </button>
 
         <button type="button" class="studio-btn" id="studio-add-drawing-btn">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -134,12 +143,42 @@ export class StudioHeader {
       this.callbacks.onAddDrawing();
     });
 
+    const followBtn = this.element.querySelector<HTMLElement>('#studio-follow-btn');
+    followBtn?.addEventListener('click', () => {
+      const active = followBtn.classList.toggle('active');
+      followBtn.setAttribute('aria-pressed', String(active));
+      this.callbacks.onFollowToggle?.(active);
+    });
+
+    const metroBtn = this.element.querySelector<HTMLElement>('#studio-metro-btn');
+    metroBtn?.addEventListener('click', () => {
+      this.callbacks.onMetronomeToggle?.();
+      const active = metroBtn.classList.toggle('active');
+      metroBtn.setAttribute('aria-pressed', String(active));
+    });
+
     this.viewToggleBtn.addEventListener('click', () => {
       this.currentView = this.currentView === 'timeline' ? 'list' : 'timeline';
       this.viewToggleBtn.querySelector('span')!.textContent =
         this.currentView === 'timeline' ? 'List' : 'Timeline';
       this.callbacks.onViewToggle(this.currentView);
     });
+  }
+
+  public setFollowState(enabled: boolean) {
+    const followBtn = this.element.querySelector<HTMLElement>('#studio-follow-btn');
+    if (followBtn) {
+      followBtn.classList.toggle('active', enabled);
+      followBtn.setAttribute('aria-pressed', String(enabled));
+    }
+  }
+
+  public setMetronomeState(enabled: boolean) {
+    const metroBtn = this.element.querySelector<HTMLElement>('#studio-metro-btn');
+    if (metroBtn) {
+      metroBtn.classList.toggle('active', enabled);
+      metroBtn.setAttribute('aria-pressed', String(enabled));
+    }
   }
 
   public updateBpm(bpm: number) {

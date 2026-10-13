@@ -44,7 +44,7 @@ This document tracks progress across all steps of Instruversal, including founda
 | **5: Resume link and keyboard shortcuts** | Editor features | Done | 2026-10-13 | `step-5` | Start page resume link (30m session / 24h fresh visit), desktop-only shortcuts list in ? sheet, full keyboard workflow with input guard. |
 | **6: Song data model, storage and database** | Song Studio | Done | 2026-10-13 | `feat: song data model, local and cloud storage` | Song data model, schema validator & migration, pure arrangement helpers, IndexedDB v2 & CloudSongStore, 002_songs.sql & 004_songs.sql, compact preview, privacy sheet update. |
 | **7: Studio screen: arrangement canvas** | Song Studio | Done | 2026-10-13 | `feat: song studio arrangement canvas and drawing import` | Multi-lane timeline, drawing clips with thumbnails, clip inspector, picker sheet with preview audition, list view, history. |
-| **8: Song playback engine** | Song Studio | Queued | - | - | Windowed scheduling, clip transposition, polyphony management. |
+| **8: Song playback engine** | Song Studio | Done | 2026-10-13 | `feat: song playback engine` | Pure project/song event compilers, Tone.Transport windowed scheduler, lazy lane instruments & drum kit cache, clip transposition, polyphony caps, 30ms anti-click releases, sounding pulse & follow playhead. |
 | **9: Mix master** | Song Studio | Queued | - | - | Lane strips, master chain (EQ, compressor, limiter), level meters, presets. |
 | **10: Song export, sharing & Library** | Song Studio | Queued | - | - | Song WAV/MIDI export, Library songs tab, public song remix. |
 | **11: Studio polish, performance & accessibility** | Song Studio | Queued | - | - | Stress test (6 lanes/12 assets), memory profiling, a11y pass. |

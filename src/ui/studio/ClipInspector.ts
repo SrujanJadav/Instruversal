@@ -107,6 +107,10 @@ export class ClipInspector {
           : ''
       }
 
+      <div style="font-size: 0.72rem; color: var(--ink-soft); font-style: italic; margin: 4px 0;">
+        Song uses master effects rack. Asset effects are bypassed.
+      </div>
+
       <div style="display: flex; flex-direction: column; gap: 6px; margin-top: 10px;">
         <button type="button" class="studio-btn" id="insp-replace-btn">Replace drawing</button>
         <button type="button" class="studio-btn" id="insp-edit-drawing-btn">Edit drawing</button>

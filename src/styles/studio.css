@@ -377,12 +377,18 @@
   flex-direction: column;
   cursor: grab;
   touch-action: none;
-  transition: box-shadow 120ms ease-out;
+  transition: box-shadow 120ms ease-out, border-color 120ms ease-out;
 }
 
 .studio-clip.selected {
   outline: 2px solid var(--ink);
   outline-offset: 1px;
+}
+
+.studio-clip.sounding {
+  border-color: var(--ink);
+  box-shadow: 0 0 0 1.5px var(--ink), 0 2px 8px rgba(28, 26, 22, 0.18);
+  filter: brightness(1.05);
 }
 
 .studio-clip.dragging {

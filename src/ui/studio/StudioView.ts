@@ -15,6 +15,8 @@ import { ListView } from './ListView';
 import { StudioHistory } from './StudioHistory';
 import { Creation } from '../../library/types';
 import { getCreationStore } from '../../library/store';
+import { SongPlaybackEngine } from '../../song/playbackEngine';
+import { getPracticeEngine } from '../../audio/practice';
 
 export class StudioView {
   public element: HTMLElement;
@@ -25,15 +27,34 @@ export class StudioView {
   private inspector: ClipInspector;
   private listView: ListView;
   private picker: DrawingPicker;
+  private playbackEngine: SongPlaybackEngine;
   private currentPlayheadBar: number = 0;
   private isPlaying: boolean = false;
-  private playAnimationId: number | null = null;
-  private playStartTime: number = 0;
-  private playStartBar: number = 0;
+  private followPlayhead: boolean = true;
 
   constructor(song: Song) {
     this.song = song;
     this.history = new StudioHistory(song);
+
+    this.playbackEngine = new SongPlaybackEngine(this.song, {
+      onPlayheadTick: (wholeBar, beat, totalSec, currentBarFloat) => {
+        const barPos = currentBarFloat !== undefined ? currentBarFloat : wholeBar - 1;
+        this.currentPlayheadBar = barPos;
+        this.timeline.updatePlayhead(barPos);
+        this.header.updateTime(wholeBar, beat, totalSec);
+
+        if (this.followPlayhead) {
+          this.timeline.scrollToBar(barPos);
+        }
+      },
+      onClipSounding: (placementId) => {
+        this.timeline.pulseClip(placementId);
+      },
+      onPlaybackStateChange: (isPlaying) => {
+        this.isPlaying = isPlaying;
+        this.header.updatePlayState(isPlaying);
+      },
+    });
 
     this.element = document.createElement('div');
     this.element.className = 'studio-view';
@@ -53,6 +74,17 @@ export class StudioView {
       },
       onUndo: () => this.undo(),
       onRedo: () => this.redo(),
+      onFollowToggle: (enabled) => {
+        this.followPlayhead = enabled;
+      },
+      onMetronomeToggle: () => {
+        try {
+          const practice = getPracticeEngine();
+          const cur = practice.getSettings();
+          practice.updateSettings({ metronomeEnabled: !cur.metronomeEnabled });
+          this.header.setMetronomeState(!cur.metronomeEnabled);
+        } catch {}
+      },
     });
 
     // Mobile landscape banner hint
@@ -173,6 +205,7 @@ export class StudioView {
     this.song = updated;
     this.timeline.setSong(this.song);
     this.listView.render(this.song);
+    this.playbackEngine.updateSong(this.song);
 
     if (pushHistory) {
       this.history.pushState(this.song);
@@ -198,6 +231,7 @@ export class StudioView {
       this.song = prev;
       this.timeline.setSong(this.song);
       this.listView.render(this.song);
+      this.playbackEngine.updateSong(this.song);
       this.saveSong();
     }
   }
@@ -208,6 +242,7 @@ export class StudioView {
       this.song = next;
       this.timeline.setSong(this.song);
       this.listView.render(this.song);
+      this.playbackEngine.updateSong(this.song);
       this.saveSong();
     }
   }
@@ -225,71 +260,24 @@ export class StudioView {
 
   private handleSeek(bar: number) {
     this.currentPlayheadBar = bar;
-    const beatsPerSec = this.song.bpm / 60;
-    const secs = (bar * 4) / beatsPerSec;
-    this.header.updateTime(bar + 1, 1, secs);
+    this.playbackEngine.seek(bar);
+    this.timeline.updatePlayhead(bar);
   }
 
-  private togglePlayback() {
+  private async togglePlayback() {
     if (this.isPlaying) {
       this.stopPlayback();
     } else {
-      this.startPlayback();
+      await this.startPlayback();
     }
   }
 
-  private startPlayback() {
-    this.isPlaying = true;
-    this.header.updatePlayState(true);
-    this.playStartTime = performance.now();
-    this.playStartBar = this.currentPlayheadBar;
-
-    const tick = () => {
-      if (!this.isPlaying) return;
-      const elapsedSec = (performance.now() - this.playStartTime) / 1000;
-      const beatsElapsed = elapsedSec * (this.song.bpm / 60);
-      const barsElapsed = beatsElapsed / 4;
-      let currentBar = this.playStartBar + barsElapsed;
-
-      // Handle loop region if set
-      if (this.song.loopRegion) {
-        const { startBar, endBar } = this.song.loopRegion;
-        if (currentBar >= endBar) {
-          this.playStartTime = performance.now();
-          this.playStartBar = startBar;
-          currentBar = startBar;
-        }
-      } else if (currentBar >= this.song.totalBars) {
-        // Return to start
-        this.playStartTime = performance.now();
-        this.playStartBar = 0;
-        currentBar = 0;
-      }
-
-      this.currentPlayheadBar = currentBar;
-      this.timeline.updatePlayhead(currentBar);
-
-      const wholeBar = Math.floor(currentBar);
-      const beat = Math.floor((currentBar - wholeBar) * 4) + 1;
-      const totalSec = (currentBar * 4) / (this.song.bpm / 60);
-      this.header.updateTime(wholeBar + 1, beat, totalSec);
-
-      this.playAnimationId = requestAnimationFrame(tick);
-    };
-
-    this.playAnimationId = requestAnimationFrame(tick);
+  private async startPlayback() {
+    await this.playbackEngine.play();
   }
 
   private stopPlayback() {
-    this.isPlaying = false;
-    this.header.updatePlayState(false);
-    if (this.playAnimationId) {
-      cancelAnimationFrame(this.playAnimationId);
-      this.playAnimationId = null;
-    }
-    const resetBar = this.song.loopRegion ? this.song.loopRegion.startBar : 0;
-    this.handleSeek(resetBar);
-    this.timeline.updatePlayhead(resetBar);
+    this.playbackEngine.stop();
   }
 
   private handleImportDrawing(creation: Creation) {
@@ -455,6 +443,6 @@ export class StudioView {
   }
 
   public dispose() {
-    this.stopPlayback();
+    this.playbackEngine.dispose();
   }
 }

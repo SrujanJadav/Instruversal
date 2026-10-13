@@ -97,6 +97,28 @@ export class Timeline {
     this.playheadLineEl.style.left = `${left}px`;
   }
 
+  public pulseClip(placementId: string) {
+    const clipEl = this.lanesContainerEl.querySelector<HTMLElement>(`[data-placement-id="${placementId}"]`);
+    if (clipEl) {
+      clipEl.classList.add('sounding');
+      window.setTimeout(() => {
+        clipEl.classList.remove('sounding');
+      }, 120);
+    }
+  }
+
+  public scrollToBar(bar: number) {
+    const headerWidth = 140;
+    const playheadPx = headerWidth + bar * this.pixelsPerBar;
+    const scrollLeft = this.scrollWrapperEl.scrollLeft;
+    const viewportWidth = this.scrollWrapperEl.clientWidth;
+
+    // Follow playhead if it approaches or exceeds visible bounds
+    if (playheadPx > scrollLeft + viewportWidth * 0.75 || playheadPx < scrollLeft + 50) {
+      this.scrollWrapperEl.scrollLeft = Math.max(0, playheadPx - viewportWidth * 0.35);
+    }
+  }
+
   public getSelectedPlacement(): SongPlacement | null {
     if (this.selectedPlacementIds.size === 0) return null;
     const id = Array.from(this.selectedPlacementIds)[0];
