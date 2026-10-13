@@ -75,16 +75,10 @@ app.innerHTML = `
       <img src="/icon.svg" alt="Instruversal Brand Icon" class="gate-icon-img icon-light-mode" />
       <img src="/icon-dark.svg" alt="Instruversal Brand Icon" class="gate-icon-img icon-dark-mode" />
     </div>
-    <div class="hero-wordmark-container" id="hero-wordmark-container">
-      <canvas class="hero-garden-canvas" id="hero-garden-canvas" aria-hidden="true"></canvas>
-      <h1 class="app-title">
-        <a href="#/" class="app-title-link" id="gate-home-link" aria-label="Instruversal, go to the start page">
-          <img src="/brand/logo-light-transparent.svg" class="brand-wordmark wordmark-light" alt="Instruversal" width="1536" height="742.4" decoding="async" />
-          <img src="/brand/logo-dark-transparent.svg" class="brand-wordmark wordmark-dark" alt="" aria-hidden="true" width="1536" height="742.4" decoding="async" />
-        </a>
-      </h1>
+    <div class="hero-wordmark-container" id="hero-wordmark-container" style="position: relative; width: 100%; overflow: hidden; background: transparent;">
+      <canvas class="hero-garden-canvas" id="hero-garden-canvas" style="position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: default; touch-action: none;" role="img" aria-label="Instruverse"></canvas>
+      <h1 class="sr-only">Instruverse</h1>
     </div>
-    <p class="app-subtitle">Draw strokes to compose. Notes loop in time.</p>
     <button class="start-btn" id="start-btn" type="button" aria-label="Start audio and enter Instruversal">
       Tap to start
     </button>
@@ -411,6 +405,9 @@ export async function goHome() {
 }
 
 function showGateScreen() {
+  document.querySelectorAll('.studio-view').forEach((el) => el.remove());
+  document.querySelectorAll('.public-song-view').forEach((el) => el.remove());
+
   gateScreen.classList.remove('hidden');
   gateScreen.removeAttribute('aria-hidden');
   gateScreen.style.transform = 'translateY(0)';
@@ -575,8 +572,11 @@ document.querySelector('#header-studio-btn')?.addEventListener('click', () => {
 });
 document.querySelector('#gate-studio-btn')?.addEventListener('click', (e) => {
   e.preventDefault();
-  window.location.hash = '#/studio';
-  handleStudioRoute('#/studio');
+  if (window.location.hash === '#/studio') {
+    handleStudioRoute('#/studio');
+  } else {
+    window.location.hash = '#/studio';
+  }
 });
 
 // Mount gate screen theme toggle
@@ -965,10 +965,17 @@ async function cleanupStudioView() {
     try {
       await fadeMasterOut(0.15);
     } catch {}
-    currentStudioView.dispose();
-    currentStudioView.element.remove();
+    try {
+      currentStudioView.dispose();
+    } catch (err) {
+      console.warn('Error disposing studio view:', err);
+    }
+    try {
+      currentStudioView.element.remove();
+    } catch {}
     currentStudioView = null;
   }
+  document.querySelectorAll('.studio-view').forEach((el) => el.remove());
 }
 
 async function handleStudioRoute(hash: string) {

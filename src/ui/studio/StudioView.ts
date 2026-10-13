@@ -570,19 +570,45 @@ export class StudioView {
   }
 
   public async flushAndExitTo(targetHash: string): Promise<void> {
-    this.playbackEngine.stop();
-    await fadeMasterOut(0.15);
-    await this.saveSong();
-    if (window.location.hash !== targetHash) {
+    try {
+      this.playbackEngine.stop();
+    } catch {}
+    try {
+      await this.saveSong();
+    } catch {}
+    try {
+      await fadeMasterOut(0.15);
+    } catch {}
+
+    try {
+      this.dispose();
+    } catch {}
+    try {
+      this.element.remove();
+    } catch {}
+
+    if (window.location.hash === targetHash) {
+      window.dispatchEvent(new Event('hashchange'));
+    } else {
       window.location.hash = targetHash;
     }
   }
 
   public dispose() {
-    this.playbackEngine.stop();
-    this.mixerPanel.dispose();
-    this.exportModal.dispose();
-    this.fxPanel.destroy();
-    this.playbackEngine.dispose();
+    try {
+      this.playbackEngine.stop();
+    } catch {}
+    try {
+      this.mixerPanel.dispose();
+    } catch {}
+    try {
+      this.exportModal.dispose();
+    } catch {}
+    try {
+      this.fxPanel.destroy();
+    } catch {}
+    try {
+      this.playbackEngine.dispose();
+    } catch {}
   }
 }

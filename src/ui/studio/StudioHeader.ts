@@ -132,7 +132,11 @@ export class StudioHeader {
       if (this.callbacks.onHome) {
         this.callbacks.onHome();
       } else {
-        window.location.hash = '#/';
+        if (window.location.hash === '#/') {
+          window.dispatchEvent(new Event('hashchange'));
+        } else {
+          window.location.hash = '#/';
+        }
       }
     });
 

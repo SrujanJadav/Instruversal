@@ -15,25 +15,29 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: var(--space-5);
+  padding: max(var(--space-2), env(safe-area-inset-top, 8px)) var(--space-3) max(var(--space-2), env(safe-area-inset-bottom, 8px));
   text-align: center;
   z-index: 10;
   background-color: transparent;
   transition: opacity var(--transition-normal), visibility var(--transition-normal);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
-.gate-screen > *:not(.garden-background-canvas):not(.hero-garden-canvas):not(.gate-topbar) {
+.gate-screen>*:not(.garden-background-canvas):not(.hero-garden-canvas):not(.gate-topbar) {
   position: relative;
   z-index: 1;
 }
 
 .hero-garden-canvas {
   position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  pointer-events: none;
-  z-index: 0;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  cursor: default;
+  touch-action: none;
+  z-index: 1;
 }
 
 .garden-background-canvas {
@@ -64,7 +68,7 @@
 
 /* Start Screen 'Try Yourself' Row (Under Load) */
 .try-yourself-section {
-  margin-top: var(--space-4);
+  margin-top: 10px;
   width: 100%;
   max-width: 500px;
   display: flex;
@@ -172,18 +176,31 @@
 }
 
 .gate-brand-icon {
-  margin-bottom: var(--space-1);
+  margin-top: 0;
+  margin-bottom: 2px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .gate-icon-img {
-  width: clamp(60px, 8vw, 84px);
-  height: clamp(60px, 8vw, 84px);
+  width: auto;
+  height: 84px;
+  max-height: 88px;
   object-fit: contain;
   filter: drop-shadow(0 4px 16px rgba(28, 26, 22, 0.12));
   transition: transform var(--transition-normal);
+}
+
+@media (min-width: 640px) {
+  .gate-brand-icon {
+    margin-bottom: 4px;
+  }
+
+  .gate-icon-img {
+    height: 94px;
+    max-height: 98px;
+  }
 }
 
 .gate-icon-img:hover {
@@ -227,7 +244,38 @@
   align-items: center;
   justify-content: center;
   width: 100%;
-  margin-bottom: var(--space-3);
+  max-width: 900px;
+  height: 180px;
+  overflow: hidden;
+  background: transparent;
+  margin-top: 0;
+  margin-bottom: 4px;
+}
+
+@media (min-width: 640px) {
+  .hero-wordmark-container {
+    height: 220px;
+    margin-bottom: 8px;
+  }
+}
+
+@media (min-width: 768px) {
+  .hero-wordmark-container {
+    height: 260px;
+    margin-bottom: 12px;
+  }
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
 }
 
 .app-title {
@@ -296,18 +344,14 @@
   :root:not([data-theme="light"]) .wordmark-light {
     display: none !important;
   }
+
   :root:not([data-theme="light"]) .wordmark-dark {
     display: block !important;
   }
 }
 
 .app-subtitle {
-  font-family: var(--font-ui);
-  font-size: 1rem;
-  color: var(--ink-soft);
-  max-width: 320px;
-  line-height: 1.4;
-  margin-bottom: var(--space-5);
+  display: none !important;
 }
 
 .start-btn {
@@ -319,11 +363,13 @@
   font-size: 0.95rem;
   font-weight: 500;
   letter-spacing: 0.01em;
-  padding: 12px 28px;
-  min-height: 44px;
+  padding: 10px 24px;
+  min-height: 42px;
   min-width: 140px;
   border-radius: var(--radius-md);
   cursor: pointer;
+  margin-top: 2px;
+  margin-bottom: 4px;
   transition: background-color var(--transition-fast), transform var(--transition-fast), opacity var(--transition-fast);
   touch-action: manipulation;
 }
@@ -669,46 +715,58 @@
     padding: max(4px, env(safe-area-inset-top, 0px)) 6px 6px;
     gap: 4px;
   }
+
   .app-header {
     height: 38px;
     padding: 0 2px;
     gap: 4px;
   }
+
   .header-left {
     gap: 2px;
     flex: 0 0 auto;
   }
+
   .header-title {
     font-size: 1.05rem;
     flex: 0 0 auto;
   }
+
   .creation-title-group,
   .header-divider-dot {
     display: none;
   }
+
   .header-actions {
     gap: 4px;
   }
+
   .header-btn {
     padding: 4px 6px;
     font-size: 0.72rem;
     min-height: 32px;
   }
+
   .hdr-text-long {
     display: none;
   }
+
   .hdr-text-short {
     display: inline;
   }
+
   .sync-text {
     display: none;
   }
+
   .sync-icon {
     display: inline-block;
   }
+
   .header-status {
     display: none;
   }
+
   #header-studio-btn {
     display: none !important;
   }
@@ -719,12 +777,15 @@
     padding: 0 1px;
     gap: 2px;
   }
+
   .header-title {
     font-size: 0.98rem;
   }
+
   .header-actions {
     gap: 3px;
   }
+
   .header-btn {
     padding: 3px 5px;
     font-size: 0.7rem;
@@ -743,7 +804,8 @@
   overflow: hidden;
   touch-action: none;
   -webkit-touch-callout: none;
-  min-height: 288px; /* 8 drum lanes >= 36px tall each */
+  min-height: 288px;
+  /* 8 drum lanes >= 36px tall each */
 }
 
 /* Small key chip in canvas corner (hidden when viewport < 600px) */
@@ -805,9 +867,11 @@
   .canvas-container {
     min-height: 75dvh;
   }
+
   .app-header {
     height: 26px;
   }
+
   .instruversal-toolbar {
     padding-top: 1px;
     padding-bottom: max(2px, env(safe-area-inset-bottom, 2px));
@@ -841,8 +905,10 @@
 .dock-scroll-container {
   overflow-x: auto;
   overflow-y: hidden;
-  scrollbar-width: none; /* Firefox: hide scrollbar */
-  -ms-overflow-style: none; /* IE/Edge: hide scrollbar */
+  scrollbar-width: none;
+  /* Firefox: hide scrollbar */
+  -ms-overflow-style: none;
+  /* IE/Edge: hide scrollbar */
   scroll-snap-type: x proximity;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-x: contain;
@@ -1149,8 +1215,15 @@
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; transform: scale(0.96); }
-  to { opacity: 1; transform: scale(1); }
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 .confirm-query {
@@ -1530,21 +1603,26 @@
     padding: 6px 8px;
     gap: 3px;
   }
+
   .track-select-lead {
     max-width: 72px;
   }
+
   .track-name-lbl {
     max-width: 48px;
   }
+
   .track-inst-btn {
     padding: 3px 4px;
     font-size: 0.68rem;
     max-width: 70px;
   }
+
   .track-vol-slider {
     width: 34px;
     max-width: 40px;
   }
+
   .track-toggle-btn {
     width: 24px;
     height: 24px;
@@ -2022,6 +2100,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+
   .scale-strip-note,
   .root-note-btn,
   .scale-pill-btn,
@@ -2903,12 +2982,15 @@
 /* ==========================================================================
    Mobile Touch Targets & Slider Thumbs
    ========================================================================== */
-@media (pointer: coarse), (max-width: 640px) {
+@media (pointer: coarse),
+(max-width: 640px) {
+
   /* Enlarge range slider thumbs to >= 28px for comfortable finger dragging */
   input[type="range"]::-webkit-slider-thumb {
     width: 28px !important;
     height: 28px !important;
   }
+
   input[type="range"]::-moz-range-thumb {
     width: 28px !important;
     height: 28px !important;
@@ -3143,7 +3225,8 @@
   white-space: nowrap;
 }
 
-@media (pointer: coarse), (max-width: 600px) {
+@media (pointer: coarse),
+(max-width: 600px) {
   .desktop-only {
     display: none !important;
   }
@@ -3170,10 +3253,10 @@ html.theme-transitioning .sync-popup,
 html.theme-transitioning .hint-overlay-card,
 html.theme-transitioning .theme-switch__container {
   transition: background-color 250ms ease-out,
-              color 250ms ease-out,
-              border-color 250ms ease-out,
-              box-shadow 250ms ease-out,
-              fill 250ms ease-out !important;
+    color 250ms ease-out,
+    border-color 250ms ease-out,
+    box-shadow 250ms ease-out,
+    fill 250ms ease-out !important;
 }
 
 /* Explicitly exempt canvas and offscreen canvas from any CSS transitions */
@@ -3183,6 +3266,7 @@ canvas.instruversal-canvas {
 }
 
 @media (prefers-reduced-motion: reduce) {
+
   html.theme-transitioning,
   html.theme-transitioning * {
     transition: none !important;
@@ -3884,8 +3968,13 @@ canvas.instruversal-canvas {
 }
 
 @keyframes countInPulse {
-  0% { transform: translate(-50%, -50%) scale(1.12); }
-  100% { transform: translate(-50%, -50%) scale(1.0); }
+  0% {
+    transform: translate(-50%, -50%) scale(1.12);
+  }
+
+  100% {
+    transform: translate(-50%, -50%) scale(1.0);
+  }
 }
 
 .count-in-overlay.beat-pulse {
@@ -3897,4 +3986,3 @@ canvas.instruversal-canvas {
     animation: none;
   }
 }
-
