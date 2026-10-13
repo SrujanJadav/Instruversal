@@ -50,10 +50,20 @@
   z-index: 0;
 }
 
-.gate-screen.hidden {
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
+.gate-screen.hidden,
+.gate-screen[style*="display: none"] {
+  display: none !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+.main-view.hidden,
+.main-view[style*="display: none"] {
+  display: none !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
 }
 
 .gate-topbar {

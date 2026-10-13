@@ -18,6 +18,7 @@ import { state, events } from './state';
 import { DrawingCanvas } from './canvas/DrawingCanvas';
 import { getTrackManager } from './audio/tracks';
 import { getLoopScheduler } from './audio/schedule';
+import { getTransport } from './audio/transport';
 import { effectiveKey, formatShortKeyLabel } from './audio/scales';
 import { Toolbar } from './ui/Toolbar';
 import { TrackPanel } from './ui/TrackPanel';
@@ -214,7 +215,66 @@ let isFreshVisit = true;
 // Initialize creation manager
 const creationManager = getCreationManager();
 
-let currentActiveScreen: 'gate' | 'editor' = 'gate';
+export type ScreenName = 'home' | 'studio' | 'songStudio' | 'publicSong';
+let currentActiveScreen: ScreenName = 'home';
+
+export function getCurrentScreen(): ScreenName {
+  return currentActiveScreen;
+}
+
+export function setScreen(screen: ScreenName) {
+  currentActiveScreen = screen;
+  if (screen === 'home') {
+    // When on 'home', Studio/Canvas DOM must be completely hidden
+    mainView.style.display = 'none';
+    mainView.style.opacity = '0';
+    mainView.style.visibility = 'hidden';
+    mainView.style.pointerEvents = 'none';
+    mainView.setAttribute('aria-hidden', 'true');
+
+    // Home screen container must be visible
+    gateScreen.classList.remove('hidden');
+    gateScreen.removeAttribute('aria-hidden');
+    gateScreen.style.transform = 'translateY(0)';
+    gateScreen.style.display = 'flex';
+    gateScreen.style.opacity = '1';
+    gateScreen.style.visibility = 'visible';
+    gateScreen.style.pointerEvents = 'auto';
+
+    startBtn.disabled = false;
+    startBtn.textContent = 'Tap to start';
+  } else if (screen === 'studio') {
+    // When on 'studio', Home screen container must be completely hidden
+    gateScreen.classList.add('hidden');
+    gateScreen.setAttribute('aria-hidden', 'true');
+    gateScreen.style.display = 'none';
+    gateScreen.style.opacity = '0';
+    gateScreen.style.visibility = 'hidden';
+    gateScreen.style.pointerEvents = 'none';
+
+    // Studio/Canvas DOM must be visible
+    mainView.style.display = 'flex';
+    mainView.style.opacity = '1';
+    mainView.style.visibility = 'visible';
+    mainView.style.pointerEvents = 'auto';
+    mainView.removeAttribute('aria-hidden');
+  } else {
+    // Other routes (songStudio, publicSong) hide both
+    gateScreen.classList.add('hidden');
+    gateScreen.setAttribute('aria-hidden', 'true');
+    gateScreen.style.display = 'none';
+    gateScreen.style.opacity = '0';
+    gateScreen.style.visibility = 'hidden';
+    gateScreen.style.pointerEvents = 'none';
+
+    mainView.style.display = 'none';
+    mainView.style.opacity = '0';
+    mainView.style.visibility = 'hidden';
+    mainView.style.pointerEvents = 'none';
+    mainView.setAttribute('aria-hidden', 'true');
+  }
+}
+
 let drawingCanvas: DrawingCanvas | null = null;
 
 function syncWordmarkA11y(theme?: string) {
@@ -248,7 +308,7 @@ let gardenModulePromise: Promise<typeof import('./garden/garden-background')> | 
 function loadAndMountGarden() {
   if (!isGardenFlagEnabled) return;
   if (typeof window === 'undefined') return;
-  if (currentActiveScreen !== 'gate') return;
+  if (currentActiveScreen !== 'home') return;
 
   const load = () => {
     if (!gardenModulePromise) {
@@ -257,7 +317,7 @@ function loadAndMountGarden() {
       }
     }
     gardenModulePromise?.then(({ getGardenBackground }) => {
-      if (currentActiveScreen === 'gate') {
+      if (currentActiveScreen === 'home') {
         const garden = getGardenBackground();
         garden.mount();
       }
@@ -393,8 +453,8 @@ export async function goHome() {
   // 1. Close all open sheets/panels first
   closeAllOpenSheets();
 
-  // 2. If in editor, flush autosave and wait up to 1 second
-  if (currentActiveScreen === 'editor') {
+  // 2. If in studio, flush autosave and wait up to 1 second
+  if (currentActiveScreen === 'studio') {
     const saveSuccess = await attemptSaveBeforeLeaving();
     if (!saveSuccess) {
       isLeaving = false;
@@ -432,74 +492,32 @@ function showGateScreen() {
   document.querySelectorAll('.public-song-view').forEach((el) => el.remove());
   document.querySelectorAll('.studio-coming-soon-screen').forEach((el) => el.remove());
 
-  gateScreen.classList.remove('hidden');
-  gateScreen.removeAttribute('aria-hidden');
-  gateScreen.style.transform = 'translateY(0)';
-  gateScreen.style.display = 'flex';
-  gateScreen.style.opacity = '1';
-  gateScreen.style.visibility = 'visible';
-  gateScreen.style.pointerEvents = 'auto';
-
-  startBtn.disabled = false;
-  startBtn.textContent = 'Tap to start';
-
-  mainView.style.display = 'none';
-  mainView.style.opacity = '0';
-  mainView.setAttribute('aria-hidden', 'true');
-
-  currentActiveScreen = 'gate';
+  setScreen('home');
   updateGateLoadButton();
   loadAndMountGarden();
 }
 
 async function completeGoHome() {
-  // Stop audio cleanly: fade master gain over 150ms, pause transport, release voices
+  // 1. Pause audio transport cleanly and fade master gain over 150ms
+  try {
+    const transport = getTransport();
+    transport.pause();
+  } catch {}
   await fadeMasterOut(0.15);
 
-  // Pause canvas render loop to save battery
+  // 2. Pause canvas render loop to save battery
   drawingCanvas?.pause();
 
-  // Clear thumbnail cache so fresh thumbnail with latest strokes is drawn
+  // 3. Clear thumbnail cache
   clearThumbnailCache();
 
-  // Update gate load count
+  // 4. Update screen state to 'home' (mutually exclusive)
+  setScreen('home');
+
+  // 5. Re-initialize Home components and TypeGarden
   await updateGateLoadButton();
-
-  // Reset start button text and disabled state
-  startBtn.disabled = false;
-  startBtn.textContent = 'Tap to start';
-
-  // Prepare gate screen: unhide and reset transforms/visibility
-  gateScreen.classList.remove('hidden');
-  gateScreen.removeAttribute('aria-hidden');
-  gateScreen.style.transform = 'translateY(0)';
-  gateScreen.style.visibility = 'visible';
-  gateScreen.style.pointerEvents = 'auto';
-
-  // Cross-fade between editor and start page (250ms, no animation if prefers-reduced-motion)
-  const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  if (prefersReduced) {
-    mainView.style.display = 'none';
-    mainView.style.opacity = '0';
-    mainView.setAttribute('aria-hidden', 'true');
-    gateScreen.style.display = 'flex';
-    gateScreen.style.opacity = '1';
-  } else {
-    // Both screens visible during crossfade
-    gateScreen.style.display = 'flex';
-    gateScreen.style.opacity = '0';
-    mainView.style.transition = 'opacity 250ms ease-out';
-    gateScreen.style.transition = 'opacity 250ms ease-out';
-    void gateScreen.offsetWidth; // Force layout reflow
-    gateScreen.style.opacity = '1';
-    mainView.style.opacity = '0';
-    await new Promise((resolve) => setTimeout(resolve, 250));
-    mainView.style.display = 'none';
-    mainView.setAttribute('aria-hidden', 'true');
-  }
-
-  currentActiveScreen = 'gate';
   loadAndMountGarden();
+
   if (window.location.hash !== '#/' && window.location.hash !== '') {
     window.location.hash = '#/';
   }
@@ -538,8 +556,7 @@ gateResumeBtn.addEventListener('click', async () => {
 
   try {
     gateResumeBtn.disabled = true;
-    await creationManager.openCreation(targetId, false);
-    await enterMainView(true);
+    await openStudio({ creationId: targetId, autoplay: true });
   } catch (err) {
     console.error('Failed to resume creation:', err);
   } finally {
@@ -655,58 +672,62 @@ function updateHeaderStatus() {
   }
 }
 
-export async function enterMainView(startAudio: boolean = true) {
-  teardownGarden();
-  if (startAudio && Tone.context.state !== 'running') {
-    await Tone.start();
-    state.audioStarted = true;
-    events.emit('audio:started', undefined);
-  }
+export interface OpenStudioOptions {
+  creationId?: string;
+  creation?: Creation;
+  projectData?: any;
+  autoplay?: boolean;
+  startAudio?: boolean;
+}
 
-  restoreMasterGain();
-
-  const trackManager = getTrackManager();
-  getLoopScheduler();
-
-  if (startAudio) {
-    const defaultTrack = trackManager.getTrack(state.selectedTrackId);
-    if (defaultTrack) {
-      defaultTrack.audition();
+export async function openStudio(opts: OpenStudioOptions = {}) {
+  // 1. Coordinate audio unlocking within user gesture
+  if (Tone.context.state !== 'running') {
+    try {
+      await Tone.start();
+      state.audioStarted = true;
+      events.emit('audio:started', undefined);
+    } catch (err) {
+      console.warn('AudioContext start error:', err);
     }
   }
 
-  const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  if (prefersReduced) {
-    gateScreen.style.display = 'none';
-    gateScreen.classList.add('hidden');
-    gateScreen.setAttribute('aria-hidden', 'true');
-    mainView.style.display = 'flex';
-    mainView.style.opacity = '1';
-    mainView.removeAttribute('aria-hidden');
-  } else {
-    mainView.style.display = 'flex';
-    mainView.style.opacity = '0';
-    gateScreen.style.transition = 'opacity 250ms ease-out';
-    mainView.style.transition = 'opacity 250ms ease-out';
-    void mainView.offsetWidth; // Force layout reflow
-    mainView.style.opacity = '1';
-    gateScreen.style.opacity = '0';
-    await new Promise((resolve) => setTimeout(resolve, 250));
-    gateScreen.style.display = 'none';
-    gateScreen.classList.add('hidden');
-    gateScreen.setAttribute('aria-hidden', 'true');
-    mainView.removeAttribute('aria-hidden');
+  restoreMasterGain();
+  getLoopScheduler();
+
+  // 2. Cleanly teardown home background animations & listeners and dismiss any open modals
+  teardownGarden();
+  getGalleryModal().close(false, false);
+  getLibraryModal().close(false);
+  closeAllOpenSheets();
+
+  // 3. Hydrate project data if provided (paused initially)
+  if (opts.creationId) {
+    await creationManager.openCreation(opts.creationId, false);
+  } else if (opts.creation) {
+    await creationManager.openCreation(opts.creation, false);
+  }
+
+  // 4. Transition view immediately to 'studio' (mutually exclusive)
+  setScreen('studio');
+  if (window.location.hash !== '#/app') {
+    window.location.hash = '#/app';
   }
 
   updateHeaderStatus();
 
+  // 5. Mount or resize DrawingCanvas
   const canvasContainer = document.querySelector<HTMLElement>('#canvas-container');
   if (canvasContainer && !drawingCanvas) {
     drawingCanvas = new DrawingCanvas(canvasContainer);
   } else if (drawingCanvas) {
     drawingCanvas.resume();
+    drawingCanvas.handleResize();
   }
+  // Dispatch resize event so canvas calculates dimensions immediately upon becoming visible
+  window.dispatchEvent(new Event('resize'));
 
+  // Initialize studio UI controls if not yet mounted
   initCountInOverlay();
   getPracticeEngine();
 
@@ -733,10 +754,22 @@ export async function enterMainView(startAudio: boolean = true) {
   updateCanvasKeyChip();
   checkStudioReturnButton();
 
-  currentActiveScreen = 'editor';
-  if (window.location.hash !== '#/app') {
-    window.location.hash = '#/app';
+  // 6. Coordinate audio playback:
+  // Start audio playback ONLY AFTER view has changed to 'studio' and canvas has mounted
+  const transport = getTransport();
+  if (opts.autoplay) {
+    await transport.play();
+  } else if (!opts.creationId && !opts.creation && opts.startAudio !== false) {
+    // Blank canvas from "Tap to start": audition default selected track
+    const defaultTrack = getTrackManager().getTrack(state.selectedTrackId);
+    if (defaultTrack) {
+      defaultTrack.audition();
+    }
   }
+}
+
+export async function enterMainView(startAudio: boolean = true) {
+  await openStudio({ startAudio, autoplay: false });
 }
 
 async function handleStart() {
@@ -744,7 +777,7 @@ async function handleStart() {
   startBtn.textContent = 'Starting…';
 
   try {
-    await enterMainView(true);
+    await openStudio({ autoplay: false, startAudio: true });
     showFirstRunHintOverlay(false);
   } catch (err) {
     console.error('Audio initialization error:', err);
@@ -764,7 +797,6 @@ tryCards.forEach((card) => {
     tryCards.forEach((c) => (c.disabled = true));
     try {
       clearStoredResumeData();
-      // 1. Audio unlock within user gesture
       if (Tone.context.state !== 'running') {
         try {
           await Tone.start();
@@ -773,14 +805,9 @@ tryCards.forEach((card) => {
         } catch {}
       }
 
-      // 2. Transition gate -> editor
-      await enterMainView(true);
-
-      // 3. Dynamically load example project
       const { loadExampleProject } = await import('./examples');
       const { project, song } = await loadExampleProject(exampleId);
 
-      // 4. Open as a NEW UNSAVED creation (like a share link) and start playing
       const newId = `creation-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
       const creation: Creation = {
         id: newId,
@@ -791,7 +818,7 @@ tryCards.forEach((card) => {
         project,
       };
 
-      await creationManager.openCreation(creation, true);
+      await openStudio({ creation, autoplay: true });
     } catch (err) {
       console.error('Failed to load example:', err);
     } finally {
@@ -800,12 +827,13 @@ tryCards.forEach((card) => {
   });
 });
 
-events.on('app:start', (opts) => enterMainView(opts?.startAudio));
+events.on('app:start', (opts) => openStudio({ startAudio: opts?.startAudio, autoplay: false }));
+events.on('studio:open', (opts) => openStudio(opts));
 events.on('ui:close-all-sheets', () => closeAllOpenSheets());
 
 // Periodic check for resume link 30-minute expiry on gate screen
 window.setInterval(() => {
-  if (currentActiveScreen === 'gate' && activeResumeTarget) {
+  if (currentActiveScreen === 'home' && activeResumeTarget) {
     updateGateLoadButton();
   }
 }, 30000);
@@ -910,8 +938,7 @@ async function handlePublicSharedRoute(slug: string) {
   }
 
   closeAllOpenSheets();
-  await enterMainView(false);
-  await creationManager.openCreation(creation, false);
+  await openStudio({ creation, autoplay: false });
 
   let banner = document.querySelector<HTMLElement>('#public-shared-banner');
   if (!banner) {
@@ -1016,18 +1043,7 @@ async function handleStudioRoute(hash: string) {
     closeAllOpenSheets();
     await cleanupStudioView();
 
-    const mainView = document.querySelector<HTMLElement>('#main-view');
-    const gateScreen = document.querySelector<HTMLElement>('#gate-screen');
-    if (mainView) {
-      mainView.style.display = 'none';
-      mainView.setAttribute('aria-hidden', 'true');
-    }
-    if (gateScreen) {
-      gateScreen.style.display = 'none';
-      gateScreen.setAttribute('aria-hidden', 'true');
-    }
-
-    currentActiveScreen = 'studio' as any;
+    setScreen('songStudio');
 
     if (!isStudioEnabled) {
       document.querySelectorAll('.studio-coming-soon-screen').forEach((el) => el.remove());
@@ -1122,18 +1138,7 @@ async function handlePublicSongRoute(slug: string) {
     await cleanupStudioView();
     cleanupPublicSongView();
 
-    const mainView = document.querySelector<HTMLElement>('#main-view');
-    const gateScreen = document.querySelector<HTMLElement>('#gate-screen');
-    if (mainView) {
-      mainView.style.display = 'none';
-      mainView.setAttribute('aria-hidden', 'true');
-    }
-    if (gateScreen) {
-      gateScreen.style.display = 'none';
-      gateScreen.setAttribute('aria-hidden', 'true');
-    }
-
-    currentActiveScreen = 'publicSong' as any;
+    setScreen('publicSong');
     const { PublicSongView } = await import('./ui/PublicSongView');
     currentPublicSongView = new PublicSongView(slug);
     app.appendChild(currentPublicSongView.element);
@@ -1163,7 +1168,7 @@ async function handleHashChange() {
     cleanupPublicSongView();
 
     if (hash === '#/' || hash === '' || hash === '#') {
-      if (currentActiveScreen === 'editor') {
+      if (currentActiveScreen === 'studio') {
         await goHome();
       } else {
         await fadeMasterOut(0.15);
@@ -1171,9 +1176,9 @@ async function handleHashChange() {
         showGateScreen();
       }
     } else if (hash === '#/app') {
-      if (currentActiveScreen !== 'editor') {
+      if (currentActiveScreen !== 'studio') {
         closeAllOpenSheets();
-        await enterMainView(false);
+        await openStudio({ autoplay: false });
       }
     } else if (hash === '#/load') {
       getGalleryModal().open();
@@ -1224,8 +1229,7 @@ async function handleInitialRoute() {
     const store = getCreationStore();
     const list = await store.list();
     if (list.length > 0) {
-      await creationManager.openCreation(list[0].id, false);
-      await enterMainView(false);
+      await openStudio({ creationId: list[0].id, autoplay: false });
     } else {
       window.location.hash = '#/';
       showGateScreen();
@@ -1234,7 +1238,7 @@ async function handleInitialRoute() {
     showGateScreen();
     getGalleryModal().open();
   } else if (hash === '#/library') {
-    await enterMainView(false);
+    await openStudio({ autoplay: false });
     getLibraryModal().open();
   } else {
     showGateScreen();

@@ -112,6 +112,12 @@ export type EventMap = {
   'polyphony:change': PolyphonyCap;
   'polyphony:thinned': boolean;
   'app:start': { startAudio?: boolean } | undefined;
+  'studio:open': {
+    creationId?: string;
+    creation?: any;
+    projectData?: any;
+    autoplay?: boolean;
+  } | undefined;
   'grid:change': { mode: 'melodic' | 'beat'; enabled: boolean };
 };
 

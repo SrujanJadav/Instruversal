@@ -2,7 +2,6 @@ import * as Tone from 'tone';
 import { state, events } from '../state';
 import { CreationMeta } from '../library/types';
 import { getCreationStore } from '../library/store';
-import { getCreationManager } from '../library/manager';
 import { renderThumbnailCanvas } from './thumbnail';
 import { GALLERY_CONSTANTS } from './constants';
 
@@ -148,6 +147,9 @@ export class GalleryModal {
       return;
     }
 
+    this.currentCenteredMeta = this.creations[0];
+    this.updateCenteredCaption(this.creations[0]);
+
     // 3. Fade out gate-screen content
     const gateScreen = document.querySelector<HTMLElement>('#gate-screen');
     if (gateScreen) {
@@ -286,30 +288,16 @@ export class GalleryModal {
     if (this.isAnimating) return;
     this.isAnimating = true;
 
-    // 1. Hide gallery overlay with clean zoom / fade
-    this.overlay.style.transition = `opacity ${GALLERY_CONSTANTS.openProjectZoomDurationMs}ms ease-out`;
-    this.overlay.style.opacity = '0';
+    // 1. Immediately dismiss modal without restoring the gate screen
+    this.close(false, false);
 
-    // 2. Hide gate-screen
-    const gateScreen = document.querySelector<HTMLElement>('#gate-screen');
-    if (gateScreen) {
-      gateScreen.style.display = 'none';
-      gateScreen.classList.add('hidden');
-    }
+    // 2. Open studio via decoupled event with the loaded project and start playback only after mount
+    events.emit('studio:open', { creationId, autoplay: true });
 
-    // 3. Trigger transition to main-view and unlock audio
-    events.emit('app:start', { startAudio: true });
-
-    // 4. Open the project cleanly and start playing
-    await getCreationManager().openCreation(creationId, true);
-
-    setTimeout(() => {
-      this.close(false);
-      this.isAnimating = false;
-    }, GALLERY_CONSTANTS.openProjectZoomDurationMs);
+    this.isAnimating = false;
   }
 
-  public close(updateHash: boolean = true) {
+  public close(updateHash: boolean = true, restoreGate: boolean = true) {
     this.isOpen = false;
     this.overlay.classList.remove('open');
     this.overlay.style.opacity = '';
@@ -319,27 +307,29 @@ export class GalleryModal {
       this.galleryInstance = null;
     }
 
-    // Restore gate screen position and opacity
-    const gateScreen = document.querySelector<HTMLElement>('#gate-screen');
-    if (gateScreen) {
-      gateScreen.classList.remove('hidden');
-      gateScreen.removeAttribute('aria-hidden');
-      gateScreen.style.display = 'flex';
-      gateScreen.style.visibility = 'visible';
-      gateScreen.style.pointerEvents = 'auto';
-      gateScreen.style.transition = `opacity ${GALLERY_CONSTANTS.backAnimationDurationMs}ms ease-out, transform ${GALLERY_CONSTANTS.backAnimationDurationMs}ms ease-out`;
-      gateScreen.style.transform = 'translateY(0)';
-      gateScreen.style.opacity = '1';
-    }
+    if (restoreGate) {
+      // Restore gate screen position and opacity only when returning to start page
+      const gateScreen = document.querySelector<HTMLElement>('#gate-screen');
+      if (gateScreen) {
+        gateScreen.classList.remove('hidden');
+        gateScreen.removeAttribute('aria-hidden');
+        gateScreen.style.display = 'flex';
+        gateScreen.style.visibility = 'visible';
+        gateScreen.style.pointerEvents = 'auto';
+        gateScreen.style.transition = `opacity ${GALLERY_CONSTANTS.backAnimationDurationMs}ms ease-out, transform ${GALLERY_CONSTANTS.backAnimationDurationMs}ms ease-out`;
+        gateScreen.style.transform = 'translateY(0)';
+        gateScreen.style.opacity = '1';
+      }
 
-    const startBtn = document.querySelector<HTMLButtonElement>('#start-btn');
-    if (startBtn) {
-      startBtn.disabled = false;
-      startBtn.textContent = 'Tap to start';
-    }
+      const startBtn = document.querySelector<HTMLButtonElement>('#start-btn');
+      if (startBtn) {
+        startBtn.disabled = false;
+        startBtn.textContent = 'Tap to start';
+      }
 
-    if (updateHash && window.location.hash === '#/load') {
-      window.location.hash = '#/';
+      if (updateHash && window.location.hash === '#/load') {
+        window.location.hash = '#/';
+      }
     }
     this.openerElement?.focus();
   }

@@ -981,12 +981,8 @@ export class LibraryModal {
   }
 
   private async openCreationAndClose(id: string, startPlaying: boolean) {
-    this.close();
-    const mainViewEl = document.querySelector<HTMLElement>('#main-view');
-    if (!mainViewEl || mainViewEl.style.display === 'none') {
-      events.emit('app:start', { startAudio: startPlaying });
-    }
-    await getCreationManager().openCreation(id, startPlaying);
+    this.close(false);
+    events.emit('studio:open', { creationId: id, autoplay: startPlaying });
   }
 
   private handleInlineRename(meta: CreationMeta) {
