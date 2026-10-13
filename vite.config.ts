@@ -24,6 +24,14 @@ export default defineConfig(({ command, mode }) => {
   };
 
   return {
+    server: {
+      host: true,
+      port: 5173,
+    },
+    preview: {
+      host: true,
+      port: 4173,
+    },
     plugins: [
       htmlSiteUrlPlugin,
       VitePWA({

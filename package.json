@@ -8,9 +8,9 @@
     "url": "https://github.com/SrujanJadav/Instruversal.git"
   },
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --host",
     "build": "tsc && vite build",
-    "preview": "vite preview",
+    "preview": "vite preview --host",
     "test": "vitest run"
   },
   "keywords": [
