@@ -5,6 +5,7 @@ import './styles/theme-toggle.css';
 import './styles/library.css';
 import './styles/gallery.css';
 import './styles/account.css';
+import './styles/studio.css';
 
 // MUST be first before any Tone.js module instantiates nodes
 import { initLowLatencyContext } from './audio/context';
@@ -84,6 +85,11 @@ app.innerHTML = `
         Load
       </button>
       <span class="load-count-badge" id="gate-load-count">0 saved</span>
+    </div>
+    <div class="gate-studio-container" id="gate-studio-container" style="margin-top: 6px;">
+      <a href="#/studio" class="gate-resume-link" id="gate-studio-btn" aria-label="Open Song Studio">
+        Open Studio
+      </a>
     </div>
     <div class="gate-resume-container" id="gate-resume-container" style="display: none;">
       <button class="gate-resume-link" id="gate-resume-btn" type="button" aria-label="Resume sketch">
@@ -596,6 +602,7 @@ export async function enterMainView(startAudio: boolean = true) {
   }
 
   updateCanvasKeyChip();
+  checkStudioReturnButton();
 
   currentActiveScreen = 'editor';
   if (window.location.hash !== '#/app') {
@@ -808,6 +815,106 @@ async function handlePublicSharedRoute(slug: string) {
   });
 }
 
+function checkStudioReturnButton() {
+  const returnSongId = sessionStorage.getItem('instruversal:studio_return_song_id');
+  const existingBtn = document.querySelector('#studio-return-floating-btn');
+  if (returnSongId) {
+    if (!existingBtn) {
+      const btn = document.createElement('button');
+      btn.id = 'studio-return-floating-btn';
+      btn.className = 'studio-btn studio-btn-primary';
+      btn.style.cssText =
+        'position: fixed; bottom: 84px; right: 20px; z-index: 60; box-shadow: 0 4px 12px rgba(28,26,22,0.25); border: 1.5px solid var(--paper);';
+      btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg><span>Back to song</span>`;
+      btn.addEventListener('click', async () => {
+        const assetId = sessionStorage.getItem('instruversal:studio_return_asset_id');
+        sessionStorage.removeItem('instruversal:studio_return_song_id');
+        sessionStorage.removeItem('instruversal:studio_return_asset_id');
+        btn.remove();
+
+        const { getSongStore } = await import('./song/store');
+        const songStore = getSongStore();
+        const song = await songStore.get(returnSongId);
+        if (song && assetId && song.assets[assetId]) {
+          const currentProj = creationManager.getCurrentCreation().project;
+          song.assets[assetId].project = JSON.parse(JSON.stringify(currentProj));
+          song.assets[assetId].sourceUpdatedAt = Date.now();
+          await songStore.save(song);
+        }
+        window.location.hash = `#/studio/${returnSongId}`;
+      });
+      document.body.appendChild(btn);
+    }
+  } else if (existingBtn) {
+    existingBtn.remove();
+  }
+}
+
+let currentStudioView: any = null;
+
+function cleanupStudioView() {
+  if (currentStudioView) {
+    currentStudioView.dispose();
+    currentStudioView.element.remove();
+    currentStudioView = null;
+  }
+}
+
+async function handleStudioRoute(hash: string) {
+  closeAllOpenSheets();
+  cleanupStudioView();
+
+  const mainView = document.querySelector<HTMLElement>('#main-view');
+  const gateScreen = document.querySelector<HTMLElement>('#gate-screen');
+  if (mainView) {
+    mainView.style.display = 'none';
+    mainView.setAttribute('aria-hidden', 'true');
+  }
+  if (gateScreen) {
+    gateScreen.style.display = 'none';
+    gateScreen.setAttribute('aria-hidden', 'true');
+  }
+
+  currentActiveScreen = 'studio' as any;
+
+  if (Tone.context.state !== 'running') {
+    try {
+      await Tone.start();
+      state.audioStarted = true;
+      events.emit('audio:started', undefined);
+    } catch {}
+  }
+
+  const { getSongStore } = await import('./song/store');
+  const { createSongFromCreation } = await import('./song/helpers');
+  const songStore = getSongStore();
+
+  const parts = hash.split('/');
+  const songId = parts[2];
+
+  let targetSong = null;
+  if (songId && songId !== 'new') {
+    targetSong = await songStore.get(songId);
+  }
+
+  if (!targetSong) {
+    const list = await songStore.list();
+    if (list.length > 0 && (!songId || songId !== 'new')) {
+      targetSong = await songStore.get(list[0].id);
+    } else {
+      const currentCreation = creationManager.getCurrentCreation();
+      targetSong = createSongFromCreation(currentCreation);
+      await songStore.save(targetSong);
+    }
+  }
+
+  if (targetSong) {
+    const { StudioView } = await import('./ui/studio/StudioView');
+    currentStudioView = new StudioView(targetSong);
+    app.appendChild(currentStudioView.element);
+  }
+}
+
 // Global hash router
 async function handleHashChange() {
   const hash = window.location.hash;
@@ -816,25 +923,31 @@ async function handleHashChange() {
     document.querySelector('#public-shared-banner')?.remove();
   }
 
-  if (hash === '#/' || hash === '' || hash === '#') {
-    if (currentActiveScreen === 'editor') {
-      await goHome();
-    } else {
-      closeAllOpenSheets();
-      showGateScreen();
+  if (hash.startsWith('#/studio')) {
+    await handleStudioRoute(hash);
+  } else {
+    cleanupStudioView();
+
+    if (hash === '#/' || hash === '' || hash === '#') {
+      if (currentActiveScreen === 'editor') {
+        await goHome();
+      } else {
+        closeAllOpenSheets();
+        showGateScreen();
+      }
+    } else if (hash === '#/app') {
+      if (currentActiveScreen !== 'editor') {
+        closeAllOpenSheets();
+        await enterMainView(false);
+      }
+    } else if (hash === '#/load') {
+      getGalleryModal().open();
+    } else if (hash === '#/library') {
+      getLibraryModal().open();
+    } else if (hash.startsWith('#/c/')) {
+      const slug = hash.slice(4).split('?')[0].trim();
+      await handlePublicSharedRoute(slug);
     }
-  } else if (hash === '#/app') {
-    if (currentActiveScreen !== 'editor') {
-      closeAllOpenSheets();
-      await enterMainView(false);
-    }
-  } else if (hash === '#/load') {
-    getGalleryModal().open();
-  } else if (hash === '#/library') {
-    getLibraryModal().open();
-  } else if (hash.startsWith('#/c/')) {
-    const slug = hash.slice(4).split('?')[0].trim();
-    await handlePublicSharedRoute(slug);
   }
 }
 
@@ -859,7 +972,9 @@ async function handleInitialRoute() {
   await updateGateLoadButton();
 
   const hash = window.location.hash;
-  if (hash.startsWith('#/c/')) {
+  if (hash.startsWith('#/studio')) {
+    await handleStudioRoute(hash);
+  } else if (hash.startsWith('#/c/')) {
     const slug = hash.slice(4).split('?')[0].trim();
     await handlePublicSharedRoute(slug);
   } else if (hash === '#/app') {

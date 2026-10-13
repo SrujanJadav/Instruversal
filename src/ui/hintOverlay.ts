@@ -93,6 +93,19 @@ export function showFirstRunHintOverlay(force = false): void {
           <li><kbd>Arrows</kbd><span>Nudge</span></li>
           <li><kbd>Esc</kbd><span>Closes sheets</span></li>
         </ul>
+        <div class="hint-shortcuts-header" style="margin-top: 8px;">
+          <span class="hint-section-title">Song Studio shortcuts</span>
+        </div>
+        <ul class="hint-shortcuts-list">
+          <li><kbd>Space</kbd><span>Play and pause</span></li>
+          <li><kbd>S</kbd><span>Split clip at playhead</span></li>
+          <li><kbd>Delete</kbd><span>Delete clip</span></li>
+          <li><kbd>Ctrl/Cmd+D</kbd><span>Duplicate clip</span></li>
+          <li><kbd>Arrows</kbd><span>Move by one bar</span></li>
+          <li><kbd>Shift+Arrows</kbd><span>Resize by one bar</span></li>
+          <li><kbd>+ / −</kbd><span>Zoom timeline</span></li>
+          <li><kbd>Esc</kbd><span>Deselect</span></li>
+        </ul>
       </div>
 
       <button type="button" class="hint-dismiss-btn" id="hint-got-it-btn">

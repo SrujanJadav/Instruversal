@@ -54,6 +54,17 @@ class CreationManager {
     return this.saveStatus;
   }
 
+  public getCurrentCreation(): Creation {
+    return {
+      id: this.currentId,
+      title: this.currentTitle,
+      createdAt: this.createdAt,
+      updatedAt: Date.now(),
+      schemaVersion: 2,
+      project: serializeProject(),
+    };
+  }
+
   public onStatusChange(fn: (status: SaveStatus) => void): () => void {
     this.statusListeners.add(fn);
     fn(this.saveStatus);

@@ -43,7 +43,7 @@ This document tracks progress across all steps of Instruversal, including founda
 | **4: Practice aids (drone, metronome, count-in)** | Editor features | Done | 2026-10-13 | `c4de17f` | Mixer sheet Practice section, sustained root+5th pad drone with key glide, Transport metronome, 1-bar count-in pre-roll with 1 2 3 4 overlay. |
 | **5: Resume link and keyboard shortcuts** | Editor features | Done | 2026-10-13 | `step-5` | Start page resume link (30m session / 24h fresh visit), desktop-only shortcuts list in ? sheet, full keyboard workflow with input guard. |
 | **6: Song data model, storage and database** | Song Studio | Done | 2026-10-13 | `feat: song data model, local and cloud storage` | Song data model, schema validator & migration, pure arrangement helpers, IndexedDB v2 & CloudSongStore, 002_songs.sql & 004_songs.sql, compact preview, privacy sheet update. |
-| **7: Studio screen: arrangement canvas** | Song Studio | Queued | - | - | Multi-lane timeline, drawing clips, clip inspector, picker sheet. |
+| **7: Studio screen: arrangement canvas** | Song Studio | Done | 2026-10-13 | `feat: song studio arrangement canvas and drawing import` | Multi-lane timeline, drawing clips with thumbnails, clip inspector, picker sheet with preview audition, list view, history. |
 | **8: Song playback engine** | Song Studio | Queued | - | - | Windowed scheduling, clip transposition, polyphony management. |
 | **9: Mix master** | Song Studio | Queued | - | - | Lane strips, master chain (EQ, compressor, limiter), level meters, presets. |
 | **10: Song export, sharing & Library** | Song Studio | Queued | - | - | Song WAV/MIDI export, Library songs tab, public song remix. |

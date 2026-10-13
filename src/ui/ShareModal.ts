@@ -133,6 +133,14 @@ class ShareModal {
           </div>
           <button type="button" class="auth-submit-btn" id="share-export-midi-btn" style="width: auto; padding: 6px 14px; font-size: 0.82rem; white-space: nowrap;">Export MIDI</button>
         </div>
+
+        <div class="share-export-row" style="margin-top: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; gap: var(--space-2);">
+          <div class="share-toggle-info">
+            <span class="share-toggle-label">Add to Song…</span>
+            <span class="share-toggle-sub">Arrange this sketch in the Song Studio timeline</span>
+          </div>
+          <button type="button" class="auth-submit-btn" id="share-add-to-song-btn" style="width: auto; padding: 6px 14px; font-size: 0.82rem; white-space: nowrap;">Add to song</button>
+        </div>
       </div>
     `;
 
@@ -143,6 +151,69 @@ class ShareModal {
     const toast = body.querySelector<HTMLElement>('#share-toast');
     const exportBtn = body.querySelector<HTMLButtonElement>('#share-export-audio-btn');
     const exportMidiBtn = body.querySelector<HTMLButtonElement>('#share-export-midi-btn');
+    const addToSongBtn = body.querySelector<HTMLButtonElement>('#share-add-to-song-btn');
+
+    addToSongBtn?.addEventListener('click', async () => {
+      if (!this.currentId) return;
+      const creationStore = getCreationStore();
+      const creation = await creationStore.get(this.currentId);
+      if (!creation) return;
+
+      const { getSongStore } = await import('../song/store');
+      const { createSongFromCreation, addAsset, findFreeSlot } = await import('../song/helpers');
+      const songStore = getSongStore();
+      const existingSongs = await songStore.list();
+
+      this.close();
+
+      if (existingSongs.length === 0) {
+        const newSong = createSongFromCreation(creation);
+        await songStore.save(newSong);
+        window.location.hash = `#/studio/${newSong.id}`;
+      } else {
+        const choice = window.prompt(
+          `Add "${creation.title}" to which song?\nType "new" for a New Song, or enter existing title:\nAvailable: ${existingSongs.map((s) => s.title).join(', ')}`,
+          'new'
+        );
+        if (!choice) return;
+
+        if (choice.trim().toLowerCase() === 'new') {
+          const newSong = createSongFromCreation(creation);
+          await songStore.save(newSong);
+          window.location.hash = `#/studio/${newSong.id}`;
+        } else {
+          const matched = existingSongs.find(
+            (s) => s.title.toLowerCase() === choice.trim().toLowerCase()
+          );
+          const targetSong = matched ? await songStore.get(matched.id) : null;
+          if (targetSong) {
+            const { song: withAsset, assetId } = addAsset(targetSong, creation);
+            const sketchBars = creation.project?.bars ?? 2;
+            const laneId = withAsset.lanes[0].id;
+            const startBar = findFreeSlot(withAsset.placements, laneId, withAsset.totalBars, sketchBars);
+            withAsset.placements.push({
+              id: `p-${Date.now()}`,
+              assetId,
+              laneId,
+              startBar,
+              lengthBars: sketchBars,
+              offsetBars: 0,
+              gainDb: 0,
+              transpose: 0,
+              fadeInBars: 0,
+              fadeOutBars: 0,
+              mute: false,
+            });
+            await songStore.save(withAsset);
+            window.location.hash = `#/studio/${withAsset.id}`;
+          } else {
+            const newSong = createSongFromCreation(creation);
+            await songStore.save(newSong);
+            window.location.hash = `#/studio/${newSong.id}`;
+          }
+        }
+      }
+    });
 
     exportBtn?.addEventListener('click', () => {
       const title = this.currentTitle;

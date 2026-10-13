@@ -26,6 +26,7 @@ export class LibraryModal {
   private activeMenuCardId: string | null = null;
   private confirmingDeleteId: string | null = null;
   private openerElement: HTMLElement | null = null;
+  private currentTab: 'sketches' | 'songs' = 'sketches';
 
   constructor() {
     this.overlay = document.createElement('div');
@@ -75,6 +76,11 @@ export class LibraryModal {
         </div>
 
         <div class="library-subbar">
+          <div class="library-tabs-group" role="tablist" aria-label="Library sections" style="display: flex; gap: 4px; margin-right: var(--space-2, 8px);">
+            <button type="button" class="library-sort-chip active" id="lib-tab-sketches" role="tab" aria-selected="true">Sketches</button>
+            <button type="button" class="library-sort-chip" id="lib-tab-songs" role="tab" aria-selected="false">Songs</button>
+          </div>
+
           <div class="library-search-wrapper">
             <span class="library-search-icon">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -214,10 +220,37 @@ export class LibraryModal {
       }
     });
 
+    // Tab switching
+    const sketchesTab = this.overlay.querySelector<HTMLButtonElement>('#lib-tab-sketches');
+    const songsTab = this.overlay.querySelector<HTMLButtonElement>('#lib-tab-songs');
+
+    sketchesTab?.addEventListener('click', () => {
+      this.currentTab = 'sketches';
+      sketchesTab.classList.add('active');
+      sketchesTab.setAttribute('aria-selected', 'true');
+      songsTab?.classList.remove('active');
+      songsTab?.setAttribute('aria-selected', 'false');
+      this.renderGrid();
+    });
+
+    songsTab?.addEventListener('click', () => {
+      this.currentTab = 'songs';
+      songsTab.classList.add('active');
+      songsTab.setAttribute('aria-selected', 'true');
+      sketchesTab?.classList.remove('active');
+      sketchesTab?.setAttribute('aria-selected', 'false');
+      this.renderSongsGrid();
+    });
+
     // New button
     this.overlay.querySelector('#lib-new-btn')?.addEventListener('click', async () => {
-      await getCreationManager().createNewCreation();
-      this.close();
+      if (this.currentTab === 'songs') {
+        this.close();
+        window.location.hash = '#/studio/new';
+      } else {
+        await getCreationManager().createNewCreation();
+        this.close();
+      }
     });
 
     // Empty state demo button
@@ -432,6 +465,66 @@ export class LibraryModal {
       return `<span class="card-sync-badge error" title="Couldn't sync, will retry">Couldn't sync</span>`;
     }
     return `<span class="card-sync-badge local" title="Saved on this device only">This device</span>`;
+  }
+
+  private async renderSongsGrid() {
+    const { getSongStore } = await import('../song/store');
+    const songStore = getSongStore();
+    const songs = await songStore.list();
+
+    this.countBadge.textContent = `${songs.length} saved`;
+
+    let items = [...songs];
+    if (this.searchQuery) {
+      items = items.filter((s) => s.title.toLowerCase().includes(this.searchQuery));
+    }
+    if (this.sortBy === 'alpha') {
+      items.sort((a, b) => a.title.localeCompare(b.title));
+    } else {
+      items.sort((a, b) => b.updatedAt - a.updatedAt);
+    }
+
+    if (items.length === 0) {
+      this.gridContainer.innerHTML = '';
+      this.emptyState.style.display = 'flex';
+      const emptyTitle = this.emptyState.querySelector('.library-empty-title');
+      const emptyDesc = this.emptyState.querySelector('.library-empty-desc');
+      if (emptyTitle) emptyTitle.textContent = 'No songs created yet';
+      if (emptyDesc) emptyDesc.textContent = 'Create a new song to arrange your sketches on a timeline.';
+      return;
+    }
+
+    this.emptyState.style.display = 'none';
+    this.gridContainer.innerHTML = '';
+
+    for (const song of items) {
+      const card = document.createElement('div');
+      card.className = 'library-card';
+      card.setAttribute('role', 'button');
+      card.setAttribute('tabindex', '0');
+      card.setAttribute('aria-label', `Open ${song.title} in Studio`);
+
+      card.innerHTML = `
+        <div class="card-thumbnail-box" style="display: flex; flex-direction: column; justify-content: center; align-items: center; background: var(--paper-deep); padding: 8px;">
+          <div style="font-family: var(--font-display, serif); font-size: 1.05rem; font-weight: 600; text-align: center; color: var(--ink); margin-bottom: 4px;">${song.title}</div>
+          <span style="font-family: var(--font-mono, monospace); font-size: 0.75rem; color: var(--ink-soft);">${song.totalBars} bars · ${song.lanesCount} lanes</span>
+        </div>
+        <div class="card-meta-row">
+          <span class="card-title" title="${song.title}">${song.title}</span>
+        </div>
+        <div class="card-info-row">
+          <span class="card-time">${this.formatRelativeTime(song.updatedAt)}</span>
+          <span class="card-badge">${song.bpm} BPM</span>
+        </div>
+      `;
+
+      card.addEventListener('click', () => {
+        this.close();
+        window.location.hash = `#/studio/${song.id}`;
+      });
+
+      this.gridContainer.appendChild(card);
+    }
   }
 
   private renderGrid() {
