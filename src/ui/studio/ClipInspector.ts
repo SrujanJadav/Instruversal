@@ -101,6 +101,25 @@ export class ClipInspector {
         <button type="button" class="studio-mini-btn" id="insp-rep-4">4×</button>
       </div>
 
+      <div style="margin-top: 10px;">
+        <div class="studio-field-label" style="margin-bottom: 4px;">Mute track colours</div>
+        <div class="studio-colors-picker" id="insp-color-chips">
+          ${(a.project?.tracks || [])
+            .map((t: any) => {
+              const isMuted = Array.isArray(p.mutedColors) && p.mutedColors.includes(t.id);
+              const swatchColor = t.colorHex || '#1C1A16';
+              return `
+                <button type="button" class="studio-color-chip ${isMuted ? 'muted' : 'active'}" data-track-id="${t.id}" title="${t.name}">
+                  <span class="studio-color-dot" style="background-color: ${swatchColor};"></span>
+                  <span class="studio-color-name">${t.name}</span>
+                  <span class="studio-color-badge">${isMuted ? 'Off' : 'On'}</span>
+                </button>
+              `;
+            })
+            .join('')}
+        </div>
+      </div>
+
       ${
         hasSourceUpdate
           ? `<button type="button" class="studio-btn" id="insp-update-orig-btn" style="color: var(--vermilion, #D2432A);">Update from original</button>`
@@ -182,6 +201,27 @@ export class ClipInspector {
     });
     this.element.querySelector('#insp-rep-4')?.addEventListener('click', () => {
       this.callbacks.onUpdatePlacement({ ...p, lengthBars: loopBars * 4 });
+    });
+
+    // Mute track colours toggles
+    this.element.querySelectorAll<HTMLButtonElement>('.studio-color-chip').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const trackId = btn.dataset.trackId;
+        if (!trackId) return;
+
+        const currentMuted = Array.isArray(p.mutedColors) ? [...p.mutedColors] : [];
+        let updatedMuted: string[];
+        if (currentMuted.includes(trackId)) {
+          updatedMuted = currentMuted.filter((id) => id !== trackId);
+        } else {
+          updatedMuted = [...currentMuted, trackId];
+        }
+
+        const updatedPlacement = { ...p, mutedColors: updatedMuted };
+        this.currentPlacement = updatedPlacement;
+        this.callbacks.onUpdatePlacement(updatedPlacement);
+        this.render();
+      });
     });
 
     this.element.querySelector('#insp-update-orig-btn')?.addEventListener('click', () => {

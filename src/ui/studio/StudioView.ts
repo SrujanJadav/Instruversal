@@ -1,4 +1,5 @@
-import { Song, SongPlacement, SongLane, SONG_LIMITS } from '../../song/types';
+import { Song, SongPlacement, SongLane, SongMasterSettings, SONG_LIMITS } from '../../song/types';
+import { autoBalanceSong } from '../../song/presets';
 import {
   hasPlacementOverlap,
   findFreeSlot,
@@ -13,6 +14,8 @@ import { ClipInspector } from './ClipInspector';
 import { DrawingPicker } from './DrawingPicker';
 import { ListView } from './ListView';
 import { StudioHistory } from './StudioHistory';
+import { MixerPanel } from './MixerPanel';
+import { FxPanel } from '../FxPanel';
 import { Creation } from '../../library/types';
 import { getCreationStore } from '../../library/store';
 import { SongPlaybackEngine } from '../../song/playbackEngine';
@@ -27,6 +30,8 @@ export class StudioView {
   private inspector: ClipInspector;
   private listView: ListView;
   private picker: DrawingPicker;
+  private mixerPanel: MixerPanel;
+  private fxPanel: FxPanel;
   private playbackEngine: SongPlaybackEngine;
   private currentPlayheadBar: number = 0;
   private isPlaying: boolean = false;
@@ -53,6 +58,7 @@ export class StudioView {
       onPlaybackStateChange: (isPlaying) => {
         this.isPlaying = isPlaying;
         this.header.updatePlayState(isPlaying);
+        this.mixerPanel?.onPlaybackChange(isPlaying);
       },
     });
 
@@ -74,6 +80,7 @@ export class StudioView {
       },
       onUndo: () => this.undo(),
       onRedo: () => this.redo(),
+      onMixToggle: () => this.toggleMixer(),
       onFollowToggle: (enabled) => {
         this.followPlayhead = enabled;
       },
@@ -147,9 +154,22 @@ export class StudioView {
       onClose: () => {},
     });
 
+    // Mixer Panel
+    this.mixerPanel = new MixerPanel(this.song, this.playbackEngine, {
+      onUpdateLane: (l) => this.handleUpdateLane(l),
+      onUpdateMaster: (m) => this.handleUpdateMaster(m),
+      onAutoBalance: () => this.handleAutoBalance(),
+      onOpenEffects: () => this.fxPanel.open(),
+      onClose: () => this.header.setMixActive(false),
+    });
+
+    // Fx Panel (Effects Rack)
+    this.fxPanel = new FxPanel(this.element);
+
     bodyEl.appendChild(this.timeline.element);
     bodyEl.appendChild(this.listView.element);
     bodyEl.appendChild(this.inspector.element);
+    bodyEl.appendChild(this.mixerPanel.element);
 
     this.element.appendChild(this.header.element);
     this.element.appendChild(hintBanner);
@@ -205,6 +225,7 @@ export class StudioView {
     this.song = updated;
     this.timeline.setSong(this.song);
     this.listView.render(this.song);
+    this.mixerPanel.setSong(this.song);
     this.playbackEngine.updateSong(this.song);
 
     if (pushHistory) {
@@ -442,7 +463,25 @@ export class StudioView {
     window.location.hash = '#/';
   }
 
+  private toggleMixer() {
+    this.mixerPanel.toggle();
+    this.header.setMixActive(this.mixerPanel['isOpen']);
+  }
+
+  private handleUpdateMaster(master: SongMasterSettings) {
+    this.updateSong({ ...this.song, master });
+  }
+
+  private handleAutoBalance() {
+    const { song: balanced, explanation } = autoBalanceSong(this.song);
+    this.updateSong(balanced);
+    this.header.setSaveStatus(explanation.slice(0, 28) + '…');
+    window.setTimeout(() => this.header.setSaveStatus('Saved'), 3000);
+  }
+
   public dispose() {
+    this.mixerPanel.dispose();
+    this.fxPanel.destroy();
     this.playbackEngine.dispose();
   }
 }

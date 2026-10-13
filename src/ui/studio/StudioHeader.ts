@@ -14,6 +14,7 @@ export interface StudioHeaderCallbacks {
   onRedo: () => void;
   onFollowToggle?: (enabled: boolean) => void;
   onMetronomeToggle?: () => void;
+  onMixToggle?: () => void;
 }
 
 export class StudioHeader {
@@ -77,6 +78,11 @@ export class StudioHeader {
           <span>Add drawing</span>
         </button>
 
+        <button type="button" class="studio-btn" id="studio-mix-btn" title="Toggle mixer panel" aria-label="Toggle mixer panel">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
+          <span>Mix</span>
+        </button>
+
         <button type="button" class="studio-btn" id="studio-view-toggle-btn" aria-label="Toggle between timeline and list view">
           <span>List</span>
         </button>
@@ -137,6 +143,10 @@ export class StudioHeader {
 
     this.element.querySelector('#studio-zoom-in')?.addEventListener('click', () => {
       this.callbacks.onZoomIn();
+    });
+
+    this.element.querySelector('#studio-mix-btn')?.addEventListener('click', () => {
+      this.callbacks.onMixToggle?.();
     });
 
     this.element.querySelector('#studio-add-drawing-btn')?.addEventListener('click', () => {
@@ -207,5 +217,18 @@ export class StudioHeader {
 
   public setSaveStatus(status: string) {
     this.saveStatusEl.textContent = status;
+  }
+
+  public setMixActive(active: boolean) {
+    const btn = this.element.querySelector('#studio-mix-btn');
+    if (btn) {
+      if (active) {
+        btn.classList.add('active');
+        btn.setAttribute('aria-pressed', 'true');
+      } else {
+        btn.classList.remove('active');
+        btn.setAttribute('aria-pressed', 'false');
+      }
+    }
   }
 }

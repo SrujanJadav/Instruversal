@@ -9,9 +9,9 @@ import { INSTRUMENTS_MAP, InstrumentInstance } from '../audio/instruments';
 import { DrumKitInstance, DrumKitId } from '../audio/drums';
 import { getFlowVoicePool } from '../audio/voicePool';
 import { getBeatFlowVoicePool } from '../audio/beatFlowVoices';
-import { getMasterEffectsRack } from '../audio/effects';
 import { getTotalAudioLatencySeconds } from '../audio/context';
 import { state, events, POLYPHONY_VOICE_COUNTS } from '../state';
+import { SongMasterChain, MasterMeterLevel } from './masterChain';
 
 export interface SongPlaybackEngineCallbacks {
   onPlayheadTick?: (bar: number, beat: number, totalSeconds: number, currentBarFloat?: number) => void;
@@ -25,13 +25,23 @@ interface CachedInstrument {
   lastUsed: number;
 }
 
+interface LaneAudioNode {
+  channel: Tone.Channel;
+  reverbSend: Tone.Gain;
+  delaySend: Tone.Gain;
+  meter: Tone.Meter;
+}
+
 export class SongPlaybackEngine {
   private song: Song;
   private callbacks: SongPlaybackEngineCallbacks;
   private schedule: CompiledSongSchedule;
 
-  // Lane channels (up to 6) connected to master effects rack
-  private laneChannels: Map<string, Tone.Gain> = new Map();
+  // Master Chain (Bus -> Effects -> EQ -> Comp -> MasterGain -> Limiter -> Meter)
+  public masterChain: SongMasterChain;
+
+  // Lane audio nodes (Tone.Channel, Reverb Send, Delay Send, Meter)
+  private laneAudioNodes: Map<string, LaneAudioNode> = new Map();
 
   // Lazy instrument cache (capped at 12 active instances)
   private instrumentCache: Map<string, CachedInstrument> = new Map();
@@ -49,6 +59,11 @@ export class SongPlaybackEngine {
     this.callbacks = callbacks;
     this.schedule = buildSongSchedule(song);
 
+    try {
+      this.masterChain = new SongMasterChain(this.song.master);
+    } catch {
+      this.masterChain = {} as any;
+    }
     this.initLanes();
     this.setupTransportSettings();
     this.updatePolyphonyCap();
@@ -56,19 +71,61 @@ export class SongPlaybackEngine {
 
   private initLanes() {
     try {
-      const effectsRack = getMasterEffectsRack();
       for (const lane of this.song.lanes) {
-        if (!this.laneChannels.has(lane.id)) {
-          const gainNode = new Tone.Gain(Math.pow(10, (lane.volumeDb || 0) / 20));
-          if (effectsRack && effectsRack.input) {
-            gainNode.connect(effectsRack.input);
-          }
-          this.laneChannels.set(lane.id, gainNode);
+        if (!this.laneAudioNodes.has(lane.id)) {
+          const channel = new Tone.Channel({
+            volume: lane.volumeDb ?? 0,
+            pan: lane.pan ?? 0,
+            mute: lane.mute ?? false,
+            solo: lane.solo ?? false,
+          });
+
+          const reverbSend = new Tone.Gain(lane.sendReverb ?? 0);
+          const delaySend = new Tone.Gain(lane.sendDelay ?? 0);
+          const meter = new Tone.Meter({ smoothing: 0.8 });
+
+          channel.connect(this.masterChain.songBus);
+
+          channel.connect(reverbSend);
+          reverbSend.connect(this.masterChain.reverbSend);
+
+          channel.connect(delaySend);
+          delaySend.connect(this.masterChain.delaySend);
+
+          channel.connect(meter);
+
+          this.laneAudioNodes.set(lane.id, {
+            channel,
+            reverbSend,
+            delaySend,
+            meter,
+          });
         }
       }
     } catch {
       // Non-audio test environment fallback
     }
+  }
+
+  public getLaneChannel(laneId: string): Tone.ToneAudioNode {
+    const node = this.laneAudioNodes.get(laneId);
+    return node ? node.channel : Tone.getDestination();
+  }
+
+  public getLaneMeterLevel(laneId: string): number {
+    const node = this.laneAudioNodes.get(laneId);
+    if (!node) return -90;
+    try {
+      const val = node.meter.getValue();
+      const db = Array.isArray(val) ? Math.max(...val) : val;
+      return isNaN(db) || db < -90 ? -90 : db;
+    } catch {
+      return -90;
+    }
+  }
+
+  public getMasterMeterLevel(): MasterMeterLevel {
+    return this.masterChain.getMeterLevel();
   }
 
   private setupTransportSettings() {
@@ -123,7 +180,7 @@ export class SongPlaybackEngine {
 
     this.pruneInstrumentCache();
 
-    const laneChannel = this.laneChannels.get(laneId) || Tone.getDestination();
+    const laneChannel = this.getLaneChannel(laneId);
     const instance = meta.create();
     instance.output.connect(laneChannel);
 
@@ -150,7 +207,7 @@ export class SongPlaybackEngine {
 
     this.pruneInstrumentCache();
 
-    const laneChannel = this.laneChannels.get(laneId) || Tone.getDestination();
+    const laneChannel = this.getLaneChannel(laneId);
     const kit = new DrumKitInstance(kitId);
     kit.output.connect(laneChannel);
 
@@ -191,7 +248,7 @@ export class SongPlaybackEngine {
 
     const flowVoicePool = getFlowVoicePool();
     const beatFlowVoicePool = getBeatFlowVoicePool();
-    const laneChannel = this.laneChannels.get(placement.laneId) || Tone.getDestination();
+    const laneChannel = this.getLaneChannel(placement.laneId);
 
     try {
       const part = new Tone.Part((time, ev: any) => {
@@ -450,11 +507,22 @@ export class SongPlaybackEngine {
     this.setupTransportSettings();
     this.schedule = buildSongSchedule(this.song);
 
-    // Update lane volume gains
+    // Update master chain
+    this.masterChain.updateSettings(this.song.master);
+
+    // Update lane audio nodes
+    const anySolo = this.song.lanes.some((l) => l.solo);
     for (const lane of this.song.lanes) {
-      const channel = this.laneChannels.get(lane.id);
-      if (channel) {
-        channel.gain.rampTo(Math.pow(10, (lane.volumeDb || 0) / 20), 0.05);
+      const node = this.laneAudioNodes.get(lane.id);
+      if (node) {
+        node.channel.volume.rampTo(lane.volumeDb ?? 0, 0.05);
+        node.channel.pan.rampTo(lane.pan ?? 0, 0.05);
+        node.reverbSend.gain.rampTo(lane.sendReverb ?? 0, 0.05);
+        node.delaySend.gain.rampTo(lane.sendDelay ?? 0, 0.05);
+
+        const shouldMute = anySolo ? !lane.solo : lane.mute;
+        node.channel.mute = shouldMute;
+        node.channel.solo = lane.solo;
       }
     }
 
@@ -493,10 +561,17 @@ export class SongPlaybackEngine {
     }
     this.instrumentCache.clear();
 
-    for (const channel of this.laneChannels.values()) {
-      channel.dispose();
+    this.masterChain.dispose();
+
+    for (const node of this.laneAudioNodes.values()) {
+      try {
+        node.channel.dispose();
+        node.reverbSend.dispose();
+        node.delaySend.dispose();
+        node.meter.dispose();
+      } catch {}
     }
-    this.laneChannels.clear();
+    this.laneAudioNodes.clear();
 
     // Restore Transport settings for single-drawing canvas editor
     try {

@@ -117,6 +117,7 @@ class BypassStage {
 export class MasterEffectsRack {
   public masterGain: Tone.Gain;
   public limiter: Tone.Limiter;
+  public effectsOutput: Tone.Gain;
 
   // The 7 effects
   private driveDistortion: Tone.Distortion;
@@ -238,13 +239,30 @@ export class MasterEffectsRack {
     this.stageChorus.output.connect(this.stagePhaser.input);
     this.stagePhaser.output.connect(this.stageTremolo.input);
     this.stageTremolo.output.connect(this.stageDelay.input);
-    this.stageDelay.output.connect(this.stageReverb.input);
-    this.stageReverb.output.connect(this.limiter);
+    this.effectsOutput = new Tone.Gain(1);
+    this.stageReverb.output.connect(this.effectsOutput);
+    this.effectsOutput.connect(this.limiter);
     this.limiter.toDestination();
 
     // Load saved settings if present
     this.loadPersistedConfig();
     this.applyConfig(state.fx);
+  }
+
+  public insertProcessing(nodeIn: Tone.ToneAudioNode, nodeOut: Tone.ToneAudioNode) {
+    try {
+      this.effectsOutput.disconnect(this.limiter);
+      this.effectsOutput.connect(nodeIn);
+      nodeOut.connect(this.limiter);
+    } catch {}
+  }
+
+  public removeProcessing(nodeIn: Tone.ToneAudioNode, nodeOut: Tone.ToneAudioNode) {
+    try {
+      this.effectsOutput.disconnect(nodeIn);
+      nodeOut.disconnect(this.limiter);
+      this.effectsOutput.connect(this.limiter);
+    } catch {}
   }
 
   public get input(): Tone.ToneAudioNode {
@@ -355,6 +373,7 @@ export class MasterEffectsRack {
       window.clearTimeout(this.reverbDebounceTimer);
     }
     this.masterGain.dispose();
+    this.effectsOutput.dispose();
     this.limiter.dispose();
     this.stageDrive.dispose();
     this.driveFilter.dispose();
