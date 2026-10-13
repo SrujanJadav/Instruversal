@@ -214,14 +214,27 @@ async function updateGateLoadButton() {
       gateLoadGroup.style.display = 'none';
     }
 
-    const summaries: CreationSummary[] = list.map((c) => ({
-      id: c.id,
-      title: c.title,
-      updatedAt: c.updatedAt,
-      strokesCount: c.strokeCount,
-    }));
+    const { getSongStore } = await import('./song/store');
+    const songStore = getSongStore();
+    const songList = await songStore.list();
 
-    activeResumeTarget = resolveActiveResumeTarget(summaries, isFreshVisit);
+    const summaries: (CreationSummary & { isSong?: boolean })[] = [
+      ...list.map((c) => ({
+        id: c.id,
+        title: c.title,
+        updatedAt: c.updatedAt,
+        strokesCount: c.strokeCount,
+      })),
+      ...songList.map((s) => ({
+        id: s.id,
+        title: s.title,
+        updatedAt: s.updatedAt,
+        strokesCount: s.placementsCount,
+        isSong: true,
+      })),
+    ];
+
+    activeResumeTarget = resolveActiveResumeTarget(summaries as any, isFreshVisit);
     if (activeResumeTarget) {
       gateResumeContainer.style.display = 'flex';
       gateResumeTitle.textContent = activeResumeTarget.title;
@@ -415,6 +428,7 @@ gateLoadBtn.addEventListener('click', async () => {
 gateResumeBtn.addEventListener('click', async () => {
   if (!activeResumeTarget) return;
   const targetId = activeResumeTarget.id;
+  const isSong = (activeResumeTarget as any).isSong;
 
   // Unlock audio within the user tap gesture
   if (Tone.context.state !== 'running') {
@@ -423,6 +437,11 @@ gateResumeBtn.addEventListener('click', async () => {
       state.audioStarted = true;
       events.emit('audio:started', undefined);
     } catch {}
+  }
+
+  if (isSong) {
+    window.location.hash = `#/studio/${targetId}`;
+    return;
   }
 
   try {
@@ -933,6 +952,41 @@ async function handleStudioRoute(hash: string) {
   }
 }
 
+let currentPublicSongView: any = null;
+
+function cleanupPublicSongView() {
+  if (currentPublicSongView) {
+    currentPublicSongView.dispose();
+    currentPublicSongView = null;
+  }
+}
+
+async function handlePublicSongRoute(slug: string) {
+  try {
+    closeAllOpenSheets();
+    cleanupStudioView();
+    cleanupPublicSongView();
+
+    const mainView = document.querySelector<HTMLElement>('#main-view');
+    const gateScreen = document.querySelector<HTMLElement>('#gate-screen');
+    if (mainView) {
+      mainView.style.display = 'none';
+      mainView.setAttribute('aria-hidden', 'true');
+    }
+    if (gateScreen) {
+      gateScreen.style.display = 'none';
+      gateScreen.setAttribute('aria-hidden', 'true');
+    }
+
+    currentActiveScreen = 'publicSong' as any;
+    const { PublicSongView } = await import('./ui/PublicSongView');
+    currentPublicSongView = new PublicSongView(slug);
+    app.appendChild(currentPublicSongView.element);
+  } catch (err) {
+    console.error('Failed to open public song view:', err);
+  }
+}
+
 // Global hash router
 async function handleHashChange() {
   const hash = window.location.hash;
@@ -940,11 +994,18 @@ async function handleHashChange() {
   if (!hash.startsWith('#/c/')) {
     document.querySelector('#public-shared-banner')?.remove();
   }
+  if (!hash.startsWith('#/s/')) {
+    cleanupPublicSongView();
+  }
 
   if (hash.startsWith('#/studio')) {
     await handleStudioRoute(hash);
+  } else if (hash.startsWith('#/s/')) {
+    const slug = hash.slice(4).split('?')[0].trim();
+    await handlePublicSongRoute(slug);
   } else {
     cleanupStudioView();
+    cleanupPublicSongView();
 
     if (hash === '#/' || hash === '' || hash === '#') {
       if (currentActiveScreen === 'editor') {

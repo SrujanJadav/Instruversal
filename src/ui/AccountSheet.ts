@@ -272,9 +272,10 @@ export class AccountSheet {
         </header>
 
         <p class="account-desc"><strong>What we store:</strong> Your email address (to identify your account) and the musical sketches and songs you choose to sync.</p>
+        <p class="account-desc"><strong>Public sharing:</strong> If you explicitly share a sketch or song, anyone with its link can listen. Private creations and songs remain strictly accessible only to your account and never appear publicly.</p>
         <p class="account-desc"><strong>What we never do:</strong> We do not sell your personal data, track your activity across websites, or serve ads.</p>
         <p class="account-desc"><strong>How to delete:</strong> You can delete all your creations and songs anytime from the Account sheet, or request full account deletion.</p>
-        <p class="account-desc" style="font-size: 0.8rem; color: var(--ink-soft);">Guest mode requires no email and stores all sketches and songs purely within your browser storage.</p>
+        <p class="account-desc" style="font-size: 0.8rem; color: var(--ink-soft);">Guest mode requires no email and stores all sketches and songs purely within your local browser storage.</p>
 
         <button type="button" class="account-btn account-btn-primary" id="privacy-done-btn">Done</button>
       </div>

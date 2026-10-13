@@ -19,12 +19,18 @@ export interface MidiTrackInput {
   notes: MidiNote[];
 }
 
+export interface MidiMarker {
+  text: string;
+  tick: number;
+}
+
 export interface MidiSongInput {
   title: string;
   bpm: number;
   ticksPerQuarter?: number; // default 480
   timeSignature?: [number, number]; // default [4, 4]
   keySignature?: { sf: number; mi: number }; // sf: -7..7, mi: 0=major, 1=minor
+  markers?: MidiMarker[];
   tracks: MidiTrackInput[];
 }
 
@@ -101,7 +107,20 @@ export function buildConductorTrack(song: MidiSongInput): number[] {
     trackBytes.push(0x00, 0xff, 0x59, 0x02, sfByte, (mi ? 1 : 0));
   }
 
-  // 5. Delta 0: End of Track (Meta 0x2F 0x00)
+  // 5. Song Markers (Meta 0x06: Marker)
+  if (song.markers && song.markers.length > 0) {
+    const sortedMarkers = [...song.markers].sort((a, b) => a.tick - b.tick);
+    let currentTick = 0;
+    for (const marker of sortedMarkers) {
+      const markerTick = Math.max(0, Math.round(marker.tick));
+      const delta = Math.max(0, markerTick - currentTick);
+      currentTick = markerTick;
+      const textBytes = encodeString(marker.text || 'Marker');
+      trackBytes.push(...encodeVlq(delta), 0xff, 0x06, ...encodeVlq(textBytes.length), ...textBytes);
+    }
+  }
+
+  // 6. End of Track (Meta 0x2F 0x00)
   trackBytes.push(0x00, 0xff, 0x2f, 0x00);
 
   // Package into MTrk chunk

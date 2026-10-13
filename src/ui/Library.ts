@@ -7,6 +7,9 @@ import { getCurrentUser, onAuthStateChange } from '../auth/auth';
 import { getAccountSheet } from './AccountSheet';
 import { getShareModal } from './ShareModal';
 import { getExportModal } from './ExportModal';
+import { renderSongTimelineThumbnailSvg } from '../song/preview';
+import { SongMeta } from '../song/store';
+import { Song } from '../song/types';
 
 export class LibraryModal {
   private overlay: HTMLElement;
@@ -23,8 +26,11 @@ export class LibraryModal {
   private sortBy: 'recent' | 'alpha' = 'recent';
   private isOpen: boolean = false;
   private pendingDeletions: Map<string, { timer: number; meta: CreationMeta; creation?: Creation }> = new Map();
+  private pendingSongDeletions: Map<string, { timer: number; meta: SongMeta; song?: Song }> = new Map();
   private activeMenuCardId: string | null = null;
+  private activeSongMenuCardId: string | null = null;
   private confirmingDeleteId: string | null = null;
+  private confirmingSongDeleteId: string | null = null;
   private openerElement: HTMLElement | null = null;
   private currentTab: 'sketches' | 'songs' = 'sketches';
 
@@ -292,7 +298,7 @@ export class LibraryModal {
     // Search input
     this.searchInput.addEventListener('input', () => {
       this.searchQuery = this.searchInput.value.trim().toLowerCase();
-      this.renderGrid();
+      this.renderCurrentTab();
     });
 
     // Sort toggles
@@ -303,7 +309,7 @@ export class LibraryModal {
         this.sortToggleRecent.setAttribute('aria-checked', 'true');
         this.sortToggleAlpha.classList.remove('active');
         this.sortToggleAlpha.setAttribute('aria-checked', 'false');
-        this.renderGrid();
+        this.renderCurrentTab();
       }
     });
 
@@ -314,7 +320,7 @@ export class LibraryModal {
         this.sortToggleAlpha.setAttribute('aria-checked', 'true');
         this.sortToggleRecent.classList.remove('active');
         this.sortToggleRecent.setAttribute('aria-checked', 'false');
-        this.renderGrid();
+        this.renderCurrentTab();
       }
     });
 
@@ -472,9 +478,9 @@ export class LibraryModal {
     const songStore = getSongStore();
     const songs = await songStore.list();
 
-    this.countBadge.textContent = `${songs.length} saved`;
+    let items = songs.filter((s) => !this.pendingSongDeletions.has(s.id));
+    this.countBadge.textContent = `${items.length} saved`;
 
-    let items = [...songs];
     if (this.searchQuery) {
       items = items.filter((s) => s.title.toLowerCase().includes(this.searchQuery));
     }
@@ -503,27 +509,244 @@ export class LibraryModal {
       card.setAttribute('role', 'button');
       card.setAttribute('tabindex', '0');
       card.setAttribute('aria-label', `Open ${song.title} in Studio`);
+      card.dataset.songId = song.id;
+
+      const isMenuOpen = this.activeSongMenuCardId === song.id;
+      const isConfirmingDelete = this.confirmingSongDeleteId === song.id;
+
+      const durationSec = Math.round((song.totalBars || 16) * 4 * (60 / (song.bpm || 90)));
+      const mins = Math.floor(durationSec / 60);
+      const secs = durationSec % 60;
+      const lengthLabel = `${song.totalBars} bars · ${mins}:${secs < 10 ? '0' : ''}${secs}`;
 
       card.innerHTML = `
-        <div class="card-thumbnail-box" style="display: flex; flex-direction: column; justify-content: center; align-items: center; background: var(--paper-deep); padding: 8px;">
-          <div style="font-family: var(--font-display, serif); font-size: 1.05rem; font-weight: 600; text-align: center; color: var(--ink); margin-bottom: 4px;">${song.title}</div>
-          <span style="font-family: var(--font-mono, monospace); font-size: 0.75rem; color: var(--ink-soft);">${song.totalBars} bars · ${song.lanesCount} lanes</span>
+        <div class="card-thumbnail-box">
+          ${renderSongTimelineThumbnailSvg(song.preview)}
+          <button type="button" class="card-play-btn" data-open-song-id="${song.id}" aria-label="Open ${song.title} in Studio">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 3 20 12 6 21 6 3"/></svg>
+          </button>
         </div>
-        <div class="card-meta-row">
-          <span class="card-title" title="${song.title}">${song.title}</span>
+
+        <div class="card-info">
+          <div class="card-title-row">
+            <h3 class="card-title"></h3>
+            <button type="button" class="card-menu-btn" data-song-menu-id="${song.id}" aria-label="Song options" tabindex="0">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
+            </button>
+          </div>
+
+          <div class="card-meta-row">
+            <span class="card-date">${this.formatRelativeTime(song.updatedAt)}</span>
+            ${this.renderSyncBadge(song as any)}
+          </div>
+
+          <div class="card-tags">
+            <span class="card-tag">${lengthLabel}</span>
+            <span class="card-tag">${song.bpm} BPM</span>
+            <span class="card-tag">${song.lanesCount} lane${song.lanesCount === 1 ? '' : 's'}</span>
+          </div>
         </div>
-        <div class="card-info-row">
-          <span class="card-time">${this.formatRelativeTime(song.updatedAt)}</span>
-          <span class="card-badge">${song.bpm} BPM</span>
-        </div>
+
+        ${
+          isMenuOpen
+            ? `
+          <div class="card-inline-menu" role="menu">
+            <button type="button" class="card-inline-menu-item" data-action="open-studio" data-id="${song.id}">Open in Studio</button>
+            <button type="button" class="card-inline-menu-item" data-action="rename-song" data-id="${song.id}">Rename</button>
+            <button type="button" class="card-inline-menu-item" data-action="duplicate-song" data-id="${song.id}">Duplicate</button>
+            <button type="button" class="card-inline-menu-item" data-action="share-song" data-id="${song.id}">Share link</button>
+            <button type="button" class="card-inline-menu-item danger" data-action="delete-song" data-id="${song.id}">Delete</button>
+          </div>
+        `
+            : ''
+        }
+
+        ${
+          isConfirmingDelete
+            ? `
+          <div class="card-confirm-delete">
+            <span>Sure?</span>
+            <div class="card-confirm-actions">
+              <button type="button" class="card-confirm-btn yes" data-song-confirm-yes="${song.id}">Yes</button>
+              <button type="button" class="card-confirm-btn" data-song-confirm-no="${song.id}">No</button>
+            </div>
+          </div>
+        `
+            : ''
+        }
       `;
 
-      card.addEventListener('click', () => {
+      const titleEl = card.querySelector<HTMLElement>('.card-title')!;
+      titleEl.textContent = song.title;
+
+      // Card click opens studio
+      card.addEventListener('click', (e) => {
+        const target = e.target as HTMLElement;
+        if (
+          target.closest('.card-play-btn') ||
+          target.closest('.card-menu-btn') ||
+          target.closest('.card-inline-menu') ||
+          target.closest('.card-confirm-delete')
+        ) {
+          return;
+        }
         this.close();
         window.location.hash = `#/studio/${song.id}`;
       });
 
+      // Card play button
+      card.querySelector('[data-open-song-id]')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.close();
+        window.location.hash = `#/studio/${song.id}`;
+      });
+
+      // Menu button
+      card.querySelector('[data-song-menu-id]')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.confirmingSongDeleteId = null;
+        this.activeSongMenuCardId = this.activeSongMenuCardId === song.id ? null : song.id;
+        this.renderSongsGrid();
+      });
+
+      if (isMenuOpen) {
+        card.querySelector('[data-action="open-studio"]')?.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.close();
+          window.location.hash = `#/studio/${song.id}`;
+        });
+
+        card.querySelector('[data-action="rename-song"]')?.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          this.activeSongMenuCardId = null;
+          await this.handleSongRename(song);
+        });
+
+        card.querySelector('[data-action="duplicate-song"]')?.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          this.activeSongMenuCardId = null;
+          await this.duplicateSong(song.id);
+        });
+
+        card.querySelector('[data-action="share-song"]')?.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.activeSongMenuCardId = null;
+          this.renderSongsGrid();
+          getShareModal().open(song.id, song.title, song.isPublic, song.publicSlug, 'song');
+        });
+
+        card.querySelector('[data-action="delete-song"]')?.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.activeSongMenuCardId = null;
+          this.confirmingSongDeleteId = song.id;
+          this.renderSongsGrid();
+        });
+      }
+
+      if (isConfirmingDelete) {
+        card.querySelector('[data-song-confirm-yes]')?.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.confirmingSongDeleteId = null;
+          this.initiateSongSoftDelete(song);
+        });
+
+        card.querySelector('[data-song-confirm-no]')?.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.confirmingSongDeleteId = null;
+          this.renderSongsGrid();
+        });
+      }
+
       this.gridContainer.appendChild(card);
+    }
+  }
+
+  private async handleSongRename(meta: SongMeta) {
+    const newTitle = window.prompt('Rename song:', meta.title);
+    if (!newTitle || newTitle.trim() === '' || newTitle.trim() === meta.title) return;
+    const { getSongStore } = await import('../song/store');
+    const store = getSongStore();
+    const fullSong = await store.get(meta.id);
+    if (fullSong) {
+      fullSong.title = newTitle.trim().slice(0, 80);
+      fullSong.updatedAt = Date.now();
+      await store.save(fullSong);
+      await this.renderSongsGrid();
+    }
+  }
+
+  private async duplicateSong(id: string) {
+    const { getSongStore } = await import('../song/store');
+    const store = getSongStore();
+    const orig = await store.get(id);
+    if (!orig) return;
+
+    const newSong: Song = {
+      ...JSON.parse(JSON.stringify(orig)),
+      id: `song-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      title: `${orig.title} (copy)`.slice(0, 80),
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      isPublic: false,
+      publicSlug: null,
+    };
+    await store.save(newSong);
+    await this.renderSongsGrid();
+  }
+
+  private async initiateSongSoftDelete(meta: SongMeta) {
+    const { getSongStore } = await import('../song/store');
+    const store = getSongStore();
+
+    store.get(meta.id).then((fullSong) => {
+      const timer = window.setTimeout(async () => {
+        this.pendingSongDeletions.delete(meta.id);
+        await store.remove(meta.id);
+        await this.renderSongsGrid();
+      }, 6000);
+
+      this.pendingSongDeletions.set(meta.id, {
+        timer,
+        meta,
+        song: fullSong || undefined,
+      });
+
+      this.renderSongsGrid();
+      this.showSongUndoToast(meta.id, meta.title);
+    });
+  }
+
+  private showSongUndoToast(id: string, title: string) {
+    this.toastContainer.innerHTML = `
+      <div class="library-toast">
+        <span>Deleted "${title.slice(0, 20)}".</span>
+        <button type="button" class="library-toast-undo-btn" id="lib-undo-song-btn">Undo</button>
+      </div>
+    `;
+
+    const undoBtn = this.toastContainer.querySelector('#lib-undo-song-btn')!;
+    undoBtn.addEventListener('click', () => {
+      const pending = this.pendingSongDeletions.get(id);
+      if (pending) {
+        window.clearTimeout(pending.timer);
+        this.pendingSongDeletions.delete(id);
+        this.toastContainer.innerHTML = '';
+        this.renderSongsGrid();
+      }
+    });
+
+    window.setTimeout(() => {
+      if (this.toastContainer.querySelector('#lib-undo-song-btn') === undoBtn) {
+        this.toastContainer.innerHTML = '';
+      }
+    }, 6000);
+  }
+
+  private renderCurrentTab() {
+    if (this.currentTab === 'songs') {
+      this.renderSongsGrid();
+    } else {
+      this.renderGrid();
     }
   }
 

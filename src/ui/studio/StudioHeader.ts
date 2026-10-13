@@ -15,6 +15,8 @@ export interface StudioHeaderCallbacks {
   onFollowToggle?: (enabled: boolean) => void;
   onMetronomeToggle?: () => void;
   onMixToggle?: () => void;
+  onExport?: () => void;
+  onShare?: () => void;
 }
 
 export class StudioHeader {
@@ -83,6 +85,16 @@ export class StudioHeader {
           <span>Mix</span>
         </button>
 
+        <button type="button" class="studio-btn" id="studio-export-btn" title="Export song audio or MIDI" aria-label="Export song audio or MIDI">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          <span>Export</span>
+        </button>
+
+        <button type="button" class="studio-btn" id="studio-share-btn" title="Share song link" aria-label="Share song link">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+          <span>Share</span>
+        </button>
+
         <button type="button" class="studio-btn" id="studio-view-toggle-btn" aria-label="Toggle between timeline and list view">
           <span>List</span>
         </button>
@@ -147,6 +159,14 @@ export class StudioHeader {
 
     this.element.querySelector('#studio-mix-btn')?.addEventListener('click', () => {
       this.callbacks.onMixToggle?.();
+    });
+
+    this.element.querySelector('#studio-export-btn')?.addEventListener('click', () => {
+      this.callbacks.onExport?.();
+    });
+
+    this.element.querySelector('#studio-share-btn')?.addEventListener('click', () => {
+      this.callbacks.onShare?.();
     });
 
     this.element.querySelector('#studio-add-drawing-btn')?.addEventListener('click', () => {

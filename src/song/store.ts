@@ -100,6 +100,26 @@ export class MemorySongStore implements SongStore {
       .map((v) => JSON.parse(JSON.stringify(v.song)))
       .sort((a, b) => b.updatedAt - a.updatedAt);
   }
+
+  async setPublic(id: string, isPublic: boolean): Promise<string | null> {
+    const item = this.items.get(id);
+    if (!item) return null;
+    const publicSlug = isPublic ? (item.song.publicSlug || Math.random().toString(36).substring(2, 10)) : null;
+    item.song.isPublic = isPublic;
+    item.song.publicSlug = publicSlug;
+    item.meta.isPublic = isPublic;
+    item.meta.publicSlug = publicSlug;
+    return publicSlug;
+  }
+
+  async getPublicSong(slug: string): Promise<Song | null> {
+    for (const item of this.items.values()) {
+      if (item.song.isPublic && item.song.publicSlug === slug) {
+        return JSON.parse(JSON.stringify(item.song));
+      }
+    }
+    return null;
+  }
 }
 
 export class LocalSongStore implements SongStore {
@@ -310,6 +330,62 @@ export class LocalSongStore implements SongStore {
     } catch {
       return this.memoryFallback ? this.memoryFallback.getAllFull() : [];
     }
+  }
+
+  async setPublic(id: string, isPublic: boolean): Promise<string | null> {
+    const song = await this.get(id);
+    if (!song) return null;
+    const publicSlug = isPublic ? (song.publicSlug || Math.random().toString(36).substring(2, 10)) : null;
+    song.isPublic = isPublic;
+    song.publicSlug = publicSlug;
+    await this.save(song);
+
+    // Sync to Supabase if authenticated
+    try {
+      const { getSupabase, getCurrentUser } = await import('../auth/auth');
+      const supabase = getSupabase();
+      const user = getCurrentUser();
+      if (supabase && user) {
+        await supabase
+          .from('songs')
+          .update({
+            is_public: isPublic,
+            public_slug: publicSlug,
+          })
+          .eq('id', id)
+          .eq('user_id', user.id);
+      }
+    } catch {}
+
+    return publicSlug;
+  }
+
+  async getPublicSong(slug: string): Promise<Song | null> {
+    // 1. Try querying Supabase
+    try {
+      const { getSupabase } = await import('../auth/auth');
+      const supabase = getSupabase();
+      if (supabase) {
+        const { data, error } = await supabase
+          .from('songs')
+          .select('id, title, bpm, total_bars, song, preview, is_public, public_slug, schema_version')
+          .eq('public_slug', slug)
+          .eq('is_public', true)
+          .maybeSingle();
+
+        if (!error && data && data.song) {
+          const val = validateSong(data.song);
+          if (val.isValid && val.data) {
+            return val.data;
+          }
+        }
+      }
+    } catch {}
+
+    // 2. Fall back to local DB
+    const all = await this.getAllFull();
+    const found = all.find((s) => s.isPublic && s.publicSlug === slug);
+    return found ? JSON.parse(JSON.stringify(found)) : null;
   }
 
   private async enforceCapacity(db: IDBDatabase, incomingId: string): Promise<void> {

@@ -63,29 +63,38 @@ class MigrationSheet {
       const store = getCreationStore();
       const localCreations = store.getAllFull ? await store.getAllFull() : [];
 
-      if (localCreations.length === 0) {
+      const { getSongStore } = await import('../song/store');
+      const songStore = getSongStore();
+      const localSongs = songStore.getAllFull ? await songStore.getAllFull() : [];
+
+      if (localCreations.length === 0 && localSongs.length === 0) {
         localStorage.setItem(migrationKey, 'true');
         return;
       }
 
-      this.open(localCreations.length, user.id);
+      this.open(localCreations.length, localSongs.length, user.id);
     } catch (err) {
-      console.warn('Failed to check local creations for migration:', err);
+      console.warn('Failed to check local creations/songs for migration:', err);
     }
   }
 
-  private open(count: number, userId: string) {
+  private open(creationCount: number, songCount: number, userId: string) {
     const desc = this.overlay.querySelector('#migration-desc');
     const addBtn = this.overlay.querySelector('#migration-add-all-btn') as HTMLButtonElement;
     const dismissBtn = this.overlay.querySelector('#migration-dismiss-btn') as HTMLButtonElement;
     const migrationKey = `instruversal:migrated_user_${userId}`;
 
+    const parts: string[] = [];
+    if (creationCount > 0) parts.push(`${creationCount} sketch${creationCount === 1 ? '' : 'es'}`);
+    if (songCount > 0) parts.push(`${songCount} song${songCount === 1 ? '' : 's'}`);
+    const summaryText = parts.join(' and ');
+
     if (desc) {
-      desc.textContent = `You have ${count} sketch${count === 1 ? '' : 'es'} saved on this device. Would you like to add them to your account so they are backed up and available across all your devices?`;
+      desc.textContent = `You have ${summaryText} saved on this device. Would you like to add them to your account so they are backed up and available across all your devices?`;
     }
 
     if (addBtn) {
-      addBtn.textContent = `Add all ${count} to account`;
+      addBtn.textContent = `Add to account`;
       addBtn.onclick = async () => {
         addBtn.disabled = true;
         addBtn.textContent = 'Syncing...';
@@ -98,6 +107,14 @@ class MigrationSheet {
           if ((store as any).flushPendingSync) {
             await (store as any).flushPendingSync();
           }
+
+          const { getSongStore } = await import('../song/store');
+          const songStore = getSongStore();
+          const songs = songStore.getAllFull ? await songStore.getAllFull() : [];
+          for (const s of songs) {
+            await songStore.save(s);
+          }
+
           localStorage.setItem(migrationKey, 'true');
           this.close();
         } catch (err) {

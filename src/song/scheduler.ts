@@ -485,3 +485,35 @@ export function getEventsInWindow(
 
   return events;
 }
+
+export interface CompiledSongCategorizedEvents {
+  noteEvents: ScheduledSongNoteEvent[];
+  flowEvents: ScheduledSongFlowEvent[];
+  beatHitEvents: ScheduledSongBeatHitEvent[];
+  beatFlowEvents: ScheduledSongBeatFlowEvent[];
+}
+
+/**
+ * Pure helper: compiles song schedule and splits events into typed categories.
+ */
+export function compileSongEvents(song: Song): CompiledSongCategorizedEvents {
+  const schedule = buildSongSchedule(song);
+  const noteEvents: ScheduledSongNoteEvent[] = [];
+  const flowEvents: ScheduledSongFlowEvent[] = [];
+  const beatHitEvents: ScheduledSongBeatHitEvent[] = [];
+  const beatFlowEvents: ScheduledSongBeatFlowEvent[] = [];
+
+  for (const ev of schedule.events) {
+    if (ev.kind === 'note') {
+      noteEvents.push(ev);
+    } else if (ev.kind === 'flow') {
+      flowEvents.push(ev);
+    } else if (ev.kind === 'beatHit') {
+      beatHitEvents.push(ev);
+    } else if (ev.kind === 'beatFlow') {
+      beatFlowEvents.push(ev);
+    }
+  }
+
+  return { noteEvents, flowEvents, beatHitEvents, beatFlowEvents };
+}

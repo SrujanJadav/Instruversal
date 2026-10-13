@@ -128,6 +128,10 @@ export class SongPlaybackEngine {
     return this.masterChain.getMeterLevel();
   }
 
+  public getMasterOutputNode(): Tone.ToneAudioNode {
+    return this.masterChain.getMasterOutputNode();
+  }
+
   private setupTransportSettings() {
     try {
       const t = Tone.getTransport();

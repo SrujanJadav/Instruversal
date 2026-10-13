@@ -46,7 +46,7 @@ This document tracks progress across all steps of Instruversal, including founda
 | **7: Studio screen: arrangement canvas** | Song Studio | Done | 2026-10-13 | `feat: song studio arrangement canvas and drawing import` | Multi-lane timeline, drawing clips with thumbnails, clip inspector, picker sheet with preview audition, list view, history. |
 | **8: Song playback engine** | Song Studio | Done | 2026-10-13 | `feat: song playback engine` | Pure project/song event compilers, Tone.Transport windowed scheduler, lazy lane instruments & drum kit cache, clip transposition, polyphony caps, 30ms anti-click releases, sounding pulse & follow playhead. |
 | **9: Mix master** | Song Studio | Done | 2026-10-13 | `feat: mix master with channel strips, master chain, meters and presets` | Lane channels, master bus (EQ, glue compressor, limiter), 30fps RAF meters, clip warning, presets, auto-balance. |
-| **10: Song export, sharing & Library** | Song Studio | Queued | - | - | Song WAV/MIDI export, Library songs tab, public song remix. |
+| **10: Song export, sharing & Library** | Song Studio | Done | 2026-10-13 | `step-10` | Real-time master WAV & MediaRecorder export with peak anti-clip check, pure SMF Format 1 multi-track MIDI export, Library Songs tab with theme-aware SVG previews, read-only public player (#/s/<slug>) with Remix cloning, cloud migration. |
 | **11: Studio polish, performance & accessibility** | Song Studio | Queued | - | - | Stress test (6 lanes/12 assets), memory profiling, a11y pass. |
 | **12: Final audit of everything** | Ship | Queued | - | - | Comprehensive design, audio, security, a11y & code health audit. |
 | **13: Deploy config, security headers, CI** | Ship | Queued | - | - | Cloudflare Pages config, _headers, CSP, GitHub Actions CI. |

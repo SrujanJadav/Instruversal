@@ -231,6 +231,13 @@ export class SongMasterChain {
     };
   }
 
+  public getMasterOutputNode(): Tone.ToneAudioNode {
+    if (!this.isMock && this.effectsRack && this.effectsRack.limiter) {
+      return this.effectsRack.limiter;
+    }
+    return this.masterGain || Tone.getDestination();
+  }
+
   /**
    * Cleanly restores effects rack and disposes all allocated nodes.
    */

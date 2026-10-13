@@ -16,6 +16,8 @@ import { ListView } from './ListView';
 import { StudioHistory } from './StudioHistory';
 import { MixerPanel } from './MixerPanel';
 import { FxPanel } from '../FxPanel';
+import { SongExportModal } from './SongExportModal';
+import { getShareModal } from '../ShareModal';
 import { Creation } from '../../library/types';
 import { getCreationStore } from '../../library/store';
 import { SongPlaybackEngine } from '../../song/playbackEngine';
@@ -32,6 +34,7 @@ export class StudioView {
   private picker: DrawingPicker;
   private mixerPanel: MixerPanel;
   private fxPanel: FxPanel;
+  private exportModal: SongExportModal;
   private playbackEngine: SongPlaybackEngine;
   private currentPlayheadBar: number = 0;
   private isPlaying: boolean = false;
@@ -81,6 +84,16 @@ export class StudioView {
       onUndo: () => this.undo(),
       onRedo: () => this.redo(),
       onMixToggle: () => this.toggleMixer(),
+      onExport: () => this.exportModal.open(),
+      onShare: () => {
+        getShareModal().open(
+          this.song.id,
+          this.song.title,
+          this.song.isPublic,
+          this.song.publicSlug,
+          'song'
+        );
+      },
       onFollowToggle: (enabled) => {
         this.followPlayhead = enabled;
       },
@@ -166,6 +179,11 @@ export class StudioView {
     // Fx Panel (Effects Rack)
     this.fxPanel = new FxPanel(this.element);
 
+    // Export Modal
+    this.exportModal = new SongExportModal(this.song, this.playbackEngine, (updated) => {
+      this.updateSong(updated);
+    });
+
     bodyEl.appendChild(this.timeline.element);
     bodyEl.appendChild(this.listView.element);
     bodyEl.appendChild(this.inspector.element);
@@ -226,6 +244,7 @@ export class StudioView {
     this.timeline.setSong(this.song);
     this.listView.render(this.song);
     this.mixerPanel.setSong(this.song);
+    this.exportModal.setSong(this.song);
     this.playbackEngine.updateSong(this.song);
 
     if (pushHistory) {
@@ -481,6 +500,7 @@ export class StudioView {
 
   public dispose() {
     this.mixerPanel.dispose();
+    this.exportModal.dispose();
     this.fxPanel.destroy();
     this.playbackEngine.dispose();
   }

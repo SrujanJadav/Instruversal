@@ -15,12 +15,14 @@ Instruversal is a draw-to-compose loop sequencer for desktop and phones. Draw st
 - **Continuous Pitch Glide:** Expressive portamento and glissando with adjustable glide speed.
 - **Per-Pigment Instruments:** Six dedicated tracks inspired by muted gouache pigments (Vermilion, Indigo, Ochre, Sage, Plum, Slate), each mapped to synthesizers, plucks, bells, brass, or pads.
 - **Beat Tracks & Drum Lanes:** Dedicated 8-voice drum kit engine with 8 visual drum lanes, rhythm quantization, swing, humanization, and continuous Glide/Roll/Sweep beat flow modes.
-- **Master Effects Rack:** 7-module studio chain featuring Soft Drive saturation, Sweeping Auto-Filter, 3-Band Parametric EQ, Dimension Chorus, Ping-Pong Delay, Lush Algorithmic Reverb, and Master Peak Limiter with one-tap presets.
-- **Key & Scale Audition:** 12 root keys and 6 diatonic/pentatonic musical scales with interactive audio scale strips and chord auditions.
-- **My Creations Library:** Device-local IndexedDB storage for sketches with auto-save, RDP-simplified live SVG thumbnails that recolor with light/dark themes, card duplication, and JSON backup export/import.
+- **Song Studio & Arrangement Canvas:** Multi-lane arrangement timeline where drawings become reusable musical clips. Arrange up to 6 lanes with transposition, clip gain, fades, section markers, and real-time playback.
+- **Master Bus & Mix Suite:** 6 channel strips, master 3-band EQ, glue compressor, and brickwall limiter with mastering presets (Clean, Warm, Bright, Loud, Lo-Fi) and 30fps peak meters.
+- **Real-Time WAV & Audio Export:** Record real master output (post-effects & limiter) in lossless 16-bit WAV or compressed audio with tail capture, wake lock, peak check, and anti-clipping gain correction.
+- **Standard MIDI Export (SMF Format 1):** Export full multi-track MIDI files with one track per lane, song tempo, section markers, transpositions, and General MIDI drums on Channel 10.
+- **Public Song Player & Sharing:** Share read-only public songs via `#/s/<slug>` with responsive timeline playback, device volume control, and one-click "Remix to my songs" cloning.
+- **Sketches & Songs Library:** Dual-tab library with live SVG previews, undoable deletion, duplication, rename, and cloud sync badges.
 - **3D Circular Gallery:** Dynamic WebGL gallery powered by [OGL](https://github.com/oframe/ogl) on the start screen (#/load), presenting creations as colorful portrait cards on a curved arc with momentum physics and drag/swipe navigation.
 - **Light & Dark Themes:** Tactile paper-and-ink light mode and inked-night dark mode with a sky-style sun/moon toggle, zero theme flash, and WCAG-compliant contrast.
-- **Share Links & Autosave:** Share entire compositions via self-contained URL fragments with local backup autosave.
 - **Mobile-First & Accessible:** 44px+ touch targets, hardware haptics, pointer events, screen wake lock during playback, and audio interruption handling.
 
 ---

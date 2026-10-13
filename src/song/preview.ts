@@ -81,3 +81,56 @@ export function buildSongPreview(song: Song): SongPreview {
 
   return preview;
 }
+
+/**
+ * Pure function: Renders a theme-aware SVG timeline thumbnail for song cards and gallery previews.
+ */
+export function renderSongTimelineThumbnailSvg(preview?: SongPreview | null): string {
+  const width = 320;
+  const height = 180;
+  const padX = 12;
+  const padY = 12;
+  const contentW = width - padX * 2;
+  const contentH = height - padY * 2;
+
+  if (!preview || !preview.blocks || preview.blocks.length === 0) {
+    return `
+      <svg class="song-card-svg" viewBox="0 0 ${width} ${height}" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${width}" height="${height}" fill="var(--paper-deep, #E9DFCB)" rx="6"/>
+        <line x1="${padX}" y1="${height / 2}" x2="${width - padX}" y2="${height / 2}" stroke="var(--line, rgba(28,26,22,0.14))" stroke-width="1" stroke-dasharray="4 4"/>
+      </svg>
+    `.trim();
+  }
+
+  const totalBars = Math.max(1, preview.totalBars || 16);
+  const lanesCount = Math.max(1, Math.min(8, preview.lanesCount || 4));
+  const rowH = contentH / lanesCount;
+
+  // Grid lines
+  let gridLinesSvg = '';
+  for (let i = 1; i < lanesCount; i++) {
+    const y = padY + i * rowH;
+    gridLinesSvg += `<line x1="${padX}" y1="${y}" x2="${width - padX}" y2="${y}" stroke="var(--line, rgba(28,26,22,0.14))" stroke-width="1"/>`;
+  }
+
+  // Clip blocks
+  let blocksSvg = '';
+  for (const block of preview.blocks) {
+    const x = padX + (block.startBar / totalBars) * contentW;
+    const blockW = Math.max(4, (block.lengthBars / totalBars) * contentW - 2);
+    const laneIdx = Math.min(lanesCount - 1, Math.max(0, block.laneIndex));
+    const y = padY + laneIdx * rowH + 2;
+    const blockH = Math.max(4, rowH - 4);
+    const colorVar = block.color.startsWith('--') ? block.color : `--${block.color}`;
+
+    blocksSvg += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${blockW.toFixed(1)}" height="${blockH.toFixed(1)}" rx="3" fill="var(${colorVar}, #D2432A)" opacity="0.88"/>`;
+  }
+
+  return `
+    <svg class="song-card-svg" viewBox="0 0 ${width} ${height}" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+      <rect width="${width}" height="${height}" fill="var(--paper-deep, #E9DFCB)" rx="6"/>
+      ${gridLinesSvg}
+      ${blocksSvg}
+    </svg>
+  `.trim();
+}

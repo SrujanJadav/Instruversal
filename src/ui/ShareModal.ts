@@ -10,18 +10,19 @@ class ShareModal {
   private currentTitle: string = '';
   private currentSlug: string | null = null;
   private isPublic: boolean = false;
+  private mode: 'sketch' | 'song' = 'sketch';
 
   constructor() {
     this.overlay = document.createElement('div');
     this.overlay.className = 'share-modal-overlay';
     this.overlay.setAttribute('role', 'dialog');
     this.overlay.setAttribute('aria-modal', 'true');
-    this.overlay.setAttribute('aria-label', 'Share sketch');
+    this.overlay.setAttribute('aria-label', 'Share creation');
 
     this.overlay.innerHTML = `
       <div class="share-modal-dialog">
         <div class="share-modal-header">
-          <h2 class="share-modal-title">Share Sketch</h2>
+          <h2 class="share-modal-title">Share</h2>
           <button type="button" class="share-modal-close" aria-label="Close share sheet">
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 3l10 10M13 3L3 13"/></svg>
           </button>
@@ -51,12 +52,19 @@ class ShareModal {
 
   private openerElement: HTMLElement | null = null;
 
-  public open(id: string, title: string, isPublic: boolean = false, publicSlug: string | null = null) {
+  public open(
+    id: string,
+    title: string,
+    isPublic: boolean = false,
+    publicSlug: string | null = null,
+    mode: 'sketch' | 'song' = 'sketch'
+  ) {
     this.openerElement = document.activeElement as HTMLElement | null;
     this.currentId = id;
     this.currentTitle = title;
     this.isPublic = isPublic;
     this.currentSlug = publicSlug;
+    this.mode = mode;
     this.isOpen = true;
     this.render();
     this.overlay.classList.add('visible');
@@ -73,7 +81,11 @@ class ShareModal {
   private render() {
     const titleEl = this.overlay.querySelector('.share-modal-title');
     if (titleEl) {
-      titleEl.textContent = this.currentTitle ? `Share "${this.currentTitle}"` : 'Share Sketch';
+      titleEl.textContent = this.currentTitle
+        ? `Share "${this.currentTitle}"`
+        : this.mode === 'song'
+        ? 'Share Song'
+        : 'Share Sketch';
     }
 
     const body = this.overlay.querySelector('#share-modal-body');
@@ -84,7 +96,7 @@ class ShareModal {
     if (!user) {
       body.innerHTML = `
         <div class="share-signed-out-note">
-          <p class="share-desc">Sign in to create a public link and share your sketches with anyone.</p>
+          <p class="share-desc">Sign in to create a public link and share your ${this.mode === 'song' ? 'songs' : 'sketches'} with anyone.</p>
           <button type="button" class="auth-submit-btn" id="share-signin-btn">Sign in with Account</button>
         </div>
       `;
@@ -95,8 +107,9 @@ class ShareModal {
       return;
     }
 
+    const routePrefix = this.mode === 'song' ? '#/s/' : '#/c/';
     const shareUrl = this.currentSlug
-      ? `${window.location.origin}${window.location.pathname}#/c/${this.currentSlug}`
+      ? `${window.location.origin}${window.location.pathname}${routePrefix}${this.currentSlug}`
       : '';
 
     body.innerHTML = `
@@ -152,6 +165,11 @@ class ShareModal {
     const exportBtn = body.querySelector<HTMLButtonElement>('#share-export-audio-btn');
     const exportMidiBtn = body.querySelector<HTMLButtonElement>('#share-export-midi-btn');
     const addToSongBtn = body.querySelector<HTMLButtonElement>('#share-add-to-song-btn');
+
+    if (this.mode === 'song' && addToSongBtn) {
+      const parentRow = addToSongBtn.closest('.share-export-row') as HTMLElement | null;
+      if (parentRow) parentRow.style.display = 'none';
+    }
 
     addToSongBtn?.addEventListener('click', async () => {
       if (!this.currentId) return;
@@ -215,16 +233,30 @@ class ShareModal {
       }
     });
 
-    exportBtn?.addEventListener('click', () => {
+    exportBtn?.addEventListener('click', async () => {
       const title = this.currentTitle;
       this.close();
-      getExportModal().open(title, 'wav');
+      if (this.mode === 'song' && this.currentId) {
+        window.location.hash = `#/studio/${this.currentId}`;
+      } else {
+        getExportModal().open(title, 'wav');
+      }
     });
 
-    exportMidiBtn?.addEventListener('click', () => {
+    exportMidiBtn?.addEventListener('click', async () => {
       const title = this.currentTitle;
       this.close();
-      getExportModal().open(title, 'midi');
+      if (this.mode === 'song' && this.currentId) {
+        const { getSongStore } = await import('../song/store');
+        const songStore = getSongStore();
+        const song = await songStore.get(this.currentId);
+        if (song) {
+          const { downloadSongMidiFile } = await import('../song/midiExport');
+          downloadSongMidiFile(song);
+        }
+      } else {
+        getExportModal().open(title, 'midi');
+      }
     });
 
     toggle?.addEventListener('change', async () => {
@@ -233,20 +265,31 @@ class ShareModal {
       toggle.disabled = true;
 
       try {
-        const store = getCreationStore();
-        if (store.setPublic) {
-          const slug = await store.setPublic(this.currentId, willBePublic);
-          this.isPublic = willBePublic;
-          this.currentSlug = slug;
-
-          if (willBePublic && slug) {
-            const newUrl = `${window.location.origin}${window.location.pathname}#/c/${slug}`;
-            if (linkInput) linkInput.value = newUrl;
-            if (linkBox) linkBox.classList.add('active');
-          } else {
-            if (linkInput) linkInput.value = '';
-            if (linkBox) linkBox.classList.remove('active');
+        let slug: string | null = null;
+        if (this.mode === 'song') {
+          const { getSongStore } = await import('../song/store');
+          const store = getSongStore();
+          if (store.setPublic) {
+            slug = await store.setPublic(this.currentId, willBePublic);
           }
+        } else {
+          const store = getCreationStore();
+          if (store.setPublic) {
+            slug = await store.setPublic(this.currentId, willBePublic);
+          }
+        }
+
+        this.isPublic = willBePublic;
+        this.currentSlug = slug;
+
+        const routePrefix = this.mode === 'song' ? '#/s/' : '#/c/';
+        if (willBePublic && slug) {
+          const newUrl = `${window.location.origin}${window.location.pathname}${routePrefix}${slug}`;
+          if (linkInput) linkInput.value = newUrl;
+          if (linkBox) linkBox.classList.add('active');
+        } else {
+          if (linkInput) linkInput.value = '';
+          if (linkBox) linkBox.classList.remove('active');
         }
       } catch (err) {
         console.error('Failed to update public status:', err);
