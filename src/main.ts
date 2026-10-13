@@ -13,6 +13,7 @@ initLowLatencyContext();
 
 import * as Tone from 'tone';
 import { CONFIG } from './config';
+import { isStudioEnabled, isGardenFlagEnabled } from './config/flags';
 import { state, events } from './state';
 import { DrawingCanvas } from './canvas/DrawingCanvas';
 import { getTrackManager } from './audio/tracks';
@@ -77,8 +78,17 @@ app.innerHTML = `
       <img src="/icon-dark.svg" alt="Instruversal Brand Icon" class="gate-icon-img icon-dark-mode" />
     </div>
     <div class="hero-wordmark-container" id="hero-wordmark-container" style="position: relative; width: 100%; overflow: hidden; background: transparent;">
+      ${isGardenFlagEnabled ? `
       <canvas class="hero-garden-canvas" id="hero-garden-canvas" style="position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: default; touch-action: none;" role="img" aria-label="Instruverse"></canvas>
       <h1 class="sr-only">Instruverse</h1>
+      ` : `
+      <h1 class="app-title">
+        <a href="#/" class="app-title-link" id="gate-home-link" aria-label="Instruversal, go to the start page">
+          <img src="/brand/logo-light-transparent.svg" class="brand-wordmark wordmark-light" alt="Instruversal" width="1536" height="742.4" decoding="async" />
+          <img src="/brand/logo-dark-transparent.svg" class="brand-wordmark wordmark-dark" alt="" aria-hidden="true" width="1536" height="742.4" decoding="async" />
+        </a>
+      </h1>
+      `}
     </div>
     <button class="start-btn" id="start-btn" type="button" aria-label="Start audio and enter Instruversal">
       Tap to start
@@ -89,11 +99,13 @@ app.innerHTML = `
       </button>
       <span class="load-count-badge" id="gate-load-count">0 saved</span>
     </div>
+    ${isStudioEnabled ? `
     <div class="gate-studio-container" id="gate-studio-container" style="margin-top: 6px;">
       <a href="#/studio" class="gate-resume-link" id="gate-studio-btn" aria-label="Open Song Studio">
         Open Studio
       </a>
     </div>
+    ` : ''}
     <div class="gate-resume-container" id="gate-resume-container" style="display: none;">
       <button class="gate-resume-link" id="gate-resume-btn" type="button" aria-label="Resume sketch">
         Resume <span class="gate-resume-title" id="gate-resume-title"></span>
@@ -138,10 +150,12 @@ app.innerHTML = `
         </div>
       </div>
       <div class="header-actions">
+        ${isStudioEnabled ? `
         <button type="button" class="header-btn" id="header-studio-btn" aria-label="Open Song Studio">
           <span class="hdr-text-long">Studio</span>
           <span class="hdr-text-short">Studio</span>
         </button>
+        ` : ''}
         <button type="button" class="header-btn" id="header-library-btn" aria-label="Open creations library">
           <span class="hdr-text-long">Library</span>
           <span class="hdr-text-short">Lib</span>
@@ -232,14 +246,17 @@ syncWordmarkA11y();
 let gardenModulePromise: Promise<typeof import('./garden/garden-background')> | null = null;
 
 function loadAndMountGarden() {
+  if (!isGardenFlagEnabled) return;
   if (typeof window === 'undefined') return;
   if (currentActiveScreen !== 'gate') return;
 
   const load = () => {
     if (!gardenModulePromise) {
-      gardenModulePromise = import('./garden/garden-background');
+      if (import.meta.env.VITE_ENABLE_GARDEN !== 'false') {
+        gardenModulePromise = import('./garden/garden-background');
+      }
     }
-    gardenModulePromise.then(({ getGardenBackground }) => {
+    gardenModulePromise?.then(({ getGardenBackground }) => {
       if (currentActiveScreen === 'gate') {
         const garden = getGardenBackground();
         garden.mount();
@@ -255,6 +272,7 @@ function loadAndMountGarden() {
 }
 
 function teardownGarden() {
+  if (!isGardenFlagEnabled) return;
   if (gardenModulePromise) {
     gardenModulePromise.then(({ teardownGardenBackground }) => {
       teardownGardenBackground();
@@ -412,6 +430,7 @@ export async function goHome() {
 function showGateScreen() {
   document.querySelectorAll('.studio-view').forEach((el) => el.remove());
   document.querySelectorAll('.public-song-view').forEach((el) => el.remove());
+  document.querySelectorAll('.studio-coming-soon-screen').forEach((el) => el.remove());
 
   gateScreen.classList.remove('hidden');
   gateScreen.removeAttribute('aria-hidden');
@@ -970,6 +989,7 @@ function checkStudioReturnButton() {
 let currentStudioView: any = null;
 
 async function cleanupStudioView() {
+  document.querySelectorAll('.studio-coming-soon-screen').forEach((el) => el.remove());
   if (currentStudioView) {
     try {
       await currentStudioView.flushSave();
@@ -1009,6 +1029,40 @@ async function handleStudioRoute(hash: string) {
 
     currentActiveScreen = 'studio' as any;
 
+    if (!isStudioEnabled) {
+      document.querySelectorAll('.studio-coming-soon-screen').forEach((el) => el.remove());
+      const placeholder = document.createElement('div');
+      placeholder.className = 'studio-coming-soon-screen';
+      placeholder.style.cssText = `
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: var(--space-4, 16px);
+        background-color: var(--paper, #F3ECDD);
+        color: var(--ink, #1C1A16);
+        text-align: center;
+        z-index: 10;
+      `;
+      placeholder.innerHTML = `
+        <div style="max-width: 440px; display: flex; flex-direction: column; align-items: center; gap: var(--space-3, 12px);">
+          <img src="/icon.svg" alt="Instruversal Brand Icon" class="icon-light-mode" style="width: 56px; height: 56px; margin-bottom: 8px;" />
+          <img src="/icon-dark.svg" alt="Instruversal Brand Icon" class="icon-dark-mode" style="width: 56px; height: 56px; margin-bottom: 8px;" />
+          <h1 style="font-family: var(--font-display, serif); font-size: 1.8rem; margin: 0; font-weight: 600;">Song Studio is coming soon.</h1>
+          <p style="font-family: var(--font-ui, sans-serif); color: var(--ink-soft, #5B554A); font-size: 0.95rem; line-height: 1.5; margin: 0 0 16px 0;">
+            Multi-track timeline arrangement, clip editing, and song composition are currently in development.
+          </p>
+          <a href="#/" class="start-btn" style="text-decoration: none; display: inline-flex; align-items: center; justify-content: center; min-height: 42px; padding: 10px 24px;">
+            Back to home
+          </a>
+        </div>
+      `;
+      app.appendChild(placeholder);
+      return;
+    }
+
     if (Tone.context.state !== 'running') {
       try {
         await Tone.start();
@@ -1042,7 +1096,7 @@ async function handleStudioRoute(hash: string) {
       }
     }
 
-    if (targetSong) {
+    if (import.meta.env.VITE_ENABLE_STUDIO === 'true' && targetSong) {
       const { StudioView } = await import('./ui/studio/StudioView');
       currentStudioView = new StudioView(targetSong);
       app.appendChild(currentStudioView.element);

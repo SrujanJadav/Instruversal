@@ -2,6 +2,7 @@ import { getCreationStore } from '../library/store';
 import { getCurrentUser } from '../auth/auth';
 import { getAccountSheet } from './AccountSheet';
 import { getExportModal } from './ExportModal';
+import { isStudioEnabled } from '../config/flags';
 
 class ShareModal {
   private overlay: HTMLElement;
@@ -147,6 +148,7 @@ class ShareModal {
           <button type="button" class="auth-submit-btn" id="share-export-midi-btn" style="width: auto; padding: 6px 14px; font-size: 0.82rem; white-space: nowrap;">Export MIDI</button>
         </div>
 
+        ${isStudioEnabled ? `
         <div class="share-export-row" style="margin-top: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; gap: var(--space-2);">
           <div class="share-toggle-info">
             <span class="share-toggle-label">Add to Song…</span>
@@ -154,6 +156,7 @@ class ShareModal {
           </div>
           <button type="button" class="auth-submit-btn" id="share-add-to-song-btn" style="width: auto; padding: 6px 14px; font-size: 0.82rem; white-space: nowrap;">Add to song</button>
         </div>
+        ` : ''}
       </div>
     `;
 

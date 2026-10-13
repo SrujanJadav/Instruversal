@@ -11,6 +11,7 @@ import { renderSongTimelineThumbnailSvg } from '../song/preview';
 import { SongMeta } from '../song/store';
 import { Song } from '../song/types';
 import { fadeMasterOut } from '../audio/lifecycle';
+import { isStudioEnabled } from '../config/flags';
 
 export class LibraryModal {
   private overlay: HTMLElement;
@@ -83,10 +84,12 @@ export class LibraryModal {
         </div>
 
         <div class="library-subbar">
+          ${isStudioEnabled ? `
           <div class="library-tabs-group" role="tablist" aria-label="Library sections" style="display: flex; gap: 4px; margin-right: var(--space-2, 8px);">
             <button type="button" class="library-sort-chip active" id="lib-tab-sketches" role="tab" aria-selected="true">Sketches</button>
             <button type="button" class="library-sort-chip" id="lib-tab-songs" role="tab" aria-selected="false">Songs</button>
           </div>
+          ` : ''}
 
           <div class="library-search-wrapper">
             <span class="library-search-icon">

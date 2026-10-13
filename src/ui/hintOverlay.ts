@@ -2,6 +2,7 @@ import { getCurrentUser } from '../auth/auth';
 import { getAccountSheet } from './AccountSheet';
 import { canInstallPrompt, promptInstall, isIosSafari, isStandalone } from '../pwa/installPrompt';
 import { isGardenEnabled, setGardenEnabled } from '../garden/garden-setting';
+import { isStudioEnabled, isGardenFlagEnabled } from '../config/flags';
 
 const HINT_INTRO_KEY = 'instruversal:hint-intro';
 
@@ -78,6 +79,7 @@ export function showFirstRunHintOverlay(force = false): void {
         <button type="button" class="auth-pill-btn" id="hint-account-btn" style="flex-shrink: 0;">${currentUser ? 'Manage' : 'Sign in'}</button>
       </div>
 
+      ${isGardenFlagEnabled ? `
       <div class="hint-garden-section" style="margin-top: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: var(--space-2);">
         <div>
           <span style="font-weight: 500; font-size: 0.85rem;">Type Garden</span>
@@ -87,6 +89,7 @@ export function showFirstRunHintOverlay(force = false): void {
           <input type="checkbox" id="hint-garden-toggle" ${isGardenEnabled() ? 'checked' : ''} style="accent-color: var(--sage); width: 18px; height: 18px; cursor: pointer;" aria-label="Toggle living garden background" />
         </label>
       </div>
+      ` : ''}
 
       <div class="hint-shortcuts-section desktop-only">
         <div class="hint-shortcuts-header">
@@ -104,6 +107,7 @@ export function showFirstRunHintOverlay(force = false): void {
           <li><kbd>Arrows</kbd><span>Nudge</span></li>
           <li><kbd>Esc</kbd><span>Closes sheets</span></li>
         </ul>
+        ${isStudioEnabled ? `
         <div class="hint-shortcuts-header" style="margin-top: 8px;">
           <span class="hint-section-title">Song Studio shortcuts</span>
         </div>
@@ -117,6 +121,7 @@ export function showFirstRunHintOverlay(force = false): void {
           <li><kbd>+ / −</kbd><span>Zoom timeline</span></li>
           <li><kbd>Esc</kbd><span>Deselect</span></li>
         </ul>
+        ` : ''}
       </div>
 
       <button type="button" class="hint-dismiss-btn" id="hint-got-it-btn">
