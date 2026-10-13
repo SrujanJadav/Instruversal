@@ -4,7 +4,8 @@ import { validateCreation } from './validator';
 
 const DB_NAME = 'instruversal';
 const STORE_NAME = 'creations';
-const DB_VERSION = 1;
+const SONGS_STORE_NAME = 'songs';
+const DB_VERSION = 2;
 const MAX_LOCAL_CREATIONS = 100;
 
 export class MemoryCreationStore implements CreationStore {
@@ -103,6 +104,10 @@ export class LocalStore implements CreationStore {
           if (!db.objectStoreNames.contains(STORE_NAME)) {
             const store = db.createObjectStore(STORE_NAME, { keyPath: 'id' });
             store.createIndex('updatedAt', 'updatedAt', { unique: false });
+          }
+          if (!db.objectStoreNames.contains(SONGS_STORE_NAME)) {
+            const songStore = db.createObjectStore(SONGS_STORE_NAME, { keyPath: 'id' });
+            songStore.createIndex('updatedAt', 'updatedAt', { unique: false });
           }
         };
 
