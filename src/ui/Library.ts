@@ -511,6 +511,7 @@ export class LibraryModal {
             <button type="button" class="card-inline-menu-item" data-action="duplicate" data-id="${meta.id}">Duplicate</button>
             <button type="button" class="card-inline-menu-item" data-action="share" data-id="${meta.id}">Share link</button>
             <button type="button" class="card-inline-menu-item" data-action="export-audio" data-id="${meta.id}">Export audio</button>
+            <button type="button" class="card-inline-menu-item" data-action="export-midi" data-id="${meta.id}">Export MIDI</button>
             <button type="button" class="card-inline-menu-item danger" data-action="delete" data-id="${meta.id}">Delete</button>
           </div>
         `
@@ -612,7 +613,19 @@ export class LibraryModal {
           } else {
             this.close();
           }
-          getExportModal().open(meta.title);
+          getExportModal().open(meta.title, 'wav');
+        });
+
+        card.querySelector('[data-action="export-midi"]')?.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          this.activeMenuCardId = null;
+          this.renderGrid();
+          if (getCreationManager().getCurrentId() !== meta.id) {
+            await this.openCreationAndClose(meta.id, false);
+          } else {
+            this.close();
+          }
+          getExportModal().open(meta.title, 'midi');
         });
 
         card.querySelector('[data-action="delete"]')?.addEventListener('click', (e) => {

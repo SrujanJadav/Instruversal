@@ -6,6 +6,7 @@ import {
   getSupportedExportFormats,
   ExportResult,
 } from '../export/exportAudio';
+import { exportProjectToMidi, downloadMidiFile, MidiExportResult } from '../export/exportMidi';
 
 export class ExportModal {
   private overlay: HTMLElement;
@@ -14,8 +15,9 @@ export class ExportModal {
   private activeCancelFn: (() => void) | null = null;
   private isRecording: boolean = false;
   private repeats: 1 | 2 | 4 = 2;
-  private formatId: 'wav' | 'compressed' = 'wav';
+  private formatId: 'wav' | 'compressed' | 'midi' = 'wav';
   private currentResult: ExportResult | null = null;
+  private currentMidiResult: MidiExportResult | null = null;
   private warningMessage: string | null = null;
   private customTitle: string | null = null;
 
@@ -24,7 +26,7 @@ export class ExportModal {
     this.overlay.className = 'export-modal-overlay hidden';
     this.overlay.setAttribute('role', 'dialog');
     this.overlay.setAttribute('aria-modal', 'true');
-    this.overlay.setAttribute('aria-label', 'Export audio');
+    this.overlay.setAttribute('aria-label', 'Export options');
 
     document.body.appendChild(this.overlay);
     this.setupListeners();
@@ -49,14 +51,18 @@ export class ExportModal {
     });
   }
 
-  public open(customTitle?: string) {
+  public open(customTitle?: string, initialFormat?: 'wav' | 'compressed' | 'midi') {
     this.openerElement = (document.activeElement as HTMLElement) || null;
     this.isOpen = true;
     this.isRecording = false;
     this.activeCancelFn = null;
     this.currentResult = null;
+    this.currentMidiResult = null;
     this.warningMessage = null;
     this.customTitle = customTitle || null;
+    if (initialFormat) {
+      this.formatId = initialFormat;
+    }
 
     document.body.style.overflow = 'hidden';
     this.overlay.classList.remove('hidden');
@@ -90,7 +96,7 @@ export class ExportModal {
     this.overlay.innerHTML = `
       <div class="export-modal-dialog">
         <div class="export-modal-header">
-          <h2 class="export-modal-title">Export Audio</h2>
+          <h2 class="export-modal-title">Export Loop</h2>
           <button type="button" class="export-modal-close" id="export-close-btn" aria-label="Close export dialog" ${this.isRecording ? 'disabled' : ''}>
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 3l10 10M13 3L3 13"/></svg>
           </button>
@@ -118,6 +124,30 @@ export class ExportModal {
           <div class="export-actions">
             <button type="button" class="export-cancel-btn" id="export-cancel-btn">Cancel</button>
           </div>
+        </div>
+      `;
+    }
+
+    if (this.currentMidiResult) {
+      const res = this.currentMidiResult;
+      return `
+        <div class="export-complete-view">
+          <div class="export-success-badge">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            <span>MIDI file exported</span>
+          </div>
+
+          <p class="export-file-label" id="export-file-label"></p>
+
+          <div class="export-download-row">
+            <button type="button" class="export-download-btn" id="export-midi-download-again-btn">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              <span>Download again</span>
+            </button>
+            <button type="button" class="export-done-btn" id="export-done-btn">Done</button>
+          </div>
+
+          <a href="${res.url}" download="${res.filename}" class="export-fallback-link" id="export-safari-fallback" rel="noopener">Save file (iPhone / Safari)</a>
         </div>
       `;
     }
@@ -158,6 +188,13 @@ export class ExportModal {
       `;
     }
 
+    const allFormats = [
+      ...supportedFormats,
+      { id: 'midi' as const, label: 'MIDI (.mid)', extension: 'mid', mimeType: 'audio/midi' },
+    ];
+
+    const isMidi = this.formatId === 'midi';
+
     // Config setup view
     return `
       <div class="export-config-view">
@@ -173,13 +210,17 @@ export class ExportModal {
             <button type="button" class="export-seg-btn ${this.repeats === 2 ? 'active' : ''}" data-repeat="2" role="radio" aria-checked="${this.repeats === 2}">2 loops</button>
             <button type="button" class="export-seg-btn ${this.repeats === 4 ? 'active' : ''}" data-repeat="4" role="radio" aria-checked="${this.repeats === 4}">4 loops</button>
           </div>
-          <span class="export-field-hint">Includes a 1.5s reverb & delay ring-out tail.</span>
+          <span class="export-field-hint">${
+            isMidi
+              ? 'Multi-track SMF format 1 with GM program changes, keys, and channel 10 drums.'
+              : 'Includes a 1.5s reverb & delay ring-out tail.'
+          }</span>
         </div>
 
         <div class="export-field-group">
-          <label class="export-field-label">Audio Format</label>
+          <label class="export-field-label">Export Format</label>
           <div class="export-segmented" role="radiogroup" aria-label="Format chooser">
-            ${supportedFormats
+            ${allFormats
               .map(
                 (f) => `
               <button type="button" class="export-seg-btn ${this.formatId === f.id ? 'active' : ''}" data-format="${f.id}" role="radio" aria-checked="${this.formatId === f.id}">
@@ -193,8 +234,11 @@ export class ExportModal {
 
         <div class="export-actions">
           <button type="button" class="export-start-btn" id="export-start-btn">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 3 20 12 6 21 6 3"/></svg>
-            <span>Start Recording</span>
+            ${
+              isMidi
+                ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg><span>Download MIDI (.mid)</span>`
+                : `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 3 20 12 6 21 6 3"/></svg><span>Start Recording</span>`
+            }
           </button>
         </div>
       </div>
@@ -210,7 +254,13 @@ export class ExportModal {
     if (sketchTitleEl) sketchTitleEl.textContent = sketchTitle;
 
     const fileLabelEl = this.overlay.querySelector<HTMLElement>('#export-file-label');
-    if (fileLabelEl && this.currentResult) fileLabelEl.textContent = this.currentResult.filename;
+    if (fileLabelEl) {
+      if (this.currentMidiResult) {
+        fileLabelEl.textContent = this.currentMidiResult.filename;
+      } else if (this.currentResult) {
+        fileLabelEl.textContent = this.currentResult.filename;
+      }
+    }
 
     // Repeats buttons
     const repeatBtns = this.overlay.querySelectorAll<HTMLButtonElement>('[data-repeat]');
@@ -231,10 +281,14 @@ export class ExportModal {
       });
     });
 
-    // Start recording
+    // Start recording or export MIDI
     const startBtn = this.overlay.querySelector<HTMLButtonElement>('#export-start-btn');
     startBtn?.addEventListener('click', () => {
-      this.startExport(sketchTitle);
+      if (this.formatId === 'midi') {
+        this.startMidiExport(sketchTitle);
+      } else {
+        this.startAudioExport(sketchTitle);
+      }
     });
 
     // Cancel recording
@@ -248,11 +302,19 @@ export class ExportModal {
       this.render();
     });
 
-    // Manual download button
+    // Audio manual download button
     const downloadAgainBtn = this.overlay.querySelector<HTMLButtonElement>('#export-manual-download-btn');
     downloadAgainBtn?.addEventListener('click', () => {
       if (this.currentResult) {
         triggerFileDownload(this.currentResult.blob, this.currentResult.filename);
+      }
+    });
+
+    // MIDI manual download button
+    const midiDownloadAgainBtn = this.overlay.querySelector<HTMLButtonElement>('#export-midi-download-again-btn');
+    midiDownloadAgainBtn?.addEventListener('click', () => {
+      if (this.currentMidiResult) {
+        downloadMidiFile(this.currentMidiResult);
       }
     });
 
@@ -265,13 +327,33 @@ export class ExportModal {
     lowerGainBtn?.addEventListener('click', () => {
       getMasterEffectsRack().lowerGain3dB();
       this.currentResult = null;
-      this.startExport(sketchTitle);
+      this.startAudioExport(sketchTitle);
     });
   }
 
-  private startExport(sketchTitle: string) {
+  private startMidiExport(sketchTitle: string) {
+    try {
+      const result = exportProjectToMidi({
+        title: sketchTitle,
+        repeats: this.repeats,
+        bpm: state.bpm,
+        bars: state.bars,
+      });
+
+      this.currentMidiResult = result;
+      downloadMidiFile(result);
+      this.render();
+    } catch (err) {
+      console.error('MIDI export error:', err);
+      this.warningMessage = 'MIDI export failed. Please try again.';
+      this.render();
+    }
+  }
+
+  private startAudioExport(sketchTitle: string) {
     this.isRecording = true;
     this.currentResult = null;
+    this.currentMidiResult = null;
     this.warningMessage = null;
     this.render();
 
@@ -281,7 +363,7 @@ export class ExportModal {
 
     const { promise, cancel } = recordLoopAudio({
       repeats: this.repeats,
-      format: this.formatId,
+      format: this.formatId === 'compressed' ? 'compressed' : 'wav',
       title: sketchTitle,
       onProgress: (progress, remaining) => {
         const pct = Math.round(progress * 100);

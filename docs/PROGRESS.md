@@ -39,7 +39,7 @@ This document tracks progress across all steps of Instruversal, including founda
 | **1: Try-yourself examples** | Editor features | Done | 2026-10-12 | `b9a9928` | 3 lazy-loaded examples (Ode to Joy, Marimba Pop (original), Dreamy Arpeggio (original)), notesToStrokes converter, 1ms round-trip tests, dev midi parser, start page carousel. Zero copyrighted content. |
 | **1c: Multi-intersection branch playback** | Editor features | Done | 2026-10-12 | `feat(step-1c)` | Branch splitting engine, turning-point hysteresis, Flow & Notes chords for folded shapes, playhead multi-dot riding, polyphony cap (4/8/12) with smooth voice thinning. |
 | **2: Lasso select, move, duplicate, snap** | Editor features | Done | 2026-10-13 | `ce934cf` | Third tool in dock (V), tap/lasso/rect selection, move, duplicate (+1 beat), copy/cut/paste (Ctrl+C/X/V), flip H/V, recolour, snap (16th/scale), 1 undo step. |
-| **3: MIDI export (single drawing)** | Editor features | Queued | - | - | Standard MIDI File 1 writer, multi-track, drum channel 10. |
+| **3: MIDI export (single drawing)** | Editor features | Done | 2026-10-13 | `a0c6075` | Pure SMF Format 1 encoder, multi-track export, GM drums ch10, flow/notes/beat extraction, 1/2/4 repeats, iPhone fallback link. |
 | **4: Practice aids (drone, metronome, count-in)** | Editor features | Queued | - | - | Mixer sheet practice section, transport metronome, root pad drone. |
 | **5: Resume link and keyboard shortcuts** | Editor features | Queued | - | - | Start page resume link, desktop keyboard shortcuts list. |
 | **6: Song data model, storage and database** | Song Studio | Queued | - | - | Song types, validation, IndexedDB + Supabase migration 002_songs.sql. |

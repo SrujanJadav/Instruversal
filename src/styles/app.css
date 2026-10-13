@@ -3364,6 +3364,22 @@ canvas.instruversal-canvas {
   border-color: var(--ink);
 }
 
+.export-fallback-link {
+  display: block;
+  margin-top: 10px;
+  font-family: var(--font-ui);
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+  text-decoration: underline;
+  text-align: center;
+  padding: 6px;
+  transition: color var(--transition-fast);
+}
+
+.export-fallback-link:hover {
+  color: var(--ink);
+}
+
 .export-recording-view {
   display: flex;
   flex-direction: column;

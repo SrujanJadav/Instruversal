@@ -125,6 +125,14 @@ class ShareModal {
           </div>
           <button type="button" class="auth-submit-btn" id="share-export-audio-btn" style="width: auto; padding: 6px 14px; font-size: 0.82rem; white-space: nowrap;">Export audio</button>
         </div>
+
+        <div class="share-export-row" style="margin-top: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; gap: var(--space-2);">
+          <div class="share-toggle-info">
+            <span class="share-toggle-label">Export MIDI</span>
+            <span class="share-toggle-sub">Multi-track .mid file for DAWs & instruments</span>
+          </div>
+          <button type="button" class="auth-submit-btn" id="share-export-midi-btn" style="width: auto; padding: 6px 14px; font-size: 0.82rem; white-space: nowrap;">Export MIDI</button>
+        </div>
       </div>
     `;
 
@@ -134,11 +142,18 @@ class ShareModal {
     const copyBtn = body.querySelector<HTMLButtonElement>('#share-copy-btn');
     const toast = body.querySelector<HTMLElement>('#share-toast');
     const exportBtn = body.querySelector<HTMLButtonElement>('#share-export-audio-btn');
+    const exportMidiBtn = body.querySelector<HTMLButtonElement>('#share-export-midi-btn');
 
     exportBtn?.addEventListener('click', () => {
       const title = this.currentTitle;
       this.close();
-      getExportModal().open(title);
+      getExportModal().open(title, 'wav');
+    });
+
+    exportMidiBtn?.addEventListener('click', () => {
+      const title = this.currentTitle;
+      this.close();
+      getExportModal().open(title, 'midi');
     });
 
     toggle?.addEventListener('change', async () => {
