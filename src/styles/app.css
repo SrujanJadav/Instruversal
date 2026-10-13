@@ -22,9 +22,18 @@
   transition: opacity var(--transition-normal), visibility var(--transition-normal);
 }
 
-.gate-screen > *:not(.garden-background-canvas) {
+.gate-screen > *:not(.garden-background-canvas):not(.hero-garden-canvas):not(.gate-topbar) {
   position: relative;
   z-index: 1;
+}
+
+.hero-garden-canvas {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 0;
 }
 
 .garden-background-canvas {
@@ -163,15 +172,15 @@
 }
 
 .gate-brand-icon {
-  margin-bottom: var(--space-4);
+  margin-bottom: var(--space-1);
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .gate-icon-img {
-  width: clamp(120px, 18vw, 150px);
-  height: clamp(120px, 18vw, 150px);
+  width: clamp(60px, 8vw, 84px);
+  height: clamp(60px, 8vw, 84px);
   object-fit: contain;
   filter: drop-shadow(0 4px 16px rgba(28, 26, 22, 0.12));
   transition: transform var(--transition-normal);
@@ -212,12 +221,23 @@
   filter: drop-shadow(0 4px 20px rgba(0, 0, 0, 0.6));
 }
 
+.hero-wordmark-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  margin-bottom: var(--space-3);
+}
+
 .app-title {
-  margin-bottom: var(--space-2);
+  margin: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   line-height: 1;
+  position: relative;
+  z-index: 1;
 }
 
 .app-title-link {
@@ -226,7 +246,9 @@
   justify-content: center;
   text-decoration: none;
   border-radius: var(--radius-sm, 4px);
-  padding: 2px;
+  padding: 4px;
+  position: relative;
+  z-index: 1;
 }
 
 .app-title-link:focus-visible {
@@ -235,20 +257,21 @@
 }
 
 .brand-wordmark {
-  height: 72px;
+  height: clamp(96px, 22vw, 136px);
   width: auto;
-  max-width: 100%;
+  max-width: min(92vw, 420px);
   object-fit: contain;
   filter: none !important;
   box-shadow: none !important;
   user-select: none;
   -webkit-user-drag: none;
+  background: transparent !important;
 }
 
 @media (min-width: 768px) {
   .brand-wordmark {
-    height: 96px;
-    max-width: none;
+    height: clamp(160px, 20vw, 220px);
+    max-width: min(90vw, 760px);
   }
 }
 

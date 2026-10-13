@@ -1,20 +1,24 @@
 /**
  * garden-background.ts
  *
- * Controller managing the Type Garden background canvas lifecycle.
- * Handles rAF loop, DPR scaling (capped at 2), visibility/blur pausing,
- * reduced motion still frame, frame rate capping, and complete teardown.
+ * Controller managing the Wordmark Rose & Vine Garden canvas lifecycle.
+ * Sizes the canvas to 130% width x 220% height of the wordmark hero,
+ * handles rAF with delta-time capping, pointer proximity tracking,
+ * visibility/blur pausing, reduced-motion, and clean teardown.
  */
 
-import { generateGarden, GardenLandscape } from './garden-math';
-import { renderGardenFrame, resolveGardenPalette, GardenThemePalette } from './garden-render';
+import { generateWordmarkGarden, WordmarkGardenModel, Vector2D } from './garden-math';
+import { renderWordmarkGarden } from './garden-render';
 import { isGardenEnabled } from './garden-setting';
 
-export class GardenBackground {
+export class WordmarkGardenBackground {
   private canvas: HTMLCanvasElement | null = null;
   private ctx: CanvasRenderingContext2D | null = null;
-  private landscape: GardenLandscape | null = null;
-  private palette: GardenThemePalette = resolveGardenPalette();
+  private model: WordmarkGardenModel | null = null;
+
+  private canvasWidthCss: number = 400;
+  private canvasHeightCss: number = 220;
+  private isMobile: boolean = false;
 
   private animFrameId: number | null = null;
   private startTimeMs: number = 0;
@@ -23,59 +27,58 @@ export class GardenBackground {
   private isMounted: boolean = false;
   private isDestroyed: boolean = false;
 
+  private pointerPos: Vector2D | null = null;
+  private blurTimeout: number | null = null;
+  private resizeTimeout: number | null = null;
+
   private boundOnResize: () => void;
   private boundOnVisibilityChange: () => void;
   private boundOnBlur: () => void;
   private boundOnFocus: () => void;
-  private boundOnThemeChange: () => void;
+  private boundOnPointerMove: (e: PointerEvent) => void;
   private boundOnGardenToggle: (e: Event) => void;
-
-  private resizeTimeout: number | null = null;
 
   constructor() {
     this.boundOnResize = () => this.handleResize();
     this.boundOnVisibilityChange = () => this.handleVisibilityChange();
     this.boundOnBlur = () => this.handleBlur();
     this.boundOnFocus = () => this.handleFocus();
-    this.boundOnThemeChange = () => this.handleThemeChange();
+    this.boundOnPointerMove = (e: PointerEvent) => this.handlePointerMove(e);
     this.boundOnGardenToggle = (e: Event) => this.handleGardenToggle(e as CustomEvent);
   }
 
   /**
-   * Mounts the garden canvas to the DOM if enabled and starts the lifecycle.
+   * Mounts the garden canvas and begins the animation loop if enabled.
    */
-  public mount(container?: HTMLElement | null): void {
+  public mount(): void {
     if (this.isDestroyed || this.isMounted) return;
 
     if (!isGardenEnabled()) {
-      // Still listen for toggle to turn on later
       this.bindGlobalEvents();
       return;
     }
 
-    const parent =
-      container ||
-      document.querySelector<HTMLElement>('#gate-screen') ||
-      document.querySelector<HTMLElement>('#app') ||
-      document.body;
-
-    let canvas = parent.querySelector<HTMLCanvasElement>('#garden-canvas');
+    let canvas = document.querySelector<HTMLCanvasElement>('#hero-garden-canvas');
     if (!canvas) {
-      canvas = document.createElement('canvas');
-      canvas.id = 'garden-canvas';
-      canvas.className = 'garden-background-canvas';
-      canvas.setAttribute('aria-hidden', 'true');
-      canvas.setAttribute('tabindex', '-1');
-      // Insert as first child so it sits behind all content
-      parent.insertBefore(canvas, parent.firstChild);
+      const container = document.querySelector<HTMLElement>('#hero-wordmark-container');
+      if (container) {
+        canvas = document.createElement('canvas');
+        canvas.id = 'hero-garden-canvas';
+        canvas.className = 'hero-garden-canvas';
+        canvas.setAttribute('aria-hidden', 'true');
+        canvas.setAttribute('tabindex', '-1');
+        container.insertBefore(canvas, container.firstChild);
+      }
     }
+
+    if (!canvas) return;
 
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d', { alpha: true });
     this.isMounted = true;
 
     this.bindGlobalEvents();
-    this.resizeCanvasAndLandscape();
+    this.measureAndResize();
     this.start();
   }
 
@@ -84,7 +87,7 @@ export class GardenBackground {
     document.addEventListener('visibilitychange', this.boundOnVisibilityChange);
     window.addEventListener('blur', this.boundOnBlur);
     window.addEventListener('focus', this.boundOnFocus);
-    window.addEventListener('themechange', this.boundOnThemeChange);
+    window.addEventListener('pointermove', this.boundOnPointerMove, { passive: true });
     window.addEventListener('instruversal:garden-toggle', this.boundOnGardenToggle);
   }
 
@@ -93,29 +96,42 @@ export class GardenBackground {
     document.removeEventListener('visibilitychange', this.boundOnVisibilityChange);
     window.removeEventListener('blur', this.boundOnBlur);
     window.removeEventListener('focus', this.boundOnFocus);
-    window.removeEventListener('themechange', this.boundOnThemeChange);
+    window.removeEventListener('pointermove', this.boundOnPointerMove);
     window.removeEventListener('instruversal:garden-toggle', this.boundOnGardenToggle);
   }
 
-  private resizeCanvasAndLandscape(): void {
+  private measureAndResize(): void {
     if (!this.canvas || !this.ctx) return;
 
-    const width = window.innerWidth || 360;
-    const height = window.innerHeight || 640;
+    // Measure the active wordmark element
+    const wordmarkEl =
+      document.querySelector<HTMLElement>('.wordmark-light:not([style*="display: none"])') ||
+      document.querySelector<HTMLElement>('.wordmark-dark:not([style*="display: none"])') ||
+      document.querySelector<HTMLElement>('.app-title-link') ||
+      document.querySelector<HTMLElement>('.app-title');
 
-    // Cap devicePixelRatio at 2.0 to conserve mobile GPU / battery
-    const dpr = Math.min(2.0, window.devicePixelRatio || 1);
+    const rect = wordmarkEl ? wordmarkEl.getBoundingClientRect() : null;
+    const baseW = rect && rect.width > 50 ? rect.width : (window.innerWidth < 768 ? 240 : 420);
+    const baseH = rect && rect.height > 20 ? rect.height : (window.innerWidth < 768 ? 80 : 140);
 
-    this.canvas.width = Math.floor(width * dpr);
-    this.canvas.height = Math.floor(height * dpr);
-    this.canvas.style.width = `${width}px`;
-    this.canvas.style.height = `${height}px`;
+    // Canvas is about 130% width and 220% height of the wordmark
+    this.canvasWidthCss = Math.floor(baseW * 1.35);
+    this.canvasHeightCss = Math.floor(baseH * 2.25);
+
+    this.isMobile = (window.innerWidth || 360) < 768;
+    // Cap DPR at 2.0 on desktop, 1.5 on mobile phones
+    const maxDpr = this.isMobile ? 1.5 : 2.0;
+    const dpr = Math.min(maxDpr, window.devicePixelRatio || 1);
+
+    this.canvas.width = Math.floor(this.canvasWidthCss * dpr);
+    this.canvas.height = Math.floor(this.canvasHeightCss * dpr);
+    this.canvas.style.width = `${this.canvasWidthCss}px`;
+    this.canvas.style.height = `${this.canvasHeightCss}px`;
 
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    // Regenerate procedural landscape for the current screen geometry
-    this.landscape = generateGarden(width, height);
-    this.palette = resolveGardenPalette();
+    // Procedural garden generation based on the measured canvas dimensions
+    this.model = generateWordmarkGarden(this.canvasWidthCss, this.canvasHeightCss);
   }
 
   private handleResize(): void {
@@ -124,11 +140,20 @@ export class GardenBackground {
     }
     this.resizeTimeout = window.setTimeout(() => {
       this.resizeTimeout = null;
-      this.resizeCanvasAndLandscape();
+      this.measureAndResize();
       if (!this.isRunning && this.isMounted) {
         this.renderSingleFrame();
       }
     }, 120);
+  }
+
+  private handlePointerMove(e: PointerEvent): void {
+    if (!this.canvas) return;
+    const rect = this.canvas.getBoundingClientRect();
+    this.pointerPos = {
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top,
+    };
   }
 
   private handleVisibilityChange(): void {
@@ -140,18 +165,20 @@ export class GardenBackground {
   }
 
   private handleBlur(): void {
-    this.stop();
+    // Pause if window has lost focus for more than 5 seconds
+    if (this.blurTimeout !== null) window.clearTimeout(this.blurTimeout);
+    this.blurTimeout = window.setTimeout(() => {
+      this.blurTimeout = null;
+      this.stop();
+    }, 5000);
   }
 
   private handleFocus(): void {
-    this.start();
-  }
-
-  private handleThemeChange(): void {
-    this.palette = resolveGardenPalette();
-    if (!this.isRunning && this.isMounted) {
-      this.renderSingleFrame();
+    if (this.blurTimeout !== null) {
+      window.clearTimeout(this.blurTimeout);
+      this.blurTimeout = null;
     }
+    this.start();
   }
 
   private handleGardenToggle(e: CustomEvent<{ enabled: boolean }>): void {
@@ -167,31 +194,35 @@ export class GardenBackground {
       this.stop();
       if (this.canvas) {
         this.canvas.style.display = 'none';
-        if (this.ctx && this.landscape) {
-          this.ctx.clearRect(0, 0, this.landscape.width, this.landscape.height);
+        if (this.ctx) {
+          this.ctx.clearRect(0, 0, this.canvasWidthCss, this.canvasHeightCss);
         }
       }
     }
   }
 
   /**
-   * Starts or resumes the animation loop.
+   * Starts or resumes animation loop.
    */
   public start(): void {
     if (!this.isMounted || this.isDestroyed || !isGardenEnabled()) return;
 
-    // Check if gate screen is currently active / visible
+    // Check if on start screen (hash #/ or empty)
+    const hash = window.location.hash;
+    const isStartScreen = hash === '#/' || hash === '' || hash === '#';
     const gateScreen = document.querySelector<HTMLElement>('#gate-screen');
-    if (gateScreen && (gateScreen.style.display === 'none' || gateScreen.classList.contains('hidden'))) {
-      return; // Do not run when editor is open
+    const isGateVisible =
+      gateScreen && gateScreen.style.display !== 'none' && !gateScreen.classList.contains('hidden');
+
+    if (!isStartScreen || !isGateVisible) {
+      return; // Do not run when in editor or studio
     }
 
-    // Check for prefers-reduced-motion
     const prefersReducedMotion =
       window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     if (prefersReducedMotion) {
-      this.renderSingleFrame(1.0);
+      this.renderSingleFrame();
       return;
     }
 
@@ -204,7 +235,7 @@ export class GardenBackground {
   }
 
   /**
-   * Pauses the animation loop without removing DOM elements.
+   * Pauses animation loop.
    */
   public stop(): void {
     if (this.animFrameId !== null) {
@@ -214,47 +245,66 @@ export class GardenBackground {
     this.isRunning = false;
   }
 
-  /**
-   * Animation frame loop with frame rate throttling (30fps on mobile, 60fps on desktop).
-   */
   private loop = (): void => {
-    if (!this.isRunning || !this.ctx || !this.landscape) return;
+    if (!this.isRunning || !this.ctx || !this.model) return;
 
     const now = performance.now();
-    const isMobile = this.landscape.isMobile;
-    const minFrameIntervalMs = isMobile ? 32 : 16; // 30 fps cap on phone, 60 fps on desktop
+    const minFrameIntervalMs = this.isMobile ? 32 : 16; // 30fps mobile, 60fps desktop
 
     const elapsedSinceLast = now - this.lastFrameTimeMs;
     if (elapsedSinceLast >= minFrameIntervalMs) {
-      this.lastFrameTimeMs = now - (elapsedSinceLast % minFrameIntervalMs);
+      this.lastFrameTimeMs = now;
 
-      const elapsedSec = (now - this.startTimeMs) / 1000;
-      // Growth duration 1.8 seconds
-      const growthProgress = Math.min(1.0, elapsedSec / 1.8);
+      const elapsedMs = now - this.startTimeMs;
+      const timeSec = elapsedMs / 1000;
 
-      renderGardenFrame(this.ctx, this.landscape, elapsedSec, growthProgress, this.palette);
+      const isDarkTheme = document.documentElement.getAttribute('data-theme') === 'dark';
+
+      renderWordmarkGarden(
+        this.ctx,
+        this.model,
+        this.canvasWidthCss,
+        this.canvasHeightCss,
+        elapsedMs,
+        timeSec,
+        this.pointerPos,
+        isDarkTheme
+      );
     }
 
     this.animFrameId = requestAnimationFrame(this.loop);
   };
 
   /**
-   * Draws a single static frame for reduced motion or paused resize state.
+   * Renders a single fully-grown still frame for prefers-reduced-motion.
    */
-  public renderSingleFrame(progress: number = 1.0): void {
-    if (!this.ctx || !this.landscape) return;
-    renderGardenFrame(this.ctx, this.landscape, 0.5, progress, this.palette);
+  public renderSingleFrame(): void {
+    if (!this.ctx || !this.model) return;
+    const isDarkTheme = document.documentElement.getAttribute('data-theme') === 'dark';
+    renderWordmarkGarden(
+      this.ctx,
+      this.model,
+      this.canvasWidthCss,
+      this.canvasHeightCss,
+      4000, // Fully grown state
+      1.0,
+      null,
+      isDarkTheme
+    );
   }
 
   /**
-   * Completely stops the loop, removes listeners, and cleans up canvas resources.
-   * Ensures 0 CPU consumption when user is in the editor.
+   * Complete cleanup on view exit.
    */
   public teardown(): void {
     this.stop();
     if (this.resizeTimeout !== null) {
       window.clearTimeout(this.resizeTimeout);
       this.resizeTimeout = null;
+    }
+    if (this.blurTimeout !== null) {
+      window.clearTimeout(this.blurTimeout);
+      this.blurTimeout = null;
     }
 
     this.unbindGlobalEvents();
@@ -264,7 +314,7 @@ export class GardenBackground {
       this.canvas = null;
     }
     this.ctx = null;
-    this.landscape = null;
+    this.model = null;
     this.isMounted = false;
   }
 
@@ -274,12 +324,11 @@ export class GardenBackground {
   }
 }
 
-// Global singleton instance for easy lazy loading and lifecycle binding
-let activeGarden: GardenBackground | null = null;
+let activeGarden: WordmarkGardenBackground | null = null;
 
-export function getGardenBackground(): GardenBackground {
+export function getGardenBackground(): WordmarkGardenBackground {
   if (!activeGarden) {
-    activeGarden = new GardenBackground();
+    activeGarden = new WordmarkGardenBackground();
   }
   return activeGarden;
 }

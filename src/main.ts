@@ -75,12 +75,15 @@ app.innerHTML = `
       <img src="/icon.svg" alt="Instruversal Brand Icon" class="gate-icon-img icon-light-mode" />
       <img src="/icon-dark.svg" alt="Instruversal Brand Icon" class="gate-icon-img icon-dark-mode" />
     </div>
-    <h1 class="app-title">
-      <a href="#/" class="app-title-link" id="gate-home-link" aria-label="Instruversal, go to the start page">
-        <img src="/brand/logo-light.svg" class="brand-wordmark wordmark-light" alt="Instruversal" width="1536" height="742.4" decoding="async" />
-        <img src="/brand/logo-dark.svg" class="brand-wordmark wordmark-dark" alt="" aria-hidden="true" width="1536" height="742.4" decoding="async" />
-      </a>
-    </h1>
+    <div class="hero-wordmark-container" id="hero-wordmark-container">
+      <canvas class="hero-garden-canvas" id="hero-garden-canvas" aria-hidden="true"></canvas>
+      <h1 class="app-title">
+        <a href="#/" class="app-title-link" id="gate-home-link" aria-label="Instruversal, go to the start page">
+          <img src="/brand/logo-light-transparent.svg" class="brand-wordmark wordmark-light" alt="Instruversal" width="1536" height="742.4" decoding="async" />
+          <img src="/brand/logo-dark-transparent.svg" class="brand-wordmark wordmark-dark" alt="" aria-hidden="true" width="1536" height="742.4" decoding="async" />
+        </a>
+      </h1>
+    </div>
     <p class="app-subtitle">Draw strokes to compose. Notes loop in time.</p>
     <button class="start-btn" id="start-btn" type="button" aria-label="Start audio and enter Instruversal">
       Tap to start

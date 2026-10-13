@@ -175,6 +175,7 @@ instruversal/
 ## Credits & Acknowledgements
 
 - Inspired by the exploratory design of the `play_music_theory` web application by **Tala Rae Schlossberg**.
+- Rose and vine garden inspired by Type Garden by Akshat Agarwal (type-garden.vercel.app). Code written for this project.
 - Audio engine powered by [Tone.js](https://tonejs.github.io/).
 - 3D gallery graphics powered by [OGL](https://github.com/oframe/ogl).
 - Circular gallery concept adapted to vanilla TypeScript & OGL from community component. *(Note: If you have author or license details, please submit an issue or pull request to update attribution).*

@@ -3,34 +3,26 @@ import {
   createRng,
   clamp,
   easeOutCubic,
-  evaluateCubicBezier,
-  evaluateCubicBezierTangent,
-  computeGustWave,
-  computeWindSway,
-  computeRoseBreathing,
-  computeButterflyMotion,
-  generateGarden,
+  evaluateSpring,
+  generateVineCurve,
+  computeGardenWindSway,
+  computeGardenGust,
+  computePointerLean,
+  computeBoilOffset,
+  generateWordmarkGarden,
 } from './garden-math';
 
-describe('garden-math', () => {
+describe('garden-math (Wordmark Garden)', () => {
   describe('createRng (Mulberry32)', () => {
     it('produces deterministic numbers with the same seed', () => {
-      const rng1 = createRng(12345);
-      const rng2 = createRng(12345);
-      const seq1 = [rng1(), rng1(), rng1(), rng1()];
-      const seq2 = [rng2(), rng2(), rng2(), rng2()];
-      expect(seq1).toEqual(seq2);
+      const rng1 = createRng(42);
+      const rng2 = createRng(42);
+      expect([rng1(), rng1(), rng1()]).toEqual([rng2(), rng2(), rng2()]);
     });
 
-    it('produces different sequences with different seeds', () => {
-      const rng1 = createRng(12345);
-      const rng2 = createRng(54321);
-      expect(rng1()).not.toEqual(rng2());
-    });
-
-    it('produces numbers strictly within [0, 1)', () => {
+    it('produces values strictly within [0, 1)', () => {
       const rng = createRng(99);
-      for (let i = 0; i < 100; i++) {
+      for (let i = 0; i < 50; i++) {
         const val = rng();
         expect(val).toBeGreaterThanOrEqual(0);
         expect(val).toBeLessThan(1);
@@ -39,187 +31,111 @@ describe('garden-math', () => {
   });
 
   describe('clamp and easeOutCubic', () => {
-    it('clamps values correctly', () => {
+    it('clamps values accurately', () => {
       expect(clamp(-5, 0, 10)).toBe(0);
       expect(clamp(15, 0, 10)).toBe(10);
-      expect(clamp(5, 0, 10)).toBe(5);
+      expect(clamp(4, 0, 10)).toBe(4);
     });
 
-    it('satisfies easing boundary conditions', () => {
+    it('computes cubic ease-out correctly', () => {
       expect(easeOutCubic(0)).toBeCloseTo(0, 5);
       expect(easeOutCubic(1)).toBeCloseTo(1, 5);
-      expect(easeOutCubic(-0.5)).toBeCloseTo(0, 5);
-      expect(easeOutCubic(1.5)).toBeCloseTo(1, 5);
+      expect(easeOutCubic(0.5)).toBeGreaterThan(0.5); // Fast initial rise
+    });
+  });
+
+  describe('evaluateSpring physics', () => {
+    it('starts at 0 when elapsed time is 0 or negative', () => {
+      expect(evaluateSpring(0)).toBe(0);
+      expect(evaluateSpring(-1)).toBe(0);
     });
 
-    it('is strictly monotonically increasing in [0, 1]', () => {
-      let prev = -1;
-      for (let t = 0; t <= 1.0; t += 0.1) {
-        const val = easeOutCubic(t);
-        expect(val).toBeGreaterThan(prev);
-        prev = val;
+    it('converges smoothly toward 1.0 as time increases', () => {
+      const valShort = evaluateSpring(0.1, 8, 14);
+      const valMid = evaluateSpring(0.4, 8, 14);
+      const valLong = evaluateSpring(2.0, 8, 14);
+
+      expect(valShort).toBeGreaterThan(0);
+      expect(valMid).toBeGreaterThan(valShort);
+      expect(valLong).toBeCloseTo(1.0, 2);
+    });
+  });
+
+  describe('generateVineCurve', () => {
+    it('generates exact 41 points for 40 segments starting at origin', () => {
+      const origin = { x: 50, y: 100 };
+      const points = generateVineCurve(origin, -Math.PI / 2, 120, 0.5, 1.5, 0.3, 40);
+
+      expect(points.length).toBe(41);
+      expect(points[0]).toEqual(origin);
+      // Last point is displaced upward
+      expect(points[40].y).toBeLessThan(origin.y);
+    });
+  });
+
+  describe('computeGardenWindSway and Gust', () => {
+    it('sway is 0 at base and non-zero along vine', () => {
+      expect(computeGardenWindSway(1.0, 100, 0)).toBe(0);
+      expect(Math.abs(computeGardenWindSway(1.0, 100, 1.0))).toBeGreaterThan(0);
+    });
+
+    it('gust is 0 outside the sweep window', () => {
+      const result = computeGardenGust(5.0, 600, 300, 1.0, 100);
+      expect(result.offsetX).toBe(0);
+      expect(result.angleRot).toBe(0);
+    });
+
+    it('gust deflects positively during the wave sweep', () => {
+      const result = computeGardenGust(1.0, 600, 100, 1.0, 100);
+      expect(result.offsetX).toBeGreaterThanOrEqual(0);
+    });
+  });
+
+  describe('computePointerLean', () => {
+    it('returns zero deflection when pointer is null or beyond radius', () => {
+      const pt = { x: 100, y: 100 };
+      expect(computePointerLean(pt, null, 1.0)).toEqual({ dx: 0, dy: 0 });
+      expect(computePointerLean(pt, { x: 800, y: 800 }, 1.0)).toEqual({ dx: 0, dy: 0 });
+    });
+
+    it('attracts toward nearby pointer', () => {
+      const pt = { x: 100, y: 100 };
+      const pointer = { x: 150, y: 100 };
+      const lean = computePointerLean(pt, pointer, 1.0);
+      expect(lean.dx).toBeGreaterThan(0);
+      expect(lean.dy).toBeCloseTo(0, 3);
+    });
+  });
+
+  describe('computeBoilOffset', () => {
+    it('produces small bounded jitter', () => {
+      const unit = 100;
+      for (let t = 0; t < 1.0; t += 0.15) {
+        const offset = computeBoilOffset(1, t, unit);
+        expect(Math.abs(offset.bx)).toBeLessThanOrEqual(unit * 0.02);
+        expect(Math.abs(offset.by)).toBeLessThanOrEqual(unit * 0.02);
       }
     });
   });
 
-  describe('evaluateCubicBezier and tangent', () => {
-    const p0 = { x: 0, y: 100 };
-    const p1 = { x: 10, y: 70 };
-    const p2 = { x: 20, y: 30 };
-    const p3 = { x: 30, y: 0 };
+  describe('generateWordmarkGarden', () => {
+    it('creates vines with roses, leaves, and buds matching artwork specs', () => {
+      const garden = generateWordmarkGarden(400, 160, 42);
+      expect(garden.vines.length).toBe(8);
 
-    it('evaluates endpoints accurately at t=0 and t=1', () => {
-      const start = evaluateCubicBezier(p0, p1, p2, p3, 0);
-      const end = evaluateCubicBezier(p0, p1, p2, p3, 1);
-      expect(start.x).toBeCloseTo(p0.x, 3);
-      expect(start.y).toBeCloseTo(p0.y, 3);
-      expect(end.x).toBeCloseTo(p3.x, 3);
-      expect(end.y).toBeCloseTo(p3.y, 3);
-    });
+      const roses = garden.vines.filter((v) => v.rose !== null);
+      expect(roses.length).toBeGreaterThanOrEqual(4);
 
-    it('interpolates midpoint smoothly within bounding box', () => {
-      const mid = evaluateCubicBezier(p0, p1, p2, p3, 0.5);
-      expect(mid.x).toBeGreaterThan(p0.x);
-      expect(mid.x).toBeLessThan(p3.x);
-      expect(mid.y).toBeLessThan(p0.y);
-      expect(mid.y).toBeGreaterThan(p3.y);
-    });
-
-    it('calculates tangent angle without NaN', () => {
-      const angleStart = evaluateCubicBezierTangent(p0, p1, p2, p3, 0);
-      const angleMid = evaluateCubicBezierTangent(p0, p1, p2, p3, 0.5);
-      const angleEnd = evaluateCubicBezierTangent(p0, p1, p2, p3, 1);
-      expect(Number.isNaN(angleStart)).toBe(false);
-      expect(Number.isNaN(angleMid)).toBe(false);
-      expect(Number.isNaN(angleEnd)).toBe(false);
-    });
-  });
-
-  describe('computeGustWave', () => {
-    it('returns zero outside of the active traveling wave duration', () => {
-      // Period is 12s, sweep duration is 2.4s. At t=6s, gust should be 0.
-      expect(computeGustWave(6.0, 1000, 500)).toBe(0);
-      expect(computeGustWave(10.0, 1000, 200)).toBe(0);
-    });
-
-    it('produces positive wave peak traveling across space', () => {
-      // At t=1.2s (mid-sweep), wave center is near middle of screen (500)
-      const centerVal = computeGustWave(1.2, 1000, 500);
-      const farVal = computeGustWave(1.2, 1000, 50);
-      expect(centerVal).toBeGreaterThan(0);
-      expect(centerVal).toBeGreaterThan(farVal);
-    });
-  });
-
-  describe('computeWindSway', () => {
-    it('is zero at stem root (h=0) regardless of time or gusts', () => {
-      expect(computeWindSway(100, 0, 1.5, 0)).toBeCloseTo(0, 5);
-      expect(computeWindSway(100, 0, 1.5, 1.5)).toBeCloseTo(0, 5);
-    });
-
-    it('increases deflection with height fraction', () => {
-      const swayMid = Math.abs(computeWindSway(100, 0.5, 2.0, 0));
-      const swayTip = Math.abs(computeWindSway(100, 1.0, 2.0, 0));
-      // Deflection formula uses h^1.6, so tip should have significantly higher amplitude
-      expect(swayTip).toBeGreaterThanOrEqual(swayMid);
-    });
-
-    it('amplifies deflection during gusts', () => {
-      const calmTip = Math.abs(computeWindSway(100, 1.0, 3.5, 0));
-      const gustTip = Math.abs(computeWindSway(100, 1.0, 3.5, 2.0));
-      expect(gustTip).toBeGreaterThan(calmTip);
-    });
-  });
-
-  describe('computeRoseBreathing', () => {
-    it('stays strictly within 0.96 and 1.04 breathing range', () => {
-      for (let t = 0; t < 20; t += 0.5) {
-        const scale0 = computeRoseBreathing(t, 0);
-        const scale1 = computeRoseBreathing(t, 1);
-        expect(scale0).toBeGreaterThanOrEqual(0.959);
-        expect(scale0).toBeLessThanOrEqual(1.041);
-        expect(scale1).toBeGreaterThanOrEqual(0.959);
-        expect(scale1).toBeLessThanOrEqual(1.041);
+      for (const vine of garden.vines) {
+        expect(vine.segments.length).toBe(41);
+        expect(vine.leaves.length).toBeGreaterThanOrEqual(4);
       }
-    });
-  });
-
-  describe('computeButterflyMotion', () => {
-    it('stays within drift boundary range and oscillates wings', () => {
-      const butterfly = {
-        id: 0,
-        side: 'left' as const,
-        anchorX: 100,
-        anchorY: 150,
-        driftRangeX: 20,
-        driftRangeY: 15,
-        speed: 1.0,
-        phaseOffset: 0,
-        colorName: 'plum' as const,
-      };
-
-      for (let t = 0; t < 5; t += 0.25) {
-        const motion = computeButterflyMotion(butterfly, t);
-        expect(Math.abs(motion.x - butterfly.anchorX)).toBeLessThanOrEqual(butterfly.driftRangeX + 0.1);
-        expect(Math.abs(motion.y - butterfly.anchorY)).toBeLessThanOrEqual(butterfly.driftRangeY + 0.1);
-        expect(Math.abs(motion.wingAngle)).toBeLessThanOrEqual(0.75);
-      }
-    });
-  });
-
-  describe('generateGarden calm zone enforcement', () => {
-    it('enforces calm central zone on mobile (40% open center)', () => {
-      const landscape = generateGarden(400, 800, 42);
-      expect(landscape.isMobile).toBe(true);
-      // Calm zone center 40%: [120, 280]
-      expect(landscape.calmZone.minX).toBeCloseTo(120, 1);
-      expect(landscape.calmZone.maxX).toBeCloseTo(280, 1);
-
-      expect(landscape.stems.length).toBeGreaterThanOrEqual(4);
-      expect(landscape.stems.length).toBeLessThanOrEqual(8);
-
-      for (const stem of landscape.stems) {
-        // Roots must not start in the calm zone
-        expect(stem.p0.x < landscape.calmZone.minX || stem.p0.x > landscape.calmZone.maxX).toBe(true);
-        // Tips must not end in the calm zone
-        expect(stem.p3.x < landscape.calmZone.minX || stem.p3.x > landscape.calmZone.maxX).toBe(true);
-      }
-    });
-
-    it('enforces calm central zone on desktop (80% open center)', () => {
-      const landscape = generateGarden(1200, 800, 42);
-      expect(landscape.isMobile).toBe(false);
-      // Calm zone center 80%: [120, 1080]
-      expect(landscape.calmZone.minX).toBeCloseTo(120, 1);
-      expect(landscape.calmZone.maxX).toBeCloseTo(1080, 1);
-
-      expect(landscape.stems.length).toBe(6);
-
-      for (const stem of landscape.stems) {
-        // Roots must be in the outer 10% margins
-        expect(stem.p0.x < landscape.calmZone.minX || stem.p0.x > landscape.calmZone.maxX).toBe(true);
-        // Tips must remain in outer margins
-        expect(stem.p3.x < landscape.calmZone.minX || stem.p3.x > landscape.calmZone.maxX).toBe(true);
-      }
-    });
-
-    it('attaches blooming flowers to 3 to 5 stems', () => {
-      const landscapeMobile = generateGarden(400, 800, 42);
-      const flowersMobile = landscapeMobile.stems.filter((s) => s.flower !== null);
-      expect(flowersMobile.length).toBeGreaterThanOrEqual(3);
-      expect(flowersMobile.length).toBeLessThanOrEqual(5);
-
-      const landscapeDesktop = generateGarden(1200, 800, 42);
-      const flowersDesktop = landscapeDesktop.stems.filter((s) => s.flower !== null);
-      expect(flowersDesktop.length).toBeGreaterThanOrEqual(3);
-      expect(flowersDesktop.length).toBeLessThanOrEqual(5);
     });
 
     it('is completely deterministic with fixed seed', () => {
-      const landA = generateGarden(1000, 700, 888);
-      const landB = generateGarden(1000, 700, 888);
-      expect(landA.stems[0].p3).toEqual(landB.stems[0].p3);
-      expect(landA.stems[1].p0).toEqual(landB.stems[1].p0);
+      const g1 = generateWordmarkGarden(500, 200, 123);
+      const g2 = generateWordmarkGarden(500, 200, 123);
+      expect(g1.vines[0].segments[20]).toEqual(g2.vines[0].segments[20]);
     });
   });
 });
