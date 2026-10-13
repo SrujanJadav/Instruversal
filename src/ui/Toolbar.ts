@@ -1067,6 +1067,8 @@ export class Toolbar {
     this.unsubs.push(
       events.on('transport:play', () => this.updatePlayState(true)),
       events.on('transport:pause', () => this.updatePlayState(false)),
+      events.on('practice:count-in-start' as any, () => this.updatePlayState(true)),
+      events.on('practice:count-in-end' as any, () => this.updatePlayState(getTransport().isPlaying())),
       events.on('bpm:change', (newBpm) => {
         const bpmVal = this.element.querySelector('#tb-bpm-val');
         if (bpmVal) bpmVal.textContent = String(newBpm);

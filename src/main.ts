@@ -38,6 +38,8 @@ import { getAccountSheet } from './ui/AccountSheet';
 import { getMigrationSheet } from './ui/MigrationSheet';
 import { generateUuid } from './library/manager';
 import { registerServiceWorker } from './pwa/registerSw';
+import { initCountInOverlay } from './ui/CountInOverlay';
+import { getPracticeEngine } from './audio/practice';
 
 // Initialize color theme system
 initTheme();
@@ -500,6 +502,9 @@ export async function enterMainView(startAudio: boolean = true) {
   } else if (drawingCanvas) {
     drawingCanvas.resume();
   }
+
+  initCountInOverlay();
+  getPracticeEngine();
 
   const toolbarContainer = document.querySelector<HTMLElement>('#toolbar-container');
   if (toolbarContainer && !toolbar) {

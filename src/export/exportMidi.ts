@@ -116,6 +116,7 @@ export interface MidiExportOptions {
   strokes?: Stroke[];
   tracks?: Track[];
   scaleOctaves?: [number, number];
+  includeMetronome?: boolean;
 }
 
 export interface MidiExportResult {
@@ -396,6 +397,26 @@ export function exportProjectToMidi(options: MidiExportOptions = {}): MidiExport
       program,
       keyText,
       notes: repeatedNotes,
+    });
+  }
+
+  // Include metronome track if requested
+  if (options.includeMetronome) {
+    const totalBeats = repeats * bars * 4;
+    const metronomeNotes: MidiNote[] = [];
+    for (let b = 0; b < totalBeats; b++) {
+      const isAccent = (b % 4) === 0;
+      metronomeNotes.push({
+        midi: isAccent ? 76 : 77, // High Wood Block / Low Wood Block
+        startTick: b * 480,
+        durationTicks: 60,
+        velocity: isAccent ? 100 : 70,
+      });
+    }
+    midiTracks.push({
+      name: 'Metronome',
+      channel: 9,
+      notes: metronomeNotes,
     });
   }
 

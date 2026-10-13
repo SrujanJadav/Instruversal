@@ -3543,3 +3543,159 @@ canvas.instruversal-canvas {
 .export-done-btn:hover {
   opacity: 0.88;
 }
+
+/* Practice Aids (Mixer Sheet) */
+.practice-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.practice-card {
+  background: var(--paper-deep);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.practice-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.practice-label-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.practice-item-title {
+  font-family: var(--font-ui);
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.practice-item-sub {
+  font-family: var(--font-ui);
+  font-size: 0.72rem;
+  color: var(--ink-soft);
+}
+
+.practice-toggle-btn {
+  min-width: 44px;
+  min-height: 32px;
+  padding: 4px 12px;
+  font-family: var(--font-ui);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.practice-controls-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--line);
+  transition: opacity var(--transition-fast);
+}
+
+.practice-controls-row.practice-disabled {
+  opacity: 0.38;
+  pointer-events: none;
+}
+
+.practice-follows-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.practice-sub-lbl {
+  font-family: var(--font-ui);
+  font-size: 0.74rem;
+  color: var(--ink-soft);
+}
+
+.practice-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-ui);
+  font-size: 0.76rem;
+  color: var(--ink-soft);
+  cursor: pointer;
+  user-select: none;
+  margin-top: 2px;
+}
+
+.practice-checkbox-row input[type="checkbox"] {
+  accent-color: var(--ink);
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+/* Count-in Overlay */
+.count-in-overlay {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  background: var(--paper);
+  border: 2px solid var(--ink);
+  box-shadow: 0 4px 20px rgba(28, 26, 22, 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  pointer-events: none;
+  transition: opacity 120ms ease-out;
+}
+
+.count-in-overlay.hidden {
+  display: none;
+  opacity: 0;
+}
+
+.count-in-overlay.visible {
+  display: flex;
+  opacity: 1;
+}
+
+.count-in-number {
+  font-family: var(--font-display);
+  font-size: 3.2rem;
+  font-weight: 600;
+  color: var(--ink);
+  line-height: 1;
+}
+
+@keyframes countInPulse {
+  0% { transform: translate(-50%, -50%) scale(1.12); }
+  100% { transform: translate(-50%, -50%) scale(1.0); }
+}
+
+.count-in-overlay.beat-pulse {
+  animation: countInPulse 180ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .count-in-overlay.beat-pulse {
+    animation: none;
+  }
+}
+

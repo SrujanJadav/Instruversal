@@ -2,6 +2,7 @@ import * as Tone from 'tone';
 import { CONFIG } from '../config';
 import { state, events, saveSyncOffset } from '../state';
 import { getTotalAudioLatencySeconds } from './context';
+import { getPracticeEngine } from './practice';
 
 export class TransportController {
   private bpm: number = CONFIG.defaultBpm;
@@ -94,6 +95,19 @@ export class TransportController {
       state.audioStarted = true;
       events.emit('audio:started', undefined);
     }
+
+    const practice = getPracticeEngine();
+    // Count-in only happens when starting from stopped
+    const isStopped = Tone.getTransport().state !== 'started' && Tone.getTransport().seconds === 0;
+    if (practice.isCountInEnabled() && isStopped) {
+      state.isPlaying = true;
+      practice.startCountIn(() => {
+        Tone.getTransport().start('+0.02');
+        events.emit('transport:play', undefined);
+      });
+      return;
+    }
+
     // Small scheduled offset so first notes are not clipped on initial play
     Tone.getTransport().start('+0.05');
     state.isPlaying = true;
@@ -101,19 +115,22 @@ export class TransportController {
   }
 
   public pause() {
+    getPracticeEngine().cancelCountIn();
     Tone.getTransport().pause();
     state.isPlaying = false;
     events.emit('transport:pause', undefined);
   }
 
   public stop() {
+    getPracticeEngine().cancelCountIn();
     Tone.getTransport().stop();
     state.isPlaying = false;
     events.emit('transport:pause', undefined);
   }
 
   public toggle(): Promise<void> | void {
-    if (this.isPlaying()) {
+    const practice = getPracticeEngine();
+    if (this.isPlaying() || practice.isCountingIn()) {
       this.pause();
     } else {
       return this.play();

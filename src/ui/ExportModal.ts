@@ -7,6 +7,7 @@ import {
   ExportResult,
 } from '../export/exportAudio';
 import { exportProjectToMidi, downloadMidiFile, MidiExportResult } from '../export/exportMidi';
+import { getPracticeEngine } from '../audio/practice';
 
 export class ExportModal {
   private overlay: HTMLElement;
@@ -338,6 +339,7 @@ export class ExportModal {
         repeats: this.repeats,
         bpm: state.bpm,
         bars: state.bars,
+        includeMetronome: getPracticeEngine().getSettings().includeMetronomeInExport,
       });
 
       this.currentMidiResult = result;

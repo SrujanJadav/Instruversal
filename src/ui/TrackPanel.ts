@@ -25,6 +25,7 @@ import { getPreviewEngine, getAuditionEnabled, setAuditionEnabled } from '../aud
 import { triggerHaptic } from './haptics';
 import { getLightMode, setLightMode } from '../audio/lifecycle';
 import { getTrackThemeColor } from './theme';
+import { getPracticeEngine } from '../audio/practice';
 
 const ROOT_NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
@@ -344,6 +345,8 @@ export class TrackPanel {
 
     const hwMs = Math.round(getTotalAudioLatencySeconds() * 1000);
     const currentBars = getTransport().getBars();
+    const practice = getPracticeEngine();
+    const pSettings = practice.getSettings();
     return `
       <!-- Loop Length Control -->
       <div class="mixer-loop-section">
@@ -437,6 +440,78 @@ export class TrackPanel {
           </button>
         </div>
         <p class="thinned-hint" id="mixer-thinned-hint" style="color: var(--vermilion); font-size: 0.8rem; margin-top: 6px; ${state.isThinned ? '' : 'display: none;'}">Some lines were thinned to keep the sound smooth.</p>
+      </div>
+
+      <!-- Practice Aids -->
+      <div class="mixer-sync-section practice-section">
+        <div class="mixer-sync-header">
+          <span class="section-title">Practice</span>
+        </div>
+        <p class="sync-hint">Aids for jamming and playing along in time.</p>
+
+        <!-- Drone -->
+        <div class="practice-card">
+          <div class="practice-header-row">
+            <div class="practice-label-group">
+              <span class="practice-item-title">Root &amp; Fifth Drone</span>
+              <span class="practice-item-sub">Quiet sustained pad under the loop</span>
+            </div>
+            <button type="button" class="mode-pill-btn practice-toggle-btn ${pSettings.droneEnabled ? 'active' : ''}" id="practice-drone-toggle" role="switch" aria-checked="${pSettings.droneEnabled}">
+              ${pSettings.droneEnabled ? 'On' : 'Off'}
+            </button>
+          </div>
+          <div class="practice-controls-row ${pSettings.droneEnabled ? '' : 'practice-disabled'}">
+            <div class="sync-slider-row">
+              <span class="sync-range-lbl">Vol</span>
+              <input type="range" class="sync-slider" id="practice-drone-vol" min="0" max="100" step="5" value="${Math.round(pSettings.droneVolume * 100)}" aria-label="Drone volume" />
+              <span class="sync-val-display" id="practice-drone-vol-val">${Math.round(pSettings.droneVolume * 100)}%</span>
+            </div>
+            <div class="practice-follows-row">
+              <span class="practice-sub-lbl">Follows:</span>
+              <div class="loop-mode-toggle" role="radiogroup" aria-label="Drone follows key">
+                <button type="button" class="mode-pill-btn ${pSettings.droneFollows === 'selected' ? 'active' : ''}" data-drone-follows="selected" role="radio" aria-checked="${pSettings.droneFollows === 'selected'}">Selected track</button>
+                <button type="button" class="mode-pill-btn ${pSettings.droneFollows === 'base' ? 'active' : ''}" data-drone-follows="base" role="radio" aria-checked="${pSettings.droneFollows === 'base'}">Base key</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Metronome -->
+        <div class="practice-card">
+          <div class="practice-header-row">
+            <div class="practice-label-group">
+              <span class="practice-item-title">Metronome</span>
+              <span class="practice-item-sub">Soft click on every beat (accent on beat 1)</span>
+            </div>
+            <button type="button" class="mode-pill-btn practice-toggle-btn ${pSettings.metronomeEnabled ? 'active' : ''}" id="practice-metronome-toggle" role="switch" aria-checked="${pSettings.metronomeEnabled}">
+              ${pSettings.metronomeEnabled ? 'On' : 'Off'}
+            </button>
+          </div>
+          <div class="practice-controls-row ${pSettings.metronomeEnabled ? '' : 'practice-disabled'}">
+            <div class="sync-slider-row">
+              <span class="sync-range-lbl">Vol</span>
+              <input type="range" class="sync-slider" id="practice-metronome-vol" min="0" max="100" step="5" value="${Math.round(pSettings.metronomeVolume * 100)}" aria-label="Metronome volume" />
+              <span class="sync-val-display" id="practice-metronome-vol-val">${Math.round(pSettings.metronomeVolume * 100)}%</span>
+            </div>
+            <label class="practice-checkbox-row">
+              <input type="checkbox" id="practice-export-metronome" ${pSettings.includeMetronomeInExport ? 'checked' : ''} />
+              <span>Include metronome in export</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Count-In -->
+        <div class="practice-card">
+          <div class="practice-header-row">
+            <div class="practice-label-group">
+              <span class="practice-item-title">Count-in</span>
+              <span class="practice-item-sub">1 bar of clicks before playback from stopped</span>
+            </div>
+            <button type="button" class="mode-pill-btn practice-toggle-btn ${pSettings.countInEnabled ? 'active' : ''}" id="practice-countin-toggle" role="switch" aria-checked="${pSettings.countInEnabled}">
+              ${pSettings.countInEnabled ? 'On' : 'Off'}
+            </button>
+          </div>
+        </div>
       </div>
     `;
   }
@@ -1162,6 +1237,67 @@ export class TrackPanel {
           this.render();
         }
       });
+    });
+
+    // Practice aids controls in Mixer
+    const droneToggleBtn = this.panel.querySelector<HTMLButtonElement>('#practice-drone-toggle');
+    droneToggleBtn?.addEventListener('click', () => {
+      triggerHaptic(6);
+      const practice = getPracticeEngine();
+      const current = practice.getSettings().droneEnabled;
+      practice.updateSettings({ droneEnabled: !current });
+      this.render();
+    });
+
+    const droneVolSlider = this.panel.querySelector<HTMLInputElement>('#practice-drone-vol');
+    const droneVolVal = this.panel.querySelector<HTMLElement>('#practice-drone-vol-val');
+    droneVolSlider?.addEventListener('input', () => {
+      const val = parseInt(droneVolSlider.value, 10);
+      if (droneVolVal) droneVolVal.textContent = `${val}%`;
+      getPracticeEngine().updateSettings({ droneVolume: val / 100 });
+    });
+
+    const droneFollowBtns = this.panel.querySelectorAll<HTMLButtonElement>('[data-drone-follows]');
+    droneFollowBtns.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const follows = btn.dataset.droneFollows as 'selected' | 'base';
+        if (follows) {
+          triggerHaptic(4);
+          getPracticeEngine().updateSettings({ droneFollows: follows });
+          this.render();
+        }
+      });
+    });
+
+    const metronomeToggleBtn = this.panel.querySelector<HTMLButtonElement>('#practice-metronome-toggle');
+    metronomeToggleBtn?.addEventListener('click', () => {
+      triggerHaptic(6);
+      const practice = getPracticeEngine();
+      const current = practice.getSettings().metronomeEnabled;
+      practice.updateSettings({ metronomeEnabled: !current });
+      this.render();
+    });
+
+    const metronomeVolSlider = this.panel.querySelector<HTMLInputElement>('#practice-metronome-vol');
+    const metronomeVolVal = this.panel.querySelector<HTMLElement>('#practice-metronome-vol-val');
+    metronomeVolSlider?.addEventListener('input', () => {
+      const val = parseInt(metronomeVolSlider.value, 10);
+      if (metronomeVolVal) metronomeVolVal.textContent = `${val}%`;
+      getPracticeEngine().updateSettings({ metronomeVolume: val / 100 });
+    });
+
+    const exportMetronomeCheck = this.panel.querySelector<HTMLInputElement>('#practice-export-metronome');
+    exportMetronomeCheck?.addEventListener('change', () => {
+      getPracticeEngine().updateSettings({ includeMetronomeInExport: exportMetronomeCheck.checked });
+    });
+
+    const countInToggleBtn = this.panel.querySelector<HTMLButtonElement>('#practice-countin-toggle');
+    countInToggleBtn?.addEventListener('click', () => {
+      triggerHaptic(6);
+      const practice = getPracticeEngine();
+      const current = practice.getSettings().countInEnabled;
+      practice.updateSettings({ countInEnabled: !current });
+      this.render();
     });
   }
 
