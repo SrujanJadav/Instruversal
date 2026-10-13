@@ -3194,22 +3194,6 @@
   justify-content: space-between;
 }
 
-/* ==========================================================================
-   Mobile Touch Targets & Slider Thumbs
-   ========================================================================== */
-@media (pointer: coarse),
-(max-width: 640px) {
-
-  /* Enlarge range slider thumbs to >= 28px for comfortable finger dragging */
-  input[type="range"]::-webkit-slider-thumb {
-    width: 28px !important;
-    height: 28px !important;
-  }
-
-  input[type="range"]::-moz-range-thumb {
-    width: 28px !important;
-    height: 28px !important;
-  }
 
 /* Grid Switch Pill Component */
 .grid-switch-btn {
