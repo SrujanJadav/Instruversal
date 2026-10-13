@@ -1,0 +1,27 @@
+# Cloudflare Pages Custom HTTP Response Headers
+# Note: Cloudflare Pages reads this file at deploy time. vite preview does not apply it.
+# COEP (Cross-Origin-Embedder-Policy) and COOP (Cross-Origin-Opener-Policy) are deliberately
+# omitted because they break Google Fonts (fonts.googleapis.com / fonts.gstatic.com),
+# external asset loading, and Supabase OAuth popup/redirect authentication.
+
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/index.html
+  Cache-Control: no-cache
+
+/sw.js
+  Cache-Control: no-cache
+
+/workbox-*.js
+  Cache-Control: no-cache
+
+/manifest.webmanifest
+  Cache-Control: no-cache
+
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Frame-Options: DENY
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=(), screen-wake-lock=(self), vibrate=(self)
+  Content-Security-Policy-Report-Only: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' blob:; worker-src 'self' blob:; manifest-src 'self'; connect-src 'self' https://zcogvuzgrtojztsjjrnc.supabase.co wss://zcogvuzgrtojztsjjrnc.supabase.co; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'
