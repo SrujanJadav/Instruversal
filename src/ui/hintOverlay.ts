@@ -176,3 +176,11 @@ export function showFirstRunHintOverlay(force = false): void {
     if (e.target === overlayEl) dismiss();
   });
 }
+
+export function dismissHintOverlay(): void {
+  if (overlayEl) {
+    overlayEl.remove();
+    overlayEl = null;
+  }
+}
+

@@ -25,7 +25,7 @@ import { FxPanel } from './ui/FxPanel';
 import { SyncSettingsPill } from './ui/SyncSettingsPill';
 import { initAudioLifecycle, fadeMasterOut, restoreMasterGain } from './audio/lifecycle';
 import { clearThumbnailCache } from './gallery/thumbnail';
-import { showFirstRunHintOverlay } from './ui/hintOverlay';
+import { showFirstRunHintOverlay, dismissHintOverlay } from './ui/hintOverlay';
 import { loadSavedProject } from './audio/projectState';
 import { initTheme, getTheme } from './ui/theme';
 import { ThemeToggle } from './ui/ThemeToggle';
@@ -370,7 +370,9 @@ function closeAllOpenSheets() {
   getLibraryModal().close(false);
   getGalleryModal().close(false);
   getHeaderMoreSheet(() => {}).close();
-  document.querySelector('.first-run-hint-overlay')?.remove();
+  dismissHintOverlay();
+  document.querySelectorAll('.hint-overlay-backdrop').forEach((el) => el.remove());
+  document.querySelectorAll('.first-run-hint-overlay').forEach((el) => el.remove());
 }
 
 export async function goHome() {
@@ -431,6 +433,8 @@ function showGateScreen() {
   document.querySelectorAll('.studio-view').forEach((el) => el.remove());
   document.querySelectorAll('.public-song-view').forEach((el) => el.remove());
   document.querySelectorAll('.studio-coming-soon-screen').forEach((el) => el.remove());
+  dismissHintOverlay();
+  document.querySelectorAll('.hint-overlay-backdrop').forEach((el) => el.remove());
 
   gateScreen.classList.remove('hidden');
   gateScreen.removeAttribute('aria-hidden');
