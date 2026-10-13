@@ -291,6 +291,21 @@
   min-height: 90px;
   border-bottom: 1px solid var(--line);
   position: relative;
+  outline: none;
+}
+
+.studio-lane-row:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: -2px;
+}
+
+.studio-lane-row.selected .studio-lane-header {
+  border-left: 3px solid var(--ink);
+  background-color: var(--paper);
+}
+
+.studio-lane-row.selected .studio-lane-track-area {
+  background-color: rgba(28, 26, 22, 0.03);
 }
 
 .studio-lane-header {
@@ -725,8 +740,8 @@
 }
 
 .studio-channel-strip {
-  width: 105px;
-  min-width: 105px;
+  width: 110px;
+  min-width: 110px;
   background-color: var(--paper-deep);
   border: 1px solid var(--line);
   border-radius: 6px;
@@ -734,6 +749,7 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
+  box-sizing: border-box;
 }
 
 .studio-strip-header {
@@ -768,17 +784,23 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 2px;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 .studio-knob-label {
   font-size: 0.62rem;
   color: var(--ink-soft);
   width: 22px;
+  flex-shrink: 0;
 }
 
 .studio-slider-mini {
-  flex: 1;
+  flex: 1 1 0;
+  min-width: 0;
+  width: 0;
   height: 12px;
   accent-color: var(--ink);
   cursor: pointer;
@@ -788,9 +810,13 @@
   font-family: var(--font-mono, "DM Mono", monospace);
   font-size: 0.6rem;
   color: var(--ink);
-  width: 26px;
+  width: 28px;
+  min-width: 28px;
   text-align: right;
   cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  flex-shrink: 0;
 }
 
 .studio-fader-section {
@@ -952,10 +978,22 @@
   opacity: 0.8;
 }
 
+.studio-eq-accordion,
 .studio-eq-section {
   margin-top: 6px;
   border-top: 1px solid var(--line);
   padding-top: 4px;
+  font-size: 0.7rem;
+}
+
+.studio-eq-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--ink);
+  user-select: none;
 }
 
 .studio-eq-header {
@@ -971,21 +1009,27 @@
   margin-top: 3px;
 }
 
-.studio-eq-row {
+.studio-eq-row,
+.studio-glue-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   font-size: 0.62rem;
   color: var(--ink-soft);
   gap: 4px;
+  width: 100%;
+  min-width: 0;
 }
 
-.studio-eq-val {
+.studio-eq-val,
+.studio-glue-val {
   font-family: var(--font-mono, "DM Mono", monospace);
   font-size: 0.6rem;
   color: var(--ink);
-  width: 26px;
+  width: 28px;
+  min-width: 28px;
   text-align: right;
+  flex-shrink: 0;
 }
 
 .studio-glue-accordion {
@@ -1025,28 +1069,24 @@
   color: var(--ink-soft);
 }
 
-.studio-glue-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 0.62rem;
-  color: var(--ink-soft);
-  gap: 4px;
-}
-
-.studio-glue-val {
-  font-family: var(--font-mono, "DM Mono", monospace);
-  font-size: 0.6rem;
-  color: var(--ink);
-  width: 32px;
-  text-align: right;
-}
-
 @media (max-width: 768px) {
   .studio-mixer-panel {
-    max-height: 80vh;
-    height: 360px;
+    max-height: 85vh;
+    height: auto;
     border-radius: 12px 12px 0 0;
+  }
+  .studio-master-strip {
+    width: 210px;
+    min-width: 210px;
+    padding: 6px;
+    gap: 3px;
+  }
+  .studio-fader-section {
+    height: 100px;
+    margin: 2px 0;
+  }
+  .studio-fader-vertical {
+    height: 95px;
   }
 }
 

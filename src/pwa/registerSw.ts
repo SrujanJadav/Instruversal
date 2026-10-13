@@ -11,6 +11,16 @@ export function registerServiceWorker(): void {
     return;
   }
 
+  // In development, unregister any stale service workers from prior production builds
+  if (import.meta.env.DEV) {
+    navigator.serviceWorker.getRegistrations().then((registrations) => {
+      for (const reg of registrations) {
+        reg.unregister();
+      }
+    });
+    return;
+  }
+
   const updateSW = registerSW({
     immediate: true,
     onNeedRefresh() {

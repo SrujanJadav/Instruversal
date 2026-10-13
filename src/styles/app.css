@@ -18,8 +18,23 @@
   padding: var(--space-5);
   text-align: center;
   z-index: 10;
-  background-color: var(--paper);
+  background-color: transparent;
   transition: opacity var(--transition-normal), visibility var(--transition-normal);
+}
+
+.gate-screen > *:not(.garden-background-canvas) {
+  position: relative;
+  z-index: 1;
+}
+
+.garden-background-canvas {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  pointer-events: none;
+  z-index: 0;
 }
 
 .gate-screen.hidden {
@@ -198,12 +213,69 @@
 }
 
 .app-title {
-  font-family: var(--font-display);
-  font-size: clamp(2.2rem, 5vw, 3.5rem);
-  font-weight: 500;
-  color: var(--ink);
-  letter-spacing: -0.02em;
   margin-bottom: var(--space-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.app-title-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  border-radius: var(--radius-sm, 4px);
+  padding: 2px;
+}
+
+.app-title-link:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 4px;
+}
+
+.brand-wordmark {
+  height: 72px;
+  width: auto;
+  max-width: 100%;
+  object-fit: contain;
+  filter: none !important;
+  box-shadow: none !important;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+@media (min-width: 768px) {
+  .brand-wordmark {
+    height: 96px;
+    max-width: none;
+  }
+}
+
+/* Light / Dark Mode Wordmark Switching */
+.wordmark-light {
+  display: block;
+}
+
+.wordmark-dark {
+  display: none;
+}
+
+[data-theme="dark"] .wordmark-light {
+  display: none !important;
+}
+
+[data-theme="dark"] .wordmark-dark {
+  display: block !important;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .wordmark-light {
+    display: none !important;
+  }
+  :root:not([data-theme="light"]) .wordmark-dark {
+    display: block !important;
+  }
 }
 
 .app-subtitle {
@@ -1120,6 +1192,9 @@
   flex-direction: column;
   transition: transform var(--transition-normal);
   box-shadow: 0 4px 20px rgba(28, 26, 22, 0.15);
+  box-sizing: border-box;
+  max-width: 100vw;
+  overflow-x: hidden;
 }
 
 /* Desktop layout: Right side drawer */
@@ -1128,7 +1203,8 @@
     top: 0;
     right: 0;
     bottom: 0;
-    width: 340px;
+    width: clamp(340px, 28vw, 380px);
+    max-width: 90vw;
     border-left: 1px solid var(--line);
     transform: translateX(100%);
   }
@@ -1144,11 +1220,14 @@
     left: 0;
     right: 0;
     bottom: 0;
+    width: 100vw;
+    max-width: 100vw;
     max-height: 70dvh;
     border-top: 1px solid var(--line);
     border-radius: 14px 14px 0 0;
     transform: translateY(100%);
     padding-bottom: max(var(--space-2), env(safe-area-inset-bottom, 12px));
+    overflow-x: hidden;
   }
 
   .track-panel.visible {
@@ -1220,8 +1299,8 @@
   background: transparent;
   color: var(--ink-soft);
   font-size: 1.1rem;
-  width: 32px;
-  height: 32px;
+  width: 44px;
+  height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1238,9 +1317,11 @@
 .panel-content {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   overscroll-behavior: contain;
   padding: var(--space-3);
   -webkit-overflow-scrolling: touch;
+  box-sizing: border-box;
 }
 
 /* Track list */
@@ -1249,17 +1330,22 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .track-row {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: 6px;
   padding: 8px 10px;
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
   background-color: var(--paper);
   transition: border-color var(--transition-fast), background-color var(--transition-fast);
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
 }
 
 .track-row.selected {
@@ -1273,14 +1359,22 @@
   background: transparent;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   cursor: pointer;
   padding: 0;
   font-family: var(--font-ui);
   font-weight: 500;
   font-size: 0.85rem;
   color: var(--ink);
-  min-width: 80px;
+  min-width: 0;
+  flex: 0 1 auto;
+  max-width: 88px;
+}
+
+.track-name-lbl {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .track-dot-indicator {
@@ -1298,12 +1392,21 @@
   color: var(--ink);
   font-family: var(--font-mono);
   font-size: 0.75rem;
-  padding: 3px 8px;
+  padding: 3px 6px;
   border-radius: var(--radius-sm);
   display: flex;
   align-items: center;
   gap: 4px;
   cursor: pointer;
+  min-width: 0;
+  flex: 0 1 auto;
+  max-width: 82px;
+}
+
+.inst-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .track-inst-btn:hover {
@@ -1313,6 +1416,7 @@
 .chevron-icon {
   font-size: 0.7rem;
   color: var(--ink-soft);
+  flex-shrink: 0;
 }
 
 .track-key-tag {
@@ -1328,7 +1432,8 @@
   cursor: pointer;
   white-space: nowrap;
   transition: all var(--transition-fast);
-  margin-left: 4px;
+  margin-left: 2px;
+  flex-shrink: 0;
 }
 
 .track-key-tag:hover {
@@ -1339,12 +1444,15 @@
 .track-controls {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   margin-left: auto;
+  flex-shrink: 0;
+  min-width: 0;
 }
 
 .track-toggle-btn {
   appearance: none;
+  position: relative;
   width: 26px;
   height: 26px;
   border-radius: var(--radius-sm);
@@ -1359,6 +1467,18 @@
   align-items: center;
   justify-content: center;
   transition: all var(--transition-fast);
+  touch-action: manipulation;
+}
+
+/* 44px minimum touch target for fingers */
+.track-toggle-btn::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  min-width: 44px;
+  min-height: 44px;
 }
 
 .mute-btn.active {
@@ -1374,36 +1494,33 @@
 }
 
 .track-vol-slider {
-  width: 50px;
+  width: 44px;
+  min-width: 0;
+  flex: 1 1 36px;
+  max-width: 50px;
+  height: 24px;
   accent-color: var(--ink);
 }
 
 @media (max-width: 390px) {
   .track-row {
     padding: 6px 8px;
-    gap: 4px;
+    gap: 3px;
   }
   .track-select-lead {
-    min-width: 68px;
+    max-width: 72px;
   }
   .track-name-lbl {
-    max-width: 52px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    max-width: 48px;
   }
   .track-inst-btn {
-    padding: 3px 6px;
-    font-size: 0.7rem;
-    max-width: 76px;
-  }
-  .inst-label {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    padding: 3px 4px;
+    font-size: 0.68rem;
+    max-width: 70px;
   }
   .track-vol-slider {
-    width: 38px;
+    width: 34px;
+    max-width: 40px;
   }
   .track-toggle-btn {
     width: 24px;
@@ -2668,6 +2785,7 @@
 .sync-slider {
   appearance: none;
   flex: 1;
+  min-width: 0;
   height: 6px;
   background-color: var(--paper-deep);
   border: 1px solid var(--line);

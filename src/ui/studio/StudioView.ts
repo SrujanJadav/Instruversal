@@ -22,6 +22,7 @@ import { Creation } from '../../library/types';
 import { getCreationStore } from '../../library/store';
 import { SongPlaybackEngine } from '../../song/playbackEngine';
 import { getPracticeEngine } from '../../audio/practice';
+import { fadeMasterOut } from '../../audio/lifecycle';
 
 export class StudioView {
   public element: HTMLElement;
@@ -39,6 +40,7 @@ export class StudioView {
   private currentPlayheadBar: number = 0;
   private isPlaying: boolean = false;
   private followPlayhead: boolean = true;
+  private selectedLaneId: string | null = null;
 
   constructor(song: Song) {
     this.song = song;
@@ -70,6 +72,9 @@ export class StudioView {
 
     // Header
     this.header = new StudioHeader(this.song, {
+      onHome: async () => {
+        await this.flushAndExitTo('#/');
+      },
       onTitleChange: (newTitle) => this.updateSong({ ...this.song, title: newTitle }),
       onBpmChange: (newBpm) => this.updateSong({ ...this.song, bpm: newBpm }),
       onPlayToggle: () => this.togglePlayback(),
@@ -78,8 +83,8 @@ export class StudioView {
       onZoomOut: () => this.timeline.setZoom(this.timeline.getZoom() - 30),
       onAddDrawing: () => this.picker.open(),
       onViewToggle: (view) => this.switchView(view),
-      onBack: () => {
-        window.location.hash = '#/library';
+      onBack: async () => {
+        await this.flushAndExitTo('#/library');
       },
       onUndo: () => this.undo(),
       onRedo: () => this.redo(),
@@ -137,6 +142,9 @@ export class StudioView {
       onSetLoopRegion: (region) => this.updateSong({ ...this.song, loopRegion: region }),
       onSeek: (bar) => this.handleSeek(bar),
       onAddDrawingClick: () => this.picker.open(),
+      onSelectLane: (laneId) => {
+        this.selectedLaneId = laneId;
+      },
     });
 
     // Inspector
@@ -326,13 +334,72 @@ export class StudioView {
 
     const sketchBars = creation.project?.bars ?? 2;
     const preferredStart = Math.floor(this.currentPlayheadBar);
-    const laneId = withAsset.lanes[0].id;
-    const startBar = findFreeSlot(withAsset.placements, laneId, preferredStart, sketchBars);
+
+    // Prefer selected lane, fallback to first lane
+    const targetLaneId = this.selectedLaneId && withAsset.lanes.some((l) => l.id === this.selectedLaneId)
+      ? this.selectedLaneId
+      : withAsset.lanes[0].id;
+
+    let chosenLaneId = targetLaneId;
+    let startBar = preferredStart;
+
+    // Check if slot at playhead overlaps on target lane
+    if (hasPlacementOverlap(withAsset.placements, { id: 'temp', laneId: chosenLaneId, startBar, lengthBars: sketchBars })) {
+      // Find next free slot on this lane
+      const nextFree = findFreeSlot(withAsset.placements, chosenLaneId, preferredStart, sketchBars);
+      if (nextFree + sketchBars <= SONG_LIMITS.MAX_TOTAL_BARS && !hasPlacementOverlap(withAsset.placements, { id: 'temp', laneId: chosenLaneId, startBar: nextFree, lengthBars: sketchBars })) {
+        startBar = nextFree;
+      } else {
+        // Try other existing lanes at preferredStart, then free slot
+        let placed = false;
+        for (const lane of withAsset.lanes) {
+          if (lane.id === chosenLaneId) continue;
+          if (!hasPlacementOverlap(withAsset.placements, { id: 'temp', laneId: lane.id, startBar: preferredStart, lengthBars: sketchBars })) {
+            chosenLaneId = lane.id;
+            startBar = preferredStart;
+            placed = true;
+            break;
+          }
+          const laneSlot = findFreeSlot(withAsset.placements, lane.id, preferredStart, sketchBars);
+          if (laneSlot + sketchBars <= SONG_LIMITS.MAX_TOTAL_BARS && !hasPlacementOverlap(withAsset.placements, { id: 'temp', laneId: lane.id, startBar: laneSlot, lengthBars: sketchBars })) {
+            chosenLaneId = lane.id;
+            startBar = laneSlot;
+            placed = true;
+            break;
+          }
+        }
+
+        // If no existing lane fits without overlap, add a new lane if within limit
+        if (!placed && withAsset.lanes.length < SONG_LIMITS.MAX_LANES) {
+          const newLaneIdx = withAsset.lanes.length + 1;
+          const newLane: SongLane = {
+            id: `lane-${Date.now()}`,
+            name: `Lane ${newLaneIdx}`,
+            volumeDb: 0,
+            pan: 0,
+            mute: false,
+            solo: false,
+            sendReverb: 0,
+            sendDelay: 0,
+          };
+          withAsset.lanes.push(newLane);
+          chosenLaneId = newLane.id;
+          startBar = preferredStart;
+          placed = true;
+        } else if (!placed) {
+          // Absolute fallback: search from bar 0 on target lane
+          startBar = findFreeSlot(withAsset.placements, chosenLaneId, 0, sketchBars);
+        }
+      }
+    }
+
+    this.selectedLaneId = chosenLaneId;
+    this.timeline.setSelectedLane(chosenLaneId);
 
     const newPlacement: SongPlacement = {
       id: `placement-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       assetId,
-      laneId,
+      laneId: chosenLaneId,
       startBar,
       lengthBars: sketchBars,
       offsetBars: 0,
@@ -498,7 +565,21 @@ export class StudioView {
     window.setTimeout(() => this.header.setSaveStatus('Saved'), 3000);
   }
 
+  public async flushSave(): Promise<void> {
+    await this.saveSong();
+  }
+
+  public async flushAndExitTo(targetHash: string): Promise<void> {
+    this.playbackEngine.stop();
+    await fadeMasterOut(0.15);
+    await this.saveSong();
+    if (window.location.hash !== targetHash) {
+      window.location.hash = targetHash;
+    }
+  }
+
   public dispose() {
+    this.playbackEngine.stop();
     this.mixerPanel.dispose();
     this.exportModal.dispose();
     this.fxPanel.destroy();

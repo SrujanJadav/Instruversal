@@ -1,6 +1,7 @@
 import { Song, SONG_LIMITS } from '../../song/types';
 
 export interface StudioHeaderCallbacks {
+  onHome?: () => void;
   onTitleChange: (newTitle: string) => void;
   onBpmChange: (newBpm: number) => void;
   onPlayToggle: () => void;
@@ -37,6 +38,12 @@ export class StudioHeader {
 
     this.element.innerHTML = `
       <div class="studio-header-left">
+        <a href="#/" class="header-title studio-home-btn" id="studio-home-btn" aria-label="Instruversal, go to start page">
+          <img src="/icon.svg" alt="" class="header-brand-icon icon-light-mode" />
+          <img src="/icon-dark.svg" alt="" class="header-brand-icon icon-dark-mode" />
+          <span>Instruversal</span>
+        </a>
+        <span class="header-divider-dot">·</span>
         <button type="button" class="studio-btn" id="studio-back-btn" aria-label="Back to library">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
           <span>Library</span>
@@ -118,6 +125,15 @@ export class StudioHeader {
       const val = this.titleInput.value.trim().slice(0, 80) || 'Untitled song';
       this.titleInput.value = val;
       this.callbacks.onTitleChange(val);
+    });
+
+    this.element.querySelector('#studio-home-btn')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      if (this.callbacks.onHome) {
+        this.callbacks.onHome();
+      } else {
+        window.location.hash = '#/';
+      }
     });
 
     this.element.querySelector('#studio-back-btn')?.addEventListener('click', () => {

@@ -195,8 +195,10 @@ export function buildPlacementEvents(
       const tr = trackMap.get(note.trackId);
       const instrumentId = tr?.instrumentId || 'pluck';
 
-      // Duration: 16th note in seconds
-      const durationSeconds = (60 / songBpm) / 4;
+      // Duration: 16th note in seconds, clamped so note never sounds past placement region end
+      const placementEndSeconds = (placement.startBar + lengthBars) * secondsPerBar;
+      const maxDur = Math.max(0.02, placementEndSeconds - timeSeconds);
+      const durationSeconds = Math.min((60 / songBpm) / 4, maxDur);
 
       songEvents.push({
         kind: 'note',

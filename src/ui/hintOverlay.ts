@@ -1,6 +1,7 @@
 import { getCurrentUser } from '../auth/auth';
 import { getAccountSheet } from './AccountSheet';
 import { canInstallPrompt, promptInstall, isIosSafari, isStandalone } from '../pwa/installPrompt';
+import { isGardenEnabled, setGardenEnabled } from '../garden/garden-setting';
 
 const HINT_INTRO_KEY = 'instruversal:hint-intro';
 
@@ -77,6 +78,16 @@ export function showFirstRunHintOverlay(force = false): void {
         <button type="button" class="auth-pill-btn" id="hint-account-btn" style="flex-shrink: 0;">${currentUser ? 'Manage' : 'Sign in'}</button>
       </div>
 
+      <div class="hint-garden-section" style="margin-top: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: var(--space-2);">
+        <div>
+          <span style="font-weight: 500; font-size: 0.85rem;">Type Garden</span>
+          <p style="margin: 0; font-size: 0.75rem; color: var(--ink-soft);">Living botanical background on start screen.</p>
+        </div>
+        <label class="garden-toggle-switch" style="position: relative; display: inline-flex; align-items: center; cursor: pointer; user-select: none;">
+          <input type="checkbox" id="hint-garden-toggle" ${isGardenEnabled() ? 'checked' : ''} style="accent-color: var(--sage); width: 18px; height: 18px; cursor: pointer;" aria-label="Toggle living garden background" />
+        </label>
+      </div>
+
       <div class="hint-shortcuts-section desktop-only">
         <div class="hint-shortcuts-header">
           <span class="hint-section-title">Keyboard shortcuts</span>
@@ -148,6 +159,11 @@ export function showFirstRunHintOverlay(force = false): void {
   overlayEl.querySelector('#hint-account-btn')?.addEventListener('click', () => {
     dismiss();
     getAccountSheet().open();
+  });
+
+  overlayEl.querySelector('#hint-garden-toggle')?.addEventListener('change', (e) => {
+    const target = e.target as HTMLInputElement;
+    setGardenEnabled(target.checked);
   });
 
   overlayEl.querySelector('#hint-got-it-btn')?.addEventListener('click', dismiss);

@@ -6,6 +6,7 @@ import {
   getEventsInWindow,
 } from './scheduler';
 import { Song, SongPlacement, SongAsset, SongLane } from './types';
+import { hasPlacementOverlap, findFreeSlot } from './helpers';
 import { ProjectData } from '../library/types';
 import { Stroke } from '../state';
 
@@ -257,5 +258,108 @@ describe('Song Scheduler (pure arrangement event compiler)', () => {
     const window8to12 = getEventsInWindow(schedule, 8, 12);
     expect(window8to12.length).toBeGreaterThan(0);
     expect(window8to12.every((e) => e.placementId === 'p-2')).toBe(true);
+  });
+
+  it('regression: two placements on one lane that touch have zero overlap and play independently', () => {
+    const p1: SongPlacement = {
+      id: 'p-touch-1',
+      assetId: 'asset-1',
+      laneId: 'lane-1',
+      startBar: 0,
+      lengthBars: 2,
+      offsetBars: 0,
+      gainDb: 0,
+      transpose: 0,
+      fadeInBars: 0,
+      fadeOutBars: 0,
+      mute: false,
+    };
+    const p2: SongPlacement = {
+      ...p1,
+      id: 'p-touch-2',
+      startBar: 2,
+      lengthBars: 2,
+    };
+
+    // Touching at bar 2 has zero overlap
+    expect(hasPlacementOverlap([p1], p2)).toBe(false);
+
+    const asset: SongAsset = { name: 'Sketch', project: sampleProject };
+    const events1 = buildPlacementEvents(p1, asset, 120);
+    const events2 = buildPlacementEvents(p2, asset, 120);
+
+    expect(events1.every((e) => (e.kind === 'flow' || e.kind === 'beatFlow' ? e.startTimeBars : e.timeBars) < 2)).toBe(true);
+    expect(events2.every((e) => (e.kind === 'flow' || e.kind === 'beatFlow' ? e.startTimeBars : e.timeBars) >= 2)).toBe(true);
+  });
+
+  it('regression: two overlapping requests move the second to a free slot without silent collision', () => {
+    const existing: SongPlacement[] = [
+      {
+        id: 'p-exist-1',
+        assetId: 'asset-1',
+        laneId: 'lane-1',
+        startBar: 0,
+        lengthBars: 2,
+        offsetBars: 0,
+        gainDb: 0,
+        transpose: 0,
+        fadeInBars: 0,
+        fadeOutBars: 0,
+        mute: false,
+      },
+    ];
+
+    // Requesting at bar 0 for length 2 collides with p-exist-1
+    const requested = { id: 'p-new', laneId: 'lane-1', startBar: 0, lengthBars: 2 };
+    expect(hasPlacementOverlap(existing, requested)).toBe(true);
+
+    // findFreeSlot resolves to bar 2
+    const freeBar = findFreeSlot(existing, 'lane-1', 0, 2);
+    expect(freeBar).toBe(2);
+    expect(hasPlacementOverlap(existing, { ...requested, startBar: freeBar })).toBe(false);
+  });
+
+  it('regression: a placement that ends mid-loop schedules no notes after its end', () => {
+    // 4-bar project with notes at bars 0.5, 1.5, 2.5, 3.5
+    const fourBarProject: ProjectData = {
+      ...sampleProject,
+      bars: 4,
+      strokes: [
+        {
+          id: 's-early',
+          trackId: 'track-1',
+          points: [{ x: 0.125, y: 0.5, t: 0 }], // bar 0.5
+          width: 3,
+        },
+        {
+          id: 's-late',
+          trackId: 'track-1',
+          points: [{ x: 0.875, y: 0.5, t: 0 }], // bar 3.5
+          width: 3,
+        },
+      ],
+    };
+
+    const midLoopPlacement: SongPlacement = {
+      id: 'p-mid-loop',
+      assetId: 'asset-4bar',
+      laneId: 'lane-1',
+      startBar: 0,
+      lengthBars: 2, // Cut off at 2 bars (before s-late at 3.5)
+      offsetBars: 0,
+      gainDb: 0,
+      transpose: 0,
+      fadeInBars: 0,
+      fadeOutBars: 0,
+      mute: false,
+    };
+
+    const asset: SongAsset = { name: '4-bar Loop', project: fourBarProject };
+    const events = buildPlacementEvents(midLoopPlacement, asset, 120);
+
+    // Only notes before bar 2 should be scheduled; s-late (at 3.5) must be excluded
+    expect(events.length).toBeGreaterThan(0);
+    expect(events.every((e) => (e.kind === 'flow' || e.kind === 'beatFlow' ? e.startTimeBars : e.timeBars) < 2)).toBe(true);
+    expect(events.some((e) => e.strokeId === 's-late')).toBe(false);
   });
 });

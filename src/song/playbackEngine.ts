@@ -10,6 +10,7 @@ import { DrumKitInstance, DrumKitId } from '../audio/drums';
 import { getFlowVoicePool } from '../audio/voicePool';
 import { getBeatFlowVoicePool } from '../audio/beatFlowVoices';
 import { getTotalAudioLatencySeconds } from '../audio/context';
+import { restoreMasterGain } from '../audio/lifecycle';
 import { state, events, POLYPHONY_VOICE_COUNTS } from '../state';
 import { SongMasterChain, MasterMeterLevel } from './masterChain';
 
@@ -134,12 +135,34 @@ export class SongPlaybackEngine {
 
   private setupTransportSettings() {
     try {
+      const ctx = Tone.getContext() as any;
+      if (ctx && (!ctx.transport || !ctx.transport.bpm || !ctx.transport.bpm.value)) {
+        try {
+          Object.defineProperty(ctx, 'transport', {
+            value: {
+              bpm: { value: this.song.bpm || 90 },
+              timeSignature: 4,
+              ticks: 0,
+              PPQ: 192,
+              start: () => {},
+              stop: () => {},
+              pause: () => {},
+              clear: () => {},
+              schedule: () => 1,
+              scheduleRepeat: () => 1,
+              getTicksAtTime: () => 0,
+              seconds: 0,
+            },
+            configurable: true,
+            writable: true,
+          });
+        } catch {}
+      }
+
       const t = Tone.getTransport();
       if (t) {
         if (t.bpm && typeof t.bpm === 'object' && 'value' in t.bpm) {
           t.bpm.value = this.song.bpm || 90;
-        } else {
-          (t as any).bpm = this.song.bpm || 90;
         }
         t.timeSignature = 4;
 
@@ -315,11 +338,21 @@ export class SongPlaybackEngine {
           voice.triggerRelease(item.endTimeSeconds);
         }
 
+        // End of placement voice release boundary
+        if ((ev as any).kind === '_placementEnd') {
+          flowVoicePool.releaseAll(0.03);
+          beatFlowVoicePool.releaseAll(0.03);
+          return;
+        }
+
         // Visual sounding pulse
         Tone.getDraw().schedule(() => {
           this.callbacks.onClipSounding?.(item.placementId);
         }, time);
-      }, events.map((ev) => [ev.kind === 'flow' || ev.kind === 'beatFlow' ? ev.startTimeSeconds : ev.timeSeconds, ev] as any));
+      }, [
+        ...events.map((ev) => [ev.kind === 'flow' || ev.kind === 'beatFlow' ? ev.startTimeSeconds : ev.timeSeconds, ev] as any),
+        [(placement.startBar + placement.lengthBars) * (240 / (this.song.bpm || 90)), { kind: '_placementEnd', placementId: placement.id, laneId: placement.laneId } as any]
+      ]);
 
       part.start(0);
       this.activeParts.set(placement.id, part);
@@ -334,16 +367,17 @@ export class SongPlaybackEngine {
     if (part) {
       part.dispose();
       this.activeParts.delete(placementId);
+      this.releaseAllVoices(0.03);
     }
   }
 
   /**
-   * Sliding lookahead window management (currentBar - 0.5 to currentBar + 4.0).
+   * Sliding lookahead window management (currentBar - 0.1 to currentBar + 4.0).
    */
   public updateWindow(currentBar: number) {
     if (this.isDisposed) return;
 
-    const windowStart = currentBar - 0.5;
+    const windowStart = currentBar - 0.1;
     const windowEnd = currentBar + 4.0;
 
     for (const placement of this.song.placements) {
@@ -375,6 +409,8 @@ export class SongPlaybackEngine {
       state.audioStarted = true;
       events.emit('audio:started', undefined);
     }
+
+    restoreMasterGain();
 
     this.updatePolyphonyCap();
     const currentBar = this.getCurrentBar();

@@ -2,6 +2,7 @@ import {
   Song,
   SongPlacement,
   SongLane,
+  SONG_LIMITS,
 } from '../../song/types';
 import {
   hasPlacementOverlap,
@@ -24,6 +25,7 @@ export interface TimelineCallbacks {
   onSetLoopRegion: (region: { startBar: number; endBar: number } | null) => void;
   onSeek: (bar: number) => void;
   onAddDrawingClick: () => void;
+  onSelectLane?: (laneId: string) => void;
 }
 
 export class Timeline {
@@ -32,6 +34,7 @@ export class Timeline {
   private callbacks: TimelineCallbacks;
   private pixelsPerBar: number = 120;
   private selectedPlacementIds: Set<string> = new Set();
+  private selectedLaneId: string | null = null;
   private currentPlayheadBar: number = 0;
 
   private rulerTicksEl: HTMLElement;
@@ -226,15 +229,50 @@ export class Timeline {
     }
   }
 
+  public selectLane(laneId: string) {
+    this.selectedLaneId = laneId;
+    this.lanesContainerEl.querySelectorAll<HTMLElement>('.studio-lane-row').forEach((row) => {
+      if (row.dataset.laneId === laneId) {
+        row.classList.add('selected');
+      } else {
+        row.classList.remove('selected');
+      }
+    });
+    this.callbacks.onSelectLane?.(laneId);
+  }
+
+  public getSelectedLaneId(): string | null {
+    return this.selectedLaneId || (this.song.lanes[0]?.id ?? null);
+  }
+
+  public setSelectedLane(laneId: string | null) {
+    this.selectedLaneId = laneId;
+    this.lanesContainerEl.querySelectorAll<HTMLElement>('.studio-lane-row').forEach((row) => {
+      if (row.dataset.laneId === laneId) {
+        row.classList.add('selected');
+      } else {
+        row.classList.remove('selected');
+      }
+    });
+  }
+
   private renderLanes() {
     this.lanesContainerEl.innerHTML = '';
     const totalBars = Math.max(16, this.song.totalBars + 8);
     const width = totalBars * this.pixelsPerBar;
 
-    this.song.lanes.forEach((lane) => {
+    if (!this.selectedLaneId && this.song.lanes.length > 0) {
+      this.selectedLaneId = this.song.lanes[0].id;
+    }
+
+    this.song.lanes.forEach((lane, index) => {
+      const isSelected = this.selectedLaneId === lane.id;
       const laneRow = document.createElement('div');
-      laneRow.className = 'studio-lane-row';
+      laneRow.className = `studio-lane-row ${isSelected ? 'selected' : ''}`;
       laneRow.dataset.laneId = lane.id;
+      laneRow.tabIndex = 0;
+      laneRow.setAttribute('role', 'region');
+      laneRow.setAttribute('aria-label', `${lane.name}`);
 
       laneRow.innerHTML = `
         <div class="studio-lane-header">
@@ -243,22 +281,49 @@ export class Timeline {
             <button type="button" class="studio-mini-btn" data-action="remove-lane" title="Remove lane" ${this.song.lanes.length <= 1 ? 'style="display: none;"' : ''}>×</button>
           </div>
           <div class="studio-lane-controls">
-            <button type="button" class="studio-mini-btn ${lane.mute ? 'active' : ''}" data-action="mute">M</button>
-            <button type="button" class="studio-mini-btn ${lane.solo ? 'active-solo' : ''}" data-action="solo">S</button>
+            <button type="button" class="studio-mini-btn ${lane.mute ? 'active' : ''}" data-action="mute" aria-label="${lane.name} Mute">M</button>
+            <button type="button" class="studio-mini-btn ${lane.solo ? 'active-solo' : ''}" data-action="solo" aria-label="${lane.name} Solo">S</button>
           </div>
         </div>
         <div class="studio-lane-track-area" style="width: ${width}px;"></div>
       `;
 
-      laneRow.querySelector('[data-action="remove-lane"]')?.addEventListener('click', () => {
+      laneRow.addEventListener('click', (e) => {
+        if ((e.target as HTMLElement).closest('button, input, .studio-clip')) return;
+        this.selectLane(lane.id);
+      });
+
+      laneRow.addEventListener('keydown', (e) => {
+        if ((e.target as HTMLElement).closest('button, input, .studio-clip')) return;
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          const nextIdx = Math.min(this.song.lanes.length - 1, index + 1);
+          const nextLane = this.song.lanes[nextIdx];
+          this.selectLane(nextLane.id);
+          const nextEl = this.lanesContainerEl.querySelector<HTMLElement>(`[data-lane-id="${nextLane.id}"]`);
+          nextEl?.focus();
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          const prevIdx = Math.max(0, index - 1);
+          const prevLane = this.song.lanes[prevIdx];
+          this.selectLane(prevLane.id);
+          const prevEl = this.lanesContainerEl.querySelector<HTMLElement>(`[data-lane-id="${prevLane.id}"]`);
+          prevEl?.focus();
+        }
+      });
+
+      laneRow.querySelector('[data-action="remove-lane"]')?.addEventListener('click', (e) => {
+        e.stopPropagation();
         this.callbacks.onRemoveLane(lane.id);
       });
 
-      laneRow.querySelector('[data-action="mute"]')?.addEventListener('click', () => {
+      laneRow.querySelector('[data-action="mute"]')?.addEventListener('click', (e) => {
+        e.stopPropagation();
         this.callbacks.onUpdateLane({ ...lane, mute: !lane.mute });
       });
 
-      laneRow.querySelector('[data-action="solo"]')?.addEventListener('click', () => {
+      laneRow.querySelector('[data-action="solo"]')?.addEventListener('click', (e) => {
+        e.stopPropagation();
         this.callbacks.onUpdateLane({ ...lane, solo: !lane.solo });
       });
 
@@ -343,8 +408,10 @@ export class Timeline {
 
   private attachClipGestures(clipEl: HTMLElement, placement: SongPlacement) {
     let startX = 0;
+    let startY = 0;
     let initialBar = placement.startBar;
     let initialLen = placement.lengthBars;
+    let initialLaneIndex = 0;
     let isDragging = false;
     let activeHandle: 'left' | 'right' | 'move' | null = null;
     let longPressTimer: any = null;
@@ -353,8 +420,11 @@ export class Timeline {
       // Don't intercept right click
       if (e.button !== 0) return;
       startX = e.clientX;
+      startY = e.clientY;
       initialBar = placement.startBar;
       initialLen = placement.lengthBars;
+      initialLaneIndex = this.song.lanes.findIndex((l) => l.id === placement.laneId);
+      if (initialLaneIndex < 0) initialLaneIndex = 0;
 
       const target = e.target as HTMLElement;
       if (target.dataset.handle === 'left') {
@@ -397,8 +467,11 @@ export class Timeline {
       const deltaBars = Math.round(deltaX / this.pixelsPerBar);
 
       if (activeHandle === 'move') {
+        const deltaY = e.clientY - startY;
+        const deltaLanes = Math.round(deltaY / 90);
         const targetBar = Math.max(0, initialBar + deltaBars);
         clipEl.style.left = `${targetBar * this.pixelsPerBar}px`;
+        clipEl.style.transform = `translateY(${deltaLanes * 90}px)`;
       } else if (activeHandle === 'right') {
         const targetLen = Math.max(1, initialLen + deltaBars);
         clipEl.style.width = `${targetLen * this.pixelsPerBar}px`;
@@ -415,6 +488,7 @@ export class Timeline {
         clearTimeout(longPressTimer);
         longPressTimer = null;
       }
+      clipEl.style.transform = '';
       if (!isDragging) {
         activeHandle = null;
         return;
@@ -430,15 +504,24 @@ export class Timeline {
       const deltaBars = Math.round(deltaX / this.pixelsPerBar);
 
       if (activeHandle === 'move') {
+        const deltaY = e.clientY - startY;
+        const deltaLanes = Math.round(deltaY / 90);
+        const targetLaneIdx = Math.max(0, Math.min(this.song.lanes.length - 1, initialLaneIndex + deltaLanes));
+        const targetLane = this.song.lanes[targetLaneIdx];
         const targetBar = Math.max(0, initialBar + deltaBars);
-        const candidate: SongPlacement = { ...placement, startBar: targetBar };
+        const candidate: SongPlacement = { ...placement, laneId: targetLane.id, startBar: targetBar };
 
         if (!hasPlacementOverlap(this.song.placements, candidate)) {
           this.callbacks.onUpdatePlacement(candidate);
         } else {
-          // Snap to nearest free slot or revert
-          const freeSlot = findFreeSlot(this.song.placements, placement.laneId, targetBar, placement.lengthBars);
-          this.callbacks.onUpdatePlacement({ ...placement, startBar: freeSlot });
+          // Snap to nearest free slot on target lane or revert
+          const freeSlot = findFreeSlot(this.song.placements, targetLane.id, targetBar, placement.lengthBars);
+          const freeCandidate: SongPlacement = { ...placement, laneId: targetLane.id, startBar: freeSlot };
+          if (freeSlot + placement.lengthBars <= SONG_LIMITS.MAX_TOTAL_BARS && !hasPlacementOverlap(this.song.placements, freeCandidate)) {
+            this.callbacks.onUpdatePlacement(freeCandidate);
+          } else {
+            this.renderClips();
+          }
         }
       } else if (activeHandle === 'right') {
         const targetLen = Math.max(1, initialLen + deltaBars);

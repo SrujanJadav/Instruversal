@@ -239,6 +239,7 @@ export class MasterEffectsRack {
     this.stageChorus.output.connect(this.stagePhaser.input);
     this.stagePhaser.output.connect(this.stageTremolo.input);
     this.stageTremolo.output.connect(this.stageDelay.input);
+    this.stageDelay.output.connect(this.stageReverb.input);
     this.effectsOutput = new Tone.Gain(1);
     this.stageReverb.output.connect(this.effectsOutput);
     this.effectsOutput.connect(this.limiter);

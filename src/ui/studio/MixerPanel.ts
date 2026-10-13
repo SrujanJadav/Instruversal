@@ -353,11 +353,11 @@ export class MixerPanel {
           </div>
 
           <!-- 3-Band EQ Controls -->
-          <div class="studio-eq-section">
-            <div class="studio-eq-header">
+          <details class="studio-eq-accordion" ${typeof window !== 'undefined' && window.innerWidth > 768 ? 'open' : ''}>
+            <summary class="studio-eq-summary">
               <span class="studio-field-label">3-Band EQ</span>
-              <button type="button" class="studio-mini-btn" id="eq-reset-btn" title="Reset EQ">Reset</button>
-            </div>
+              <button type="button" class="studio-mini-btn" id="eq-reset-btn" title="Reset EQ" style="margin-left: auto;">Reset</button>
+            </summary>
             <div class="studio-eq-sliders">
               <div class="studio-eq-row">
                 <label>Low</label>
@@ -375,7 +375,7 @@ export class MixerPanel {
                 <span class="studio-eq-val" id="eq-high-val">${master.eq.highDb.toFixed(1)}</span>
               </div>
             </div>
-          </div>
+          </details>
 
           <!-- Glue Compressor Accordion -->
           <details class="studio-glue-accordion">
@@ -615,7 +615,8 @@ export class MixerPanel {
     eqMid?.addEventListener('input', onEqChange);
     eqHigh?.addEventListener('input', onEqChange);
 
-    this.element.querySelector('#eq-reset-btn')?.addEventListener('click', () => {
+    this.element.querySelector('#eq-reset-btn')?.addEventListener('click', (e) => {
+      e.stopPropagation();
       if (eqLow) eqLow.value = '0';
       if (eqMid) eqMid.value = '0';
       if (eqHigh) eqHigh.value = '0';

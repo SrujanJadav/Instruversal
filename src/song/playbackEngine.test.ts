@@ -155,4 +155,37 @@ describe('SongPlaybackEngine', () => {
     engine.dispose();
     expect(engine.isPlaying()).toBe(false);
   });
+
+  it('regression: switch from one placement to the next unmounts earlier placement and releases active voices', () => {
+    const p1: SongPlacement = {
+      ...samplePlacement,
+      id: 'p-seq-1',
+      startBar: 0,
+      lengthBars: 2,
+    };
+    const p2: SongPlacement = {
+      ...samplePlacement,
+      id: 'p-seq-2',
+      startBar: 2,
+      lengthBars: 2,
+    };
+
+    const twoClipSong = {
+      ...sampleSong,
+      placements: [p1, p2],
+    };
+
+    const engine = new SongPlaybackEngine(twoClipSong);
+
+    // At bar 0, p1 is active
+    engine.updateWindow(0);
+    expect(engine['activeParts'].has('p-seq-1')).toBe(true);
+
+    // When advancing past p1's end to bar 2.5, p1 must be unmounted and p2 active
+    engine.updateWindow(2.5);
+    expect(engine['activeParts'].has('p-seq-1')).toBe(false);
+    expect(engine['activeParts'].has('p-seq-2')).toBe(true);
+
+    engine.dispose();
+  });
 });

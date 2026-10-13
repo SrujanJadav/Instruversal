@@ -26,7 +26,7 @@ import { initAudioLifecycle, fadeMasterOut, restoreMasterGain } from './audio/li
 import { clearThumbnailCache } from './gallery/thumbnail';
 import { showFirstRunHintOverlay } from './ui/hintOverlay';
 import { loadSavedProject } from './audio/projectState';
-import { initTheme } from './ui/theme';
+import { initTheme, getTheme } from './ui/theme';
 import { ThemeToggle } from './ui/ThemeToggle';
 import { getCreationManager } from './library/manager';
 import { getCreationStore } from './library/store';
@@ -75,7 +75,12 @@ app.innerHTML = `
       <img src="/icon.svg" alt="Instruversal Brand Icon" class="gate-icon-img icon-light-mode" />
       <img src="/icon-dark.svg" alt="Instruversal Brand Icon" class="gate-icon-img icon-dark-mode" />
     </div>
-    <h1 class="app-title">${CONFIG.appName}</h1>
+    <h1 class="app-title">
+      <a href="#/" class="app-title-link" id="gate-home-link" aria-label="Instruversal, go to the start page">
+        <img src="/brand/logo-light.svg" class="brand-wordmark wordmark-light" alt="Instruversal" width="1536" height="742.4" decoding="async" />
+        <img src="/brand/logo-dark.svg" class="brand-wordmark wordmark-dark" alt="" aria-hidden="true" width="1536" height="742.4" decoding="async" />
+      </a>
+    </h1>
     <p class="app-subtitle">Draw strokes to compose. Notes loop in time.</p>
     <button class="start-btn" id="start-btn" type="button" aria-label="Start audio and enter Instruversal">
       Tap to start
@@ -196,6 +201,67 @@ const creationManager = getCreationManager();
 
 let currentActiveScreen: 'gate' | 'editor' = 'gate';
 let drawingCanvas: DrawingCanvas | null = null;
+
+function syncWordmarkA11y(theme?: string) {
+  const current = theme || getTheme();
+  const lightImg = document.querySelector<HTMLImageElement>('.wordmark-light');
+  const darkImg = document.querySelector<HTMLImageElement>('.wordmark-dark');
+  if (!lightImg || !darkImg) return;
+  const isDark = current === 'dark';
+  if (isDark) {
+    darkImg.setAttribute('alt', 'Instruversal');
+    darkImg.removeAttribute('aria-hidden');
+    lightImg.setAttribute('alt', '');
+    lightImg.setAttribute('aria-hidden', 'true');
+  } else {
+    lightImg.setAttribute('alt', 'Instruversal');
+    lightImg.removeAttribute('aria-hidden');
+    darkImg.setAttribute('alt', '');
+    darkImg.setAttribute('aria-hidden', 'true');
+  }
+}
+
+window.addEventListener('themechange', (e: Event) => {
+  const custom = e as CustomEvent<{ theme?: string }>;
+  syncWordmarkA11y(custom.detail?.theme);
+});
+
+syncWordmarkA11y();
+
+let gardenModulePromise: Promise<typeof import('./garden/garden-background')> | null = null;
+
+function loadAndMountGarden() {
+  if (typeof window === 'undefined') return;
+  if (currentActiveScreen !== 'gate') return;
+
+  const load = () => {
+    if (!gardenModulePromise) {
+      gardenModulePromise = import('./garden/garden-background');
+    }
+    gardenModulePromise.then(({ getGardenBackground }) => {
+      if (currentActiveScreen === 'gate') {
+        const garden = getGardenBackground();
+        garden.mount();
+      }
+    });
+  };
+
+  if ('requestIdleCallback' in window) {
+    (window as any).requestIdleCallback(load, { timeout: 1000 });
+  } else {
+    setTimeout(load, 50);
+  }
+}
+
+function teardownGarden() {
+  if (gardenModulePromise) {
+    gardenModulePromise.then(({ teardownGardenBackground }) => {
+      teardownGardenBackground();
+    });
+  }
+}
+
+loadAndMountGarden();
 let toolbar: Toolbar | null = null;
 let trackPanel: TrackPanel | null = null;
 let fxPanel: FxPanel | null = null;
@@ -359,6 +425,7 @@ function showGateScreen() {
 
   currentActiveScreen = 'gate';
   updateGateLoadButton();
+  loadAndMountGarden();
 }
 
 async function completeGoHome() {
@@ -408,6 +475,7 @@ async function completeGoHome() {
   }
 
   currentActiveScreen = 'gate';
+  loadAndMountGarden();
   if (window.location.hash !== '#/' && window.location.hash !== '') {
     window.location.hash = '#/';
   }
@@ -561,6 +629,7 @@ function updateHeaderStatus() {
 }
 
 export async function enterMainView(startAudio: boolean = true) {
+  teardownGarden();
   if (startAudio && Tone.context.state !== 'running') {
     await Tone.start();
     state.audioStarted = true;
@@ -885,8 +954,14 @@ function checkStudioReturnButton() {
 
 let currentStudioView: any = null;
 
-function cleanupStudioView() {
+async function cleanupStudioView() {
   if (currentStudioView) {
+    try {
+      await currentStudioView.flushSave();
+    } catch {}
+    try {
+      await fadeMasterOut(0.15);
+    } catch {}
     currentStudioView.dispose();
     currentStudioView.element.remove();
     currentStudioView = null;
@@ -895,8 +970,9 @@ function cleanupStudioView() {
 
 async function handleStudioRoute(hash: string) {
   try {
+    teardownGarden();
     closeAllOpenSheets();
-    cleanupStudioView();
+    await cleanupStudioView();
 
     const mainView = document.querySelector<HTMLElement>('#main-view');
     const gateScreen = document.querySelector<HTMLElement>('#gate-screen');
@@ -918,6 +994,8 @@ async function handleStudioRoute(hash: string) {
         events.emit('audio:started', undefined);
       } catch {}
     }
+
+    restoreMasterGain();
 
     const { getSongStore } = await import('./song/store');
     const { createSongFromCreation } = await import('./song/helpers');
@@ -963,8 +1041,9 @@ function cleanupPublicSongView() {
 
 async function handlePublicSongRoute(slug: string) {
   try {
+    teardownGarden();
     closeAllOpenSheets();
-    cleanupStudioView();
+    await cleanupStudioView();
     cleanupPublicSongView();
 
     const mainView = document.querySelector<HTMLElement>('#main-view');
@@ -1004,13 +1083,14 @@ async function handleHashChange() {
     const slug = hash.slice(4).split('?')[0].trim();
     await handlePublicSongRoute(slug);
   } else {
-    cleanupStudioView();
+    await cleanupStudioView();
     cleanupPublicSongView();
 
     if (hash === '#/' || hash === '' || hash === '#') {
       if (currentActiveScreen === 'editor') {
         await goHome();
       } else {
+        await fadeMasterOut(0.15);
         closeAllOpenSheets();
         showGateScreen();
       }

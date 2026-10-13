@@ -10,6 +10,7 @@ import { getExportModal } from './ExportModal';
 import { renderSongTimelineThumbnailSvg } from '../song/preview';
 import { SongMeta } from '../song/store';
 import { Song } from '../song/types';
+import { fadeMasterOut } from '../audio/lifecycle';
 
 export class LibraryModal {
   private overlay: HTMLElement;
@@ -144,10 +145,15 @@ export class LibraryModal {
     closeBtn.addEventListener('click', () => this.close());
 
     const homeBtn = this.overlay.querySelector('#lib-home-btn');
-    homeBtn?.addEventListener('click', (e) => {
+    homeBtn?.addEventListener('click', async (e) => {
       e.preventDefault();
       this.close(false);
-      window.location.hash = '#/';
+      await fadeMasterOut(0.15);
+      if (window.location.hash !== '#/' && window.location.hash !== '') {
+        window.location.hash = '#/';
+      } else {
+        events.emit('ui:close-all-sheets', undefined);
+      }
     });
 
     const accountContainer = this.overlay.querySelector<HTMLElement>('#lib-account-container');
