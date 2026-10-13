@@ -1,54 +1,28 @@
 /**
  * Service Worker Registration and Update Notification
+ * Powered by vite-plugin-pwa with runtime safety guards
  */
+
+import { registerSW } from 'virtual:pwa-register';
+import { state, events } from '../state';
 
 export function registerServiceWorker(): void {
   if (typeof window === 'undefined' || !('serviceWorker' in navigator)) {
     return;
   }
 
-  // Only run in browser environments
-  window.addEventListener('load', () => {
-    navigator.serviceWorker
-      .register('/sw.js')
-      .then((registration) => {
-        // If there's an existing worker waiting to activate, notify user
-        if (registration.waiting) {
-          showUpdateNotification(registration.waiting);
-        }
-
-        // Listen for new workers being installed
-        registration.addEventListener('updatefound', () => {
-          const installingWorker = registration.installing;
-          if (!installingWorker) return;
-
-          installingWorker.addEventListener('statechange', () => {
-            if (
-              installingWorker.state === 'installed' &&
-              navigator.serviceWorker.controller
-            ) {
-              // A new update is ready
-              showUpdateNotification(installingWorker);
-            }
-          });
-        });
-      })
-      .catch((err) => {
-        console.debug('Service Worker registration skipped or failed:', err);
-      });
-
-    // Ensure page reloads when the new service worker takes over
-    let refreshing = false;
-    navigator.serviceWorker.addEventListener('controllerchange', () => {
-      if (!refreshing) {
-        refreshing = true;
-        window.location.reload();
-      }
-    });
+  const updateSW = registerSW({
+    immediate: true,
+    onNeedRefresh() {
+      showUpdateNotification(updateSW);
+    },
+    onOfflineReady() {
+      console.debug('Instruversal is ready for offline use.');
+    },
   });
 }
 
-function showUpdateNotification(worker: ServiceWorker): void {
+function showUpdateNotification(updateSW: (reloadPage?: boolean) => Promise<void>): void {
   if (document.getElementById('sw-update-toast')) return;
 
   const toast = document.createElement('aside');
@@ -75,8 +49,27 @@ function showUpdateNotification(worker: ServiceWorker): void {
   });
 
   const reloadBtn = toast.querySelector<HTMLButtonElement>('#sw-update-reload-btn');
-  reloadBtn?.addEventListener('click', () => {
-    worker.postMessage({ type: 'SKIP_WAITING' });
+  reloadBtn?.addEventListener('click', async () => {
+    // Safety check: Never interrupt active drawing playback or audio export!
+    const isPlaying = state.isPlaying;
+    const isExporting = Boolean(document.querySelector('.export-recording-view'));
+
+    if (isPlaying || isExporting) {
+      const textEl = toast.querySelector('.sw-update-text');
+      if (textEl) {
+        textEl.textContent = 'Update queued. Applying when paused…';
+      }
+      reloadBtn.disabled = true;
+
+      const onPause = async () => {
+        events.off('transport:pause', onPause);
+        await updateSW(true);
+      };
+      events.on('transport:pause', onPause);
+      return;
+    }
+
+    await updateSW(true);
   });
 
   const dismissBtn = toast.querySelector<HTMLButtonElement>('#sw-update-dismiss-btn');

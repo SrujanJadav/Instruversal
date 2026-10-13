@@ -1,4 +1,4 @@
-import { state, events, clearHistory } from '../state';
+import { state, events, clearHistory, loadDeviceKeyDefaults } from '../state';
 import { Creation, ProjectData, CreationStore } from './types';
 import { getCreationStore } from './store';
 import { serializeProject, deserializeProject, PROJECT_STORAGE_KEY } from '../audio/projectState';
@@ -197,7 +197,7 @@ class CreationManager {
           title: this.currentTitle,
           createdAt: this.createdAt,
           updatedAt: now,
-          schemaVersion: 1,
+          schemaVersion: 2,
           project: projectData,
         };
 
@@ -250,7 +250,7 @@ class CreationManager {
         title: this.currentTitle,
         createdAt: this.createdAt,
         updatedAt: now,
-        schemaVersion: 1,
+        schemaVersion: 2,
         project: projectData,
       };
 
@@ -347,6 +347,19 @@ class CreationManager {
     getFlowVoicePool().releaseAll(0.02);
     getBeatFlowVoicePool().releaseAll(0.02);
     clearHistory();
+
+    const defaults = loadDeviceKeyDefaults();
+    state.keyMode = defaults.keyMode;
+    state.rootNote = defaults.rootNote;
+    state.scaleName = defaults.scaleName;
+    const tm = getTrackManager();
+    for (const track of tm.getAllTracks()) {
+      if (track.trackType !== 'beat') {
+        track.setKey(defaults.keyMode === 'perColour' ? { root: defaults.rootNote, scale: defaults.scaleName } : undefined);
+      }
+    }
+    events.emit('scale:change', { rootNote: state.rootNote, scaleName: state.scaleName });
+    events.emit('key-mode:change', state.keyMode);
 
     state.strokes = [];
     events.emit('strokes:updated', []);

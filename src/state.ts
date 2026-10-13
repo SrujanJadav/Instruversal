@@ -187,6 +187,9 @@ export function saveSyncOffset(ms: number): void {
 const POLYPHONY_STORAGE_KEY = 'instruversal:polyphony';
 export function loadPolyphony(): PolyphonyCap {
   try {
+    if (localStorage.getItem('instruversal:light-mode') === 'true') {
+      return 'low';
+    }
     const saved = localStorage.getItem(POLYPHONY_STORAGE_KEY);
     if (saved === 'low' || saved === 'medium' || saved === 'high') {
       return saved;

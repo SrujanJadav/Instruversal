@@ -218,4 +218,73 @@ describe('Stroke branching engine (src/audio/branches.ts)', () => {
     const b2 = getStrokeBranches(stroke);
     expect(b1).toBe(b2);
   });
+
+  it('cone gives exactly two riding dots at x = 0.4', () => {
+    const coneStroke: Stroke = {
+      id: 'stroke-cone-dots',
+      trackId: 'track-1',
+      points: [
+        { x: 0.2, y: 0.8, t: 0 },
+        { x: 0.4, y: 0.5, t: 100 },
+        { x: 0.6, y: 0.2, t: 200 }, // Peak
+        { x: 0.4, y: 0.4, t: 300 },
+        { x: 0.2, y: 0.6, t: 400 },
+      ],
+      width: 2.0,
+    };
+    const branches = getStrokeBranches(coneStroke);
+    const activeAtPointFour = branches.filter((b) => 0.4 >= b.xStart && 0.4 <= b.xEnd);
+    expect(activeAtPointFour.length).toBe(2);
+    const yValues = activeAtPointFour.map((b) => interpolateBranchY(b, 0.4));
+    expect(yValues.length).toBe(2);
+    expect(yValues[0]).toBeCloseTo(0.5, 2);
+    expect(yValues[1]).toBeCloseTo(0.4, 2);
+  });
+
+  it('benchmarks branch building for a 2000-point stroke and 60 strokes', () => {
+    // 1. Single stroke with 2000 points
+    const pts2000 = [];
+    for (let i = 0; i < 2000; i++) {
+      const t = i / 2000;
+      pts2000.push({
+        x: 0.5 + 0.4 * Math.sin(t * 12 * Math.PI) * Math.cos(t * 2 * Math.PI),
+        y: 0.5 + 0.4 * Math.cos(t * 12 * Math.PI),
+        t: i * 16,
+      });
+    }
+    const stroke2000: Stroke = { id: 'bench-2000', trackId: 'track-1', points: pts2000, width: 2.0 };
+
+    const t0 = performance.now();
+    const branches2000 = extractBranchesFromStroke(stroke2000);
+    const dur2000 = performance.now() - t0;
+
+    // 2. 60 strokes (realistic multi-track drawing)
+    const strokes60: Stroke[] = [];
+    for (let s = 0; s < 60; s++) {
+      const pts = [];
+      const count = 150;
+      for (let i = 0; i < count; i++) {
+        const f = i / count;
+        pts.push({
+          x: 0.1 + 0.8 * f + 0.05 * Math.sin(f * 4 * Math.PI),
+          y: 0.2 + 0.6 * Math.sin((f + s * 0.1) * 2 * Math.PI),
+          t: i * 16,
+        });
+      }
+      strokes60.push({ id: `bench-s-${s}`, trackId: `track-${s % 4}`, points: pts, width: 2.0 });
+    }
+
+    const t1 = performance.now();
+    for (let s = 0; s < 60; s++) {
+      extractBranchesFromStroke(strokes60[s]);
+    }
+    const dur60 = performance.now() - t1;
+
+    console.log(`[BENCHMARK] 2000-point stroke build time: ${dur2000.toFixed(2)}ms (${branches2000.length} branches)`);
+    console.log(`[BENCHMARK] 60 strokes build time: ${dur60.toFixed(2)}ms`);
+
+    expect(dur2000).toBeLessThan(50);
+    expect(dur60).toBeLessThan(100);
+  });
 });
+

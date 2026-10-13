@@ -168,6 +168,40 @@ export function getTrackColorVar(trackId: string): string {
   return TRACK_COLOR_VARS[trackId] || '--ink';
 }
 
+import { effectiveKey } from '../audio/scales';
+
+/**
+ * Computes the key label for a project:
+ * In linked mode: formats the base key.
+ * In perColour mode: returns "Mixed keys" if melodic tracks differ, or the shared key if all match.
+ */
+export function getProjectKeyLabel(project: { keyMode?: string; rootNote?: number; scaleName?: string; tracks?: any[] }): string {
+  const baseLabel = formatKeyLabel(project.rootNote ?? 0, project.scaleName || 'major pentatonic');
+  if (project.keyMode !== 'perColour' || !Array.isArray(project.tracks) || project.tracks.length === 0) {
+    return baseLabel;
+  }
+
+  const melodicTracks = project.tracks.filter((t) => t.trackType !== 'beat');
+  if (melodicTracks.length <= 1) {
+    if (melodicTracks.length === 1) {
+      const eff = effectiveKey(melodicTracks[0], project as any);
+      return formatKeyLabel(eff.root, eff.scale);
+    }
+    return baseLabel;
+  }
+
+  const firstEff = effectiveKey(melodicTracks[0], project as any);
+  const firstKeyId = `${firstEff.root}:${firstEff.scale}`;
+  for (let i = 1; i < melodicTracks.length; i++) {
+    const eff = effectiveKey(melodicTracks[i], project as any);
+    if (`${eff.root}:${eff.scale}` !== firstKeyId) {
+      return 'Mixed keys';
+    }
+  }
+
+  return formatKeyLabel(firstEff.root, firstEff.scale);
+}
+
 /**
  * Extracts lightweight CreationMeta from a full Creation object for high-performance listing.
  */
@@ -188,11 +222,13 @@ export function extractCreationMeta(creation: Creation): CreationMeta {
     createdAt: creation.createdAt,
     updatedAt: creation.updatedAt,
     bpm: proj.bpm || 90,
+    bars: proj.bars || 2,
     rootNote: proj.rootNote ?? 0,
     scaleName: proj.scaleName || 'major pentatonic',
-    keyLabel: formatKeyLabel(proj.rootNote ?? 0, proj.scaleName || 'major pentatonic'),
+    keyLabel: getProjectKeyLabel(proj),
     trackColors: Array.from(trackColorsSet),
     strokeCount: strokes.length,
     simplifiedStrokes,
   };
 }
+

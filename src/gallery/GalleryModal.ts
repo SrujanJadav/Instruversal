@@ -207,7 +207,8 @@ export class GalleryModal {
       timeStr = `edited ${mins}m ago`;
     }
 
-    const newText = `${meta.bpm} BPM · ${meta.keyLabel || 'C Major Pentatonic'} · ${timeStr}`;
+    const barsStr = `${meta.bars || 2} bar${(meta.bars || 2) === 1 ? '' : 's'}`;
+    const newText = `${meta.bpm} BPM · ${barsStr} · ${meta.keyLabel || 'C Major Pentatonic'} · ${timeStr}`;
 
     if (this.captionEl.textContent && this.captionEl.textContent !== newText) {
       this.captionEl.style.opacity = '0';
@@ -269,7 +270,8 @@ export class GalleryModal {
       const li = document.createElement('li');
       const btn = document.createElement('button');
       btn.type = 'button';
-      btn.textContent = `${meta.title}, ${meta.bpm} BPM, ${meta.keyLabel || 'Key'}`;
+      const barsStr = `${meta.bars || 2} bar${(meta.bars || 2) === 1 ? '' : 's'}`;
+      btn.textContent = `${meta.title}, ${meta.bpm} BPM, ${barsStr}, ${meta.keyLabel || 'Key'}`;
       btn.addEventListener('click', () => {
         this.openProject(meta.id);
       });

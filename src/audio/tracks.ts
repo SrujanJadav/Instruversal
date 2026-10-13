@@ -2,7 +2,8 @@ import * as Tone from 'tone';
 import { InstrumentInstance, INSTRUMENTS_MAP } from './instruments';
 import { DrumKitInstance, DrumKitId, DrumSoundId } from './drums';
 import { BeatRate } from './beatSchedule';
-import { TrackType, BeatPlaybackMode, BeatFlowStyle, BeatRollVoice, BeatSweepCharacter } from '../state';
+import { TrackType, BeatPlaybackMode, BeatFlowStyle, BeatRollVoice, BeatSweepCharacter, events } from '../state';
+import { MusicalKey } from './scales';
 
 export interface TrackConfig {
   id: string;
@@ -19,6 +20,7 @@ export interface TrackConfig {
   beatFlowStyle?: BeatFlowStyle;
   beatRollVoice?: BeatRollVoice;
   beatSweepCharacter?: BeatSweepCharacter;
+  key?: MusicalKey;
   muted: boolean;
   solo: boolean;
   volume: number; // 0 to 1
@@ -46,6 +48,7 @@ export class Track {
   public beatFlowStyle: BeatFlowStyle;
   public beatRollVoice: BeatRollVoice;
   public beatSweepCharacter: BeatSweepCharacter;
+  public key?: MusicalKey;
   public muted: boolean;
   public solo: boolean;
   public volume: number;
@@ -69,6 +72,7 @@ export class Track {
     this.beatFlowStyle = config.beatFlowStyle || 'glide';
     this.beatRollVoice = config.beatRollVoice || 'snare';
     this.beatSweepCharacter = config.beatSweepCharacter || 'shaker';
+    this.key = config.key ? { root: config.key.root, scale: config.key.scale } : undefined;
     this.muted = config.muted;
     this.solo = config.solo;
     this.volume = config.volume;
@@ -138,6 +142,17 @@ export class Track {
 
   public setBeatSweepCharacter(char: BeatSweepCharacter) {
     this.beatSweepCharacter = char;
+  }
+
+  public setKey(key?: MusicalKey) {
+    if (!key) {
+      this.key = undefined;
+      return;
+    }
+    this.key = {
+      root: ((Math.round(key.root) % 12) + 12) % 12,
+      scale: key.scale,
+    };
   }
 
   public setInstrument(instrumentId: string) {
@@ -331,6 +346,16 @@ export class TrackManager {
       const track = new Track(config, this.effectsRack.masterGain);
       this.tracks.set(track.id, track);
     }
+
+    events.on('key-state:restore', (snapshot) => {
+      for (const [id, track] of this.tracks.entries()) {
+        const savedKey = snapshot.trackKeys[id];
+        track.setKey(savedKey);
+        events.emit('track:update', id);
+      }
+      events.emit('scale:change', { rootNote: snapshot.baseRoot, scaleName: snapshot.baseScale });
+      events.emit('key-mode:change', snapshot.keyMode);
+    });
   }
 
   public getTrack(id: string): Track | undefined {

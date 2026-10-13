@@ -1,5 +1,6 @@
 import { getCurrentUser } from '../auth/auth';
 import { getAccountSheet } from './AccountSheet';
+import { canInstallPrompt, promptInstall, isIosSafari, isStandalone } from '../pwa/installPrompt';
 
 const HINT_INTRO_KEY = 'instruversal:hint-intro';
 
@@ -17,6 +18,30 @@ export function showFirstRunHintOverlay(force = false): void {
   if (overlayEl) return;
 
   const currentUser = getCurrentUser();
+
+  let installSectionHtml = '';
+  if (!isStandalone()) {
+    if (canInstallPrompt()) {
+      installSectionHtml = `
+        <div class="hint-install-section" style="margin-top: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: var(--space-2);">
+          <div>
+            <span style="font-weight: 500; font-size: 0.85rem;">Install app</span>
+            <p style="margin: 0; font-size: 0.75rem; color: var(--ink-soft);">Add to home screen for fast offline access.</p>
+          </div>
+          <button type="button" class="auth-pill-btn" id="hint-install-btn" style="flex-shrink: 0;">Install</button>
+        </div>
+      `;
+    } else if (isIosSafari()) {
+      installSectionHtml = `
+        <div class="hint-install-section" style="margin-top: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: var(--space-2);">
+          <div>
+            <span style="font-weight: 500; font-size: 0.85rem;">Install app</span>
+            <p style="margin: 0; font-size: 0.75rem; color: var(--ink-soft);">Tap Share, then Add to Home Screen.</p>
+          </div>
+        </div>
+      `;
+    }
+  }
 
   overlayEl = document.createElement('div');
   overlayEl.className = 'hint-overlay-backdrop';
@@ -41,6 +66,9 @@ export function showFirstRunHintOverlay(force = false): void {
           <span class="hint-text"><strong>Colour is instrument.</strong> Beat colours become drums.</span>
         </li>
       </ul>
+
+      ${installSectionHtml}
+
       <div class="hint-account-section" style="margin-top: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: var(--space-2);">
         <div>
           <span style="font-weight: 500; font-size: 0.85rem;">Account</span>
@@ -56,6 +84,17 @@ export function showFirstRunHintOverlay(force = false): void {
   `;
 
   document.body.appendChild(overlayEl);
+
+  overlayEl.querySelector('#hint-install-btn')?.addEventListener('click', async () => {
+    const installed = await promptInstall();
+    if (installed) {
+      const btn = overlayEl?.querySelector<HTMLButtonElement>('#hint-install-btn');
+      if (btn) {
+        btn.textContent = 'Installed';
+        btn.disabled = true;
+      }
+    }
+  });
 
   overlayEl.querySelector('#hint-account-btn')?.addEventListener('click', () => {
     dismiss();

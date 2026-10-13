@@ -1,8 +1,9 @@
 import { state, events, Stroke, TrackType, PlaybackMode, BeatPlaybackMode, BeatFlowStyle, BeatRollVoice, BeatSweepCharacter, FxConfig } from '../state';
 import { getTrackManager, Track } from './tracks';
+import { getTransport } from './transport';
 import { DrumKitId } from './drums';
 import { BeatRate } from './beatSchedule';
-import { ScaleName } from './scales';
+import { ScaleName, KeyMode, MusicalKey, SCALES } from './scales';
 import { getMasterEffectsRack } from './effects';
 
 export const PROJECT_STORAGE_KEY = 'instruversal:project';
@@ -23,14 +24,16 @@ export interface SerializedTrack {
   beatFlowStyle: BeatFlowStyle;
   beatRollVoice: BeatRollVoice;
   beatSweepCharacter: BeatSweepCharacter;
+  key?: MusicalKey;
 }
 
 export interface SerializedProject {
-  version: 1;
+  version: 1 | 2 | 3;
   bpm: number;
   bars: number;
   rootNote: number;
   scaleName: ScaleName;
+  keyMode?: KeyMode;
   playbackMode: PlaybackMode;
   glide: number;
   tracks: SerializedTrack[];
@@ -63,14 +66,16 @@ export function serializeProject(tracks?: Track[]): SerializedProject {
     beatFlowStyle: t.beatFlowStyle,
     beatRollVoice: t.beatRollVoice,
     beatSweepCharacter: t.beatSweepCharacter,
+    key: t.key ? { root: t.key.root, scale: t.key.scale } : undefined,
   }));
 
   return {
-    version: 1,
+    version: 3,
     bpm: state.bpm,
     bars: state.bars,
     rootNote: state.rootNote,
     scaleName: state.scaleName,
+    keyMode: state.keyMode || 'linked',
     playbackMode: state.playbackMode,
     glide: state.glide,
     tracks: serializedTracks,
@@ -80,7 +85,7 @@ export function serializeProject(tracks?: Track[]): SerializedProject {
 }
 
 export function deserializeProject(data: SerializedProject, tracks?: Track[]): boolean {
-  if (!data || data.version !== 1) return false;
+  if (!data || (data.version !== 1 && data.version !== 2 && data.version !== 3)) return false;
 
   const targetTracks = tracks || getTrackManager().getAllTracks();
   if (Array.isArray(data.tracks)) {
@@ -101,14 +106,38 @@ export function deserializeProject(data: SerializedProject, tracks?: Track[]): b
         track.beatFlowStyle = tData.beatFlowStyle || track.beatFlowStyle;
         track.beatRollVoice = tData.beatRollVoice || track.beatRollVoice;
         track.beatSweepCharacter = tData.beatSweepCharacter || track.beatSweepCharacter;
+        if (tData.key && track.trackType === 'melodic' && typeof tData.key === 'object') {
+          const rawRoot = typeof tData.key.root === 'number' ? ((Math.round(tData.key.root) % 12) + 12) % 12 : 0;
+          const rawScale = (typeof tData.key.scale === 'string' && tData.key.scale in SCALES)
+            ? (tData.key.scale as ScaleName)
+            : 'major pentatonic';
+          track.setKey({ root: rawRoot, scale: rawScale });
+        } else {
+          track.key = undefined;
+        }
       }
     }
   }
 
   if (typeof data.bpm === 'number') state.bpm = data.bpm;
-  if (typeof data.bars === 'number') state.bars = data.bars;
-  if (typeof data.rootNote === 'number') state.rootNote = data.rootNote;
-  if (data.scaleName) state.scaleName = data.scaleName;
+
+  // Sanitize loop bars: 1, 2, 4, 8; legacy projects without bars default to 2
+  const VALID_BARS = [1, 2, 4, 8];
+  const deserializedBars = (typeof data.bars === 'number' && VALID_BARS.includes(data.bars)) ? data.bars : 2;
+  state.bars = deserializedBars;
+  getTransport().setBars(deserializedBars);
+  events.emit('bars:change', deserializedBars);
+
+  if (typeof data.rootNote === 'number') {
+    state.rootNote = ((Math.round(data.rootNote) % 12) + 12) % 12;
+  }
+  if (data.scaleName && data.scaleName in SCALES) {
+    state.scaleName = data.scaleName;
+  }
+  state.keyMode = data.keyMode === 'perColour' ? 'perColour' : 'linked';
+  events.emit('key-mode:change', state.keyMode);
+  events.emit('scale:change', { rootNote: state.rootNote, scaleName: state.scaleName });
+
   if (data.playbackMode) state.playbackMode = data.playbackMode;
   if (typeof data.glide === 'number') state.glide = data.glide;
   if (Array.isArray(data.strokes)) state.strokes = data.strokes;
@@ -122,6 +151,7 @@ export function deserializeProject(data: SerializedProject, tracks?: Track[]): b
 
   return true;
 }
+
 
 export function saveProject(tracks?: Track[]): void {
   try {
@@ -145,10 +175,14 @@ export function loadSavedProject(tracks?: Track[]): boolean {
     if (typeof window !== 'undefined' && window.location.hash.startsWith('#project=')) {
       const hashData = window.location.hash.slice(9);
       if (hashData) {
-        const decoded = decodeURIComponent(hashData);
-        const parsed = JSON.parse(decoded) as SerializedProject;
-        if (deserializeProject(parsed, tracks)) {
-          return true;
+        try {
+          const decoded = decodeURIComponent(hashData);
+          const parsed = JSON.parse(decoded) as SerializedProject;
+          if (deserializeProject(parsed, tracks)) {
+            return true;
+          }
+        } catch (hashErr) {
+          console.warn('Failed to parse share link hash project:', hashErr);
         }
       }
     }
@@ -156,8 +190,12 @@ export function loadSavedProject(tracks?: Track[]): boolean {
     // 2. Check localStorage
     const saved = localStorage.getItem(PROJECT_STORAGE_KEY);
     if (saved) {
-      const parsed = JSON.parse(saved) as SerializedProject;
-      return deserializeProject(parsed, tracks);
+      try {
+        const parsed = JSON.parse(saved) as SerializedProject;
+        return deserializeProject(parsed, tracks);
+      } catch (storeErr) {
+        console.warn('Failed to parse localStorage project:', storeErr);
+      }
     }
   } catch (err) {
     console.error('Failed to load project:', err);
@@ -181,12 +219,15 @@ export function initProjectAutosave(): () => void {
     events.on('stroke:added', scheduleAutosave),
     events.on('strokes:updated', scheduleAutosave),
     events.on('bpm:change', scheduleAutosave),
+    events.on('bars:change', scheduleAutosave),
     events.on('scale:change', scheduleAutosave),
     events.on('playback-mode:change', scheduleAutosave),
     events.on('glide:change', scheduleAutosave),
     events.on('track:beat-param-change', scheduleAutosave),
     events.on('track:type-change', scheduleAutosave),
     events.on('track:update', scheduleAutosave),
+    events.on('key-mode:change', scheduleAutosave),
+    events.on('track:key-change', scheduleAutosave),
     events.on('fx:change', scheduleAutosave),
   ];
 

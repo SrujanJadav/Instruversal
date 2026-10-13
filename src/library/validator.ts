@@ -1,6 +1,6 @@
 import { ProjectData, Creation } from './types';
 import { INSTRUMENTS_MAP } from '../audio/instruments';
-import { SCALES, ScaleName } from '../audio/scales';
+import { SCALES, ScaleName, KeyMode } from '../audio/scales';
 import { DRUM_KITS, DrumKitId } from '../audio/drums';
 import { SerializedTrack } from '../audio/projectState';
 import { Stroke, FxConfig, DEFAULT_FX_CONFIG } from '../state';
@@ -39,8 +39,11 @@ export function validateProject(raw: unknown): ValidationResult<ProjectData> {
 
   const p = raw as Record<string, any>;
 
-  // Check version
-  const version = p.version === 1 ? 1 : 1;
+  // Check version (migrates to version 3)
+  const version: 1 | 2 | 3 = 3;
+
+  // Key mode: 'linked' or 'perColour' (defaults to 'linked' for old projects)
+  const keyMode: KeyMode = p.keyMode === 'perColour' ? 'perColour' : 'linked';
 
   // BPM: 50 to 180
   const bpm = clamp(p.bpm, 50, 180, 90);
@@ -48,8 +51,19 @@ export function validateProject(raw: unknown): ValidationResult<ProjectData> {
     warnings.push(`BPM was clamped to ${bpm}.`);
   }
 
-  // Bars: 1 to 8
-  const bars = Math.round(clamp(p.bars, 1, 8, 2));
+  // Bars: 1, 2, 4, or 8 (default 2 for old sketches)
+  const VALID_BARS = new Set([1, 2, 4, 8]);
+  let bars = 2;
+  if (typeof p.bars === 'number' && VALID_BARS.has(p.bars)) {
+    bars = p.bars;
+  } else if (p.bars !== undefined) {
+    const rawB = Number(p.bars);
+    if (isNaN(rawB) || rawB <= 1) bars = 1;
+    else if (rawB <= 3) bars = 2;
+    else if (rawB <= 6) bars = 4;
+    else bars = 8;
+    warnings.push(`Loop bars clamped to ${bars}.`);
+  }
 
   // Root note: 0 to 11
   let rootNote = 0;
@@ -97,6 +111,28 @@ export function validateProject(raw: unknown): ValidationResult<ProjectData> {
       const beatRollVoice = VALID_BEAT_ROLL_VOICES.has(t.beatRollVoice) ? t.beatRollVoice : 'snare';
       const beatSweepCharacter = VALID_BEAT_SWEEP_CHARS.has(t.beatSweepCharacter) ? t.beatSweepCharacter : 'shaker';
 
+      // Per-track key validation
+      let trackKey: { root: number; scale: ScaleName } | undefined = undefined;
+      if (tType === 'melodic') {
+        if (t.key && typeof t.key === 'object') {
+          const rawKey = t.key as Record<string, any>;
+          let tRoot = rootNote;
+          if (typeof rawKey.root === 'number') {
+            tRoot = ((Math.round(rawKey.root) % 12) + 12) % 12;
+          }
+          let tScale: ScaleName = scaleName;
+          if (typeof rawKey.scale === 'string' && VALID_SCALES.has(rawKey.scale)) {
+            tScale = rawKey.scale as ScaleName;
+          } else if (rawKey.scale) {
+            warnings.push(`Track ${tName} scale "${rawKey.scale}" is unknown. Reverted to project scale.`);
+          }
+          trackKey = { root: tRoot, scale: tScale };
+        } else if (keyMode === 'perColour') {
+          // If in perColour mode but track lacks key, initialize with base key
+          trackKey = { root: rootNote, scale: scaleName };
+        }
+      }
+
       tracks.push({
         id: tId,
         name: tName,
@@ -113,9 +149,11 @@ export function validateProject(raw: unknown): ValidationResult<ProjectData> {
         beatFlowStyle,
         beatRollVoice,
         beatSweepCharacter,
+        key: trackKey,
       });
     }
   }
+
 
   // Strokes: cap at 1000 strokes, cap at 3000 points per stroke
   const strokes: Stroke[] = [];
@@ -203,6 +241,7 @@ export function validateProject(raw: unknown): ValidationResult<ProjectData> {
     bars,
     rootNote,
     scaleName,
+    keyMode,
     playbackMode,
     glide,
     tracks,
@@ -231,7 +270,7 @@ export function validateCreation(raw: unknown): ValidationResult<Creation> {
   const now = Date.now();
   const createdAt = typeof c.createdAt === 'number' ? c.createdAt : now;
   const updatedAt = typeof c.updatedAt === 'number' ? c.updatedAt : createdAt;
-  const schemaVersion = typeof c.schemaVersion === 'number' ? c.schemaVersion : 1;
+  const schemaVersion = typeof c.schemaVersion === 'number' ? c.schemaVersion : 2;
 
   const projRes = validateProject(c.project);
   if (!projRes.isValid || !projRes.data) {

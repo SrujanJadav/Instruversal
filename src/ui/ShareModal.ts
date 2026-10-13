@@ -1,6 +1,7 @@
 import { getCreationStore } from '../library/store';
 import { getCurrentUser } from '../auth/auth';
 import { getAccountSheet } from './AccountSheet';
+import { getExportModal } from './ExportModal';
 
 class ShareModal {
   private overlay: HTMLElement;
@@ -116,6 +117,14 @@ class ShareModal {
           <button type="button" class="share-copy-btn" id="share-copy-btn">Copy link</button>
         </div>
         <div class="share-toast" id="share-toast"></div>
+
+        <div class="share-export-row" style="margin-top: var(--space-4); padding-top: var(--space-3); border-top: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; gap: var(--space-2);">
+          <div class="share-toggle-info">
+            <span class="share-toggle-label">Export Audio</span>
+            <span class="share-toggle-sub">High-quality 16-bit WAV or compressed file</span>
+          </div>
+          <button type="button" class="auth-submit-btn" id="share-export-audio-btn" style="width: auto; padding: 6px 14px; font-size: 0.82rem; white-space: nowrap;">Export audio</button>
+        </div>
       </div>
     `;
 
@@ -124,6 +133,13 @@ class ShareModal {
     const linkInput = body.querySelector<HTMLInputElement>('#share-link-input');
     const copyBtn = body.querySelector<HTMLButtonElement>('#share-copy-btn');
     const toast = body.querySelector<HTMLElement>('#share-toast');
+    const exportBtn = body.querySelector<HTMLButtonElement>('#share-export-audio-btn');
+
+    exportBtn?.addEventListener('click', () => {
+      const title = this.currentTitle;
+      this.close();
+      getExportModal().open(title);
+    });
 
     toggle?.addEventListener('change', async () => {
       if (!this.currentId) return;

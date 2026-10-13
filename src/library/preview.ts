@@ -1,5 +1,5 @@
 import { ProjectData, SimplifiedStroke } from './types';
-import { simplifyPoints, formatKeyLabel, getTrackColorVar } from './simplify';
+import { simplifyPoints, getTrackColorVar, getProjectKeyLabel } from './simplify';
 
 export interface PreviewData {
   strokes: SimplifiedStroke[];
@@ -50,7 +50,7 @@ export function generatePreview(project: ProjectData): PreviewData {
   const preview: PreviewData = {
     strokes: simplified,
     bpm: project.bpm || 90,
-    keyLabel: formatKeyLabel(project.rootNote ?? 0, project.scaleName || 'major pentatonic'),
+    keyLabel: getProjectKeyLabel(project),
     trackColors: Array.from(trackColorsSet),
   };
 

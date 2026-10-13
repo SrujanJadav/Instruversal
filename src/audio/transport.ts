@@ -12,18 +12,31 @@ export class TransportController {
   }
 
   private setupTransport() {
-    Tone.getTransport().bpm.value = this.bpm;
-    Tone.getTransport().timeSignature = 4;
-    Tone.getTransport().loop = true;
-    Tone.getTransport().loopStart = 0;
-    Tone.getTransport().loopEnd = `${this.bars}m`;
+    try {
+      const t = Tone.getTransport();
+      if (t) {
+        if (t.bpm) t.bpm.value = this.bpm;
+        t.timeSignature = 4;
+        t.loop = true;
+        t.loopStart = 0;
+        t.loopEnd = `${this.bars}m`;
+      }
+    } catch {}
+
+    events.on('bars:change', (newBars: number) => {
+      if (this.bars !== newBars) {
+        this.setBars(newBars);
+      }
+    });
   }
 
   public setBpm(newBpm: number) {
     const clamped = Math.max(CONFIG.minBpm, Math.min(CONFIG.maxBpm, newBpm));
     this.bpm = clamped;
     state.bpm = clamped;
-    Tone.getTransport().bpm.rampTo(clamped, 0.05);
+    try {
+      Tone.getTransport()?.bpm?.rampTo?.(clamped, 0.05);
+    } catch {}
     events.emit('bpm:change', clamped);
   }
 
@@ -32,9 +45,39 @@ export class TransportController {
   }
 
   public setBars(newBars: number) {
-    this.bars = Math.max(1, Math.min(8, newBars));
-    state.bars = this.bars;
-    Tone.getTransport().loopEnd = `${this.bars}m`;
+    const clamped = Math.max(1, Math.min(8, newBars));
+    if (clamped === this.bars && state.bars === clamped) return;
+
+    const wasPlaying = this.isPlaying();
+    let bpm = 90;
+    try {
+      bpm = Tone.getTransport()?.bpm?.value || this.bpm || 90;
+    } catch {
+      bpm = this.bpm || 90;
+    }
+    const oldLoopDuration = this.bars * 4 * (60 / bpm);
+    const newLoopDuration = clamped * 4 * (60 / bpm);
+
+    // Calculate current normalized loop progress [0, 1) to prevent timing jumps
+    let currentProgress = 0;
+    try {
+      const sec = Tone.getTransport()?.seconds ?? 0;
+      currentProgress = oldLoopDuration > 0 ? (sec % oldLoopDuration) / oldLoopDuration : 0;
+    } catch {}
+
+    this.bars = clamped;
+    state.bars = clamped;
+    try {
+      const t = Tone.getTransport();
+      if (t) {
+        t.loopEnd = `${clamped}m`;
+        if (wasPlaying && newLoopDuration > 0) {
+          t.seconds = currentProgress * newLoopDuration;
+        }
+      }
+    } catch {}
+
+    events.emit('bars:change', clamped);
   }
 
   public getBars(): number {

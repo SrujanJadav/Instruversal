@@ -196,10 +196,30 @@ export function extractBranchesFromStroke(stroke: Stroke): StrokeBranch[] {
     ];
   }
 
-  // Detect turning points using hysteresis
-  const turningIndices = findTurningPointIndices(pts, HYSTERESIS_THRESHOLD);
+  // Fix 3: Simplify the raw points with RDP before turning-point detection so
+  // that hand-tremor micro-jitter does not create spurious X-reversals.
+  const ptsForTurns = simplifyPointsRDP(pts, RDP_EPSILON);
 
-  // Split into raw slices
+  // Detect turning points using hysteresis on the simplified polyline.
+  const turningIndicesOnSimplified = findTurningPointIndices(ptsForTurns, HYSTERESIS_THRESHOLD);
+
+  // Map turning-point indices back to the nearest raw-point index so slices
+  // keep all original precision for interpolation.
+  const turningIndices: number[] = turningIndicesOnSimplified.map((simplIdx) => {
+    const targetX = ptsForTurns[simplIdx].x;
+    const targetY = ptsForTurns[simplIdx].y;
+    let bestRaw = 0;
+    let bestDist = Infinity;
+    for (let ri = 0; ri < pts.length; ri++) {
+      const dx = pts[ri].x - targetX;
+      const dy = pts[ri].y - targetY;
+      const d = dx * dx + dy * dy;
+      if (d < bestDist) { bestDist = d; bestRaw = ri; }
+    }
+    return bestRaw;
+  });
+
+  // Split into raw slices at the mapped raw turning-point indices.
   const slices: Point[][] = [];
   let startIndex = 0;
   for (const turnIdx of turningIndices) {
@@ -222,12 +242,21 @@ export function extractBranchesFromStroke(stroke: Stroke): StrokeBranch[] {
     const lastPt = rawSlice[rawSlice.length - 1];
     const originalDirection: 'ltr' | 'rtl' = firstPt.x <= lastPt.x ? 'ltr' : 'rtl';
 
-    // Normalize points so x ascends strictly from xStart to xEnd
-    const ascendingPoints = originalDirection === 'ltr' ? [...rawSlice] : [...rawSlice].reverse();
-
-    const branchMinX = Math.min(firstPt.x, lastPt.x);
-    const branchMaxX = Math.max(firstPt.x, lastPt.x);
+    // Fix 1: Compute xStart/xEnd from the TRUE extrema of every point in the
+    // slice, not just the slice endpoints.  Curved arcs and human hand tremor
+    // mean the endpoints are rarely the true min/max X in the slice.
+    let branchMinX = Infinity;
+    let branchMaxX = -Infinity;
+    for (const p of rawSlice) {
+      if (p.x < branchMinX) branchMinX = p.x;
+      if (p.x > branchMaxX) branchMaxX = p.x;
+    }
     const xRange = branchMaxX - branchMinX;
+
+    // Fix 2: Sort a copy of the slice points by ascending X so that
+    // interpolateBranchY's piecewise segment search (p1.x <= targetX <= p2.x)
+    // never encounters a backwards segment and skips it.
+    const ascendingPoints = [...rawSlice].sort((a, b) => a.x - b.x);
 
     rawBranches.push({
       id: `${stroke.id}-b${i}`,

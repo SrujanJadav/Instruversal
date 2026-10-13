@@ -175,6 +175,12 @@ describe('State & History stack', () => {
 
     savePolyphony('low');
     expect(loadPolyphony()).toBe('low');
+
+    // Light mode forces 'low'
+    localStorage.setItem('instruversal:light-mode', 'true');
+    savePolyphony('high');
+    expect(loadPolyphony()).toBe('low');
+    localStorage.removeItem('instruversal:light-mode');
   });
 });
 

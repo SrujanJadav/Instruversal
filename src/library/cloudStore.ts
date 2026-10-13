@@ -102,7 +102,7 @@ export class CloudStore implements CreationStore {
     try {
       const { data, error } = await supabase
         .from('creations')
-        .select('id, title, created_at, updated_at, preview, bpm, key_label, is_public, public_slug')
+        .select('id, title, created_at, updated_at, preview, bpm, key_label, bars, is_public, public_slug')
         .eq('user_id', user.id)
         .order('updated_at', { ascending: false });
 
@@ -152,6 +152,7 @@ export class CloudStore implements CreationStore {
               createdAt: remoteCreated,
               updatedAt: remoteUpdated,
               bpm: row.bpm || 90,
+              bars: row.bars || row.preview?.bars || 2,
               rootNote: 0,
               scaleName: 'major pentatonic',
               keyLabel: row.key_label || 'C Major Pentatonic',
@@ -171,6 +172,7 @@ export class CloudStore implements CreationStore {
               createdAt: remoteCreated,
               updatedAt: remoteUpdated,
               bpm: row.bpm || 90,
+              bars: row.bars || row.preview?.bars || 2,
               rootNote: 0,
               scaleName: 'major pentatonic',
               keyLabel: row.key_label || 'C Major Pentatonic',
@@ -199,6 +201,7 @@ export class CloudStore implements CreationStore {
             createdAt: remoteCreated,
             updatedAt: remoteUpdated,
             bpm: row.bpm || 90,
+            bars: row.bars || row.preview?.bars || 2,
             rootNote: 0,
             scaleName: 'major pentatonic',
             keyLabel: row.key_label || 'C Major Pentatonic',
@@ -354,6 +357,15 @@ export class CloudStore implements CreationStore {
           continue;
         }
 
+        const projectStr = JSON.stringify(creation.project);
+        const encoder = typeof TextEncoder !== 'undefined' ? new TextEncoder() : null;
+        const projectBytes = encoder ? encoder.encode(projectStr).length : projectStr.length;
+        if (projectBytes > 500000) {
+          console.warn(`Project payload exceeds 500KB limit for ${id} (${projectBytes} bytes).`);
+          this.syncErrorIds.add(id);
+          continue;
+        }
+
         const preview: PreviewData = generatePreview(creation.project);
 
         const { data, error } = await supabase.from('creations').upsert({
@@ -363,8 +375,9 @@ export class CloudStore implements CreationStore {
           project: creation.project,
           preview,
           bpm: creation.project.bpm || 90,
+          bars: creation.project.bars || 2,
           key_label: preview.keyLabel || 'C Major Pentatonic',
-          schema_version: creation.schemaVersion || 1,
+          schema_version: creation.schemaVersion || 3,
         }).select('updated_at').single();
 
         if (error) {
@@ -428,7 +441,7 @@ export class CloudStore implements CreationStore {
 
     const { data, error } = await supabase
       .from('creations')
-      .select('id, title, created_at, updated_at, project, is_public, public_slug')
+      .select('id, title, created_at, updated_at, project, is_public, public_slug, schema_version')
       .eq('public_slug', slug)
       .eq('is_public', true)
       .maybeSingle();
@@ -442,7 +455,7 @@ export class CloudStore implements CreationStore {
       title: data.title,
       createdAt: new Date(data.created_at).getTime(),
       updatedAt: new Date(data.updated_at).getTime(),
-      schemaVersion: 1,
+      schemaVersion: data.schema_version || 2,
       project: data.project,
     });
 

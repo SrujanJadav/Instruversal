@@ -21,6 +21,7 @@ export interface CreationMeta {
   createdAt: number;
   updatedAt: number;
   bpm: number;
+  bars: number;
   rootNote: number;
   scaleName: string;
   keyLabel: string;

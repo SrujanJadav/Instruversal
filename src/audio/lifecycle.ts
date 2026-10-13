@@ -1,5 +1,5 @@
 import * as Tone from 'tone';
-import { state, events } from '../state';
+import { state, events, savePolyphony } from '../state';
 import { getTransport } from './transport';
 import { getFlowVoicePool } from './voicePool';
 import { getBeatFlowVoicePool } from './beatFlowVoices';
@@ -30,6 +30,11 @@ export function setLightMode(enabled: boolean): void {
   try {
     localStorage.setItem(LIGHT_MODE_KEY, String(enabled));
   } catch {}
+  if (enabled) {
+    state.polyphony = 'low';
+    savePolyphony('low');
+    events.emit('polyphony:change', 'low');
+  }
   applyLightModeSettings(enabled);
 }
 

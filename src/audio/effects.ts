@@ -251,6 +251,15 @@ export class MasterEffectsRack {
     return this.masterGain;
   }
 
+  public get outputNode(): Tone.ToneAudioNode {
+    return this.limiter;
+  }
+
+  public lowerGain3dB() {
+    const current = this.masterGain.gain.value;
+    this.masterGain.gain.rampTo(current * 0.7079, 0.05);
+  }
+
   public applyConfig(cfg: FxConfig) {
     const now = Tone.now();
 

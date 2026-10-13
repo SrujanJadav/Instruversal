@@ -8,8 +8,68 @@ export const SCALES = {
 } as const;
 
 export type ScaleName = keyof typeof SCALES;
+export type KeyMode = 'linked' | 'perColour';
 
-const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'] as const;
+export interface MusicalKey {
+  root: number; // 0..11
+  scale: ScaleName;
+}
+
+export const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'] as const;
+
+/**
+ * Pure function: calculates the effective musical key for a track.
+ * Beat tracks ignore keys.
+ * In 'perColour' mode: returns track.key if defined, otherwise project key.
+ * In 'linked' mode: returns project key.
+ */
+export function effectiveKey(
+  track: { trackType?: string; key?: MusicalKey } | null | undefined,
+  project: { keyMode?: KeyMode; rootNote?: number; scaleName?: ScaleName; key?: MusicalKey }
+): MusicalKey {
+  const baseKey: MusicalKey = project.key || {
+    root: ((Math.round(project.rootNote ?? 0) % 12) + 12) % 12,
+    scale: (project.scaleName as ScaleName) || 'major pentatonic',
+  };
+
+  if (track && track.trackType === 'beat') {
+    return baseKey;
+  }
+
+  if (project.keyMode === 'perColour' && track?.key) {
+    return {
+      root: ((Math.round(track.key.root) % 12) + 12) % 12,
+      scale: track.key.scale,
+    };
+  }
+
+  return baseKey;
+}
+
+/**
+ * Formats a short key label suitable for small tags or dots (e.g. "Am", "C pent", "D dor").
+ */
+export function formatShortKeyLabel(key: MusicalKey): string {
+  const normRoot = ((Math.round(key.root) % 12) + 12) % 12;
+  const rootStr = NOTE_NAMES[normRoot] || 'C';
+  switch (key.scale) {
+    case 'major pentatonic':
+      return `${rootStr} pent`;
+    case 'minor pentatonic':
+      return `${rootStr}m`;
+    case 'major':
+      return `${rootStr} maj`;
+    case 'natural minor':
+      return `${rootStr} min`;
+    case 'dorian':
+      return `${rootStr} dor`;
+    case 'mixolydian':
+      return `${rootStr} mix`;
+    default:
+      return rootStr;
+  }
+}
+
 
 /**
  * Builds an array of MIDI note numbers for a given root pitch class (0 = C, 1 = C#, ..., 11 = B),

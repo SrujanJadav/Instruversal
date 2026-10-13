@@ -22,6 +22,14 @@ import { eraseStrokes, Capsule, Point2D } from './eraser';
 import { getFlowVoicePool } from '../audio/voicePool';
 import { getBeatFlowVoicePool } from '../audio/beatFlowVoices';
 import { getStrokeBranches, interpolateBranchY } from '../audio/branches';
+// Dev-only debug tools (dynamically imported on demand, excluded from production)
+let devDebugModule: {
+  drawDebugOverlay: (ctx: CanvasRenderingContext2D, width: number, height: number) => void;
+  mountDebugUI: () => void;
+  unmountDebugUI: () => void;
+  dumpCurrentStrokesAnalysis?: () => void;
+} | null = null;
+let isDevDebugActive = false;
 
 interface HitEffect {
   x: number;
@@ -146,6 +154,66 @@ export class DrawingCanvas {
 
     // Initial sizing
     this.handleResize();
+
+    if (import.meta.env.DEV) {
+      const checkDebugEnabled = (): boolean => {
+        if (typeof window === 'undefined') return false;
+        return Boolean(
+          window.location.hash.includes('debug') ||
+          window.localStorage.getItem('instruversal:debug') === '1' ||
+          window.sessionStorage.getItem('instruversal:debug') === '1'
+        );
+      };
+
+      const syncDebugState = async () => {
+        const shouldBeActive = checkDebugEnabled();
+        isDevDebugActive = shouldBeActive;
+        if (shouldBeActive) {
+          if (!devDebugModule) {
+            devDebugModule = await import('./debugOverlay');
+          }
+          devDebugModule.mountDebugUI();
+          this.markStaticDirty();
+        } else {
+          if (devDebugModule) {
+            devDebugModule.unmountDebugUI();
+          }
+          this.markStaticDirty();
+        }
+      };
+
+      syncDebugState();
+
+      const onKeyDown = (e: KeyboardEvent) => {
+        if (e.ctrlKey && e.shiftKey && (e.key === 'D' || e.key === 'd')) {
+          e.preventDefault();
+          const current = checkDebugEnabled();
+          const next = !current;
+          window.sessionStorage.setItem('instruversal:debug', next ? '1' : '0');
+          if (!next) {
+            window.localStorage.removeItem('instruversal:debug');
+            if (window.location.hash.includes('debug')) {
+              window.location.hash = window.location.hash.replace('debug', '').replace(/#+$/, '');
+            }
+          }
+          syncDebugState();
+        }
+      };
+
+      const onHashChange = () => {
+        syncDebugState();
+      };
+
+      window.addEventListener('keydown', onKeyDown);
+      window.addEventListener('hashchange', onHashChange);
+      this.unsubs.push(() => {
+        window.removeEventListener('keydown', onKeyDown);
+        window.removeEventListener('hashchange', onHashChange);
+        if (devDebugModule) {
+          devDebugModule.unmountDebugUI();
+        }
+      });
+    }
   }
 
   private setupAppListeners() {
@@ -174,7 +242,12 @@ export class DrawingCanvas {
       events.on('eraser:radius-change', () => this.redraw()),
       events.on('eraser:mode-change', () => this.redraw()),
       events.on('strokes:updated', () => this.markStaticDirty()),
-      events.on('stroke:added', () => this.markStaticDirty()),
+      events.on('stroke:added', () => {
+        this.markStaticDirty();
+        if (import.meta.env.DEV && isDevDebugActive && devDebugModule?.dumpCurrentStrokesAnalysis) {
+          devDebugModule.dumpCurrentStrokesAnalysis();
+        }
+      }),
       events.on('bars:change', () => this.markStaticDirty()),
       events.on('transport:play', () => this.startAnimation()),
       events.on('transport:pause', () => this.redraw()),
@@ -786,6 +859,11 @@ export class DrawingCanvas {
     // 7. Eraser indicator cursor ring
     if (state.activeTool === 'eraser' && this.eraserPos) {
       this.drawEraserRing(this.eraserPos.x, this.eraserPos.y);
+    }
+
+    // 8. Dev-only debug overlay (only active when explicitly switched on)
+    if (import.meta.env.DEV && isDevDebugActive && devDebugModule) {
+      devDebugModule.drawDebugOverlay(this.ctx, this.width, this.height);
     }
   }
 
