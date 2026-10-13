@@ -614,6 +614,9 @@
   .header-status {
     display: none;
   }
+  #header-studio-btn {
+    display: none !important;
+  }
 }
 
 @media (max-width: 380px) {

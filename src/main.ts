@@ -135,6 +135,10 @@ app.innerHTML = `
         </div>
       </div>
       <div class="header-actions">
+        <button type="button" class="header-btn" id="header-studio-btn" aria-label="Open Song Studio">
+          <span class="hdr-text-long">Studio</span>
+          <span class="hdr-text-short">Studio</span>
+        </button>
         <button type="button" class="header-btn" id="header-library-btn" aria-label="Open creations library">
           <span class="hdr-text-long">Library</span>
           <span class="hdr-text-short">Lib</span>
@@ -473,6 +477,16 @@ creationManager.onStatusChange((status) => {
 // Library button click
 libraryBtn.addEventListener('click', () => {
   getLibraryModal().open();
+});
+
+// Studio buttons
+document.querySelector('#header-studio-btn')?.addEventListener('click', () => {
+  window.location.hash = '#/studio';
+});
+document.querySelector('#gate-studio-btn')?.addEventListener('click', (e) => {
+  e.preventDefault();
+  window.location.hash = '#/studio';
+  handleStudioRoute('#/studio');
 });
 
 // Mount gate screen theme toggle
@@ -861,57 +875,61 @@ function cleanupStudioView() {
 }
 
 async function handleStudioRoute(hash: string) {
-  closeAllOpenSheets();
-  cleanupStudioView();
+  try {
+    closeAllOpenSheets();
+    cleanupStudioView();
 
-  const mainView = document.querySelector<HTMLElement>('#main-view');
-  const gateScreen = document.querySelector<HTMLElement>('#gate-screen');
-  if (mainView) {
-    mainView.style.display = 'none';
-    mainView.setAttribute('aria-hidden', 'true');
-  }
-  if (gateScreen) {
-    gateScreen.style.display = 'none';
-    gateScreen.setAttribute('aria-hidden', 'true');
-  }
-
-  currentActiveScreen = 'studio' as any;
-
-  if (Tone.context.state !== 'running') {
-    try {
-      await Tone.start();
-      state.audioStarted = true;
-      events.emit('audio:started', undefined);
-    } catch {}
-  }
-
-  const { getSongStore } = await import('./song/store');
-  const { createSongFromCreation } = await import('./song/helpers');
-  const songStore = getSongStore();
-
-  const parts = hash.split('/');
-  const songId = parts[2];
-
-  let targetSong = null;
-  if (songId && songId !== 'new') {
-    targetSong = await songStore.get(songId);
-  }
-
-  if (!targetSong) {
-    const list = await songStore.list();
-    if (list.length > 0 && (!songId || songId !== 'new')) {
-      targetSong = await songStore.get(list[0].id);
-    } else {
-      const currentCreation = creationManager.getCurrentCreation();
-      targetSong = createSongFromCreation(currentCreation);
-      await songStore.save(targetSong);
+    const mainView = document.querySelector<HTMLElement>('#main-view');
+    const gateScreen = document.querySelector<HTMLElement>('#gate-screen');
+    if (mainView) {
+      mainView.style.display = 'none';
+      mainView.setAttribute('aria-hidden', 'true');
     }
-  }
+    if (gateScreen) {
+      gateScreen.style.display = 'none';
+      gateScreen.setAttribute('aria-hidden', 'true');
+    }
 
-  if (targetSong) {
-    const { StudioView } = await import('./ui/studio/StudioView');
-    currentStudioView = new StudioView(targetSong);
-    app.appendChild(currentStudioView.element);
+    currentActiveScreen = 'studio' as any;
+
+    if (Tone.context.state !== 'running') {
+      try {
+        await Tone.start();
+        state.audioStarted = true;
+        events.emit('audio:started', undefined);
+      } catch {}
+    }
+
+    const { getSongStore } = await import('./song/store');
+    const { createSongFromCreation } = await import('./song/helpers');
+    const songStore = getSongStore();
+
+    const parts = hash.split('/');
+    const songId = parts[2];
+
+    let targetSong = null;
+    if (songId && songId !== 'new') {
+      targetSong = await songStore.get(songId);
+    }
+
+    if (!targetSong) {
+      const list = await songStore.list();
+      if (list.length > 0 && (!songId || songId !== 'new')) {
+        targetSong = await songStore.get(list[0].id);
+      } else {
+        const currentCreation = creationManager.getCurrentCreation();
+        targetSong = createSongFromCreation(currentCreation);
+        await songStore.save(targetSong);
+      }
+    }
+
+    if (targetSong) {
+      const { StudioView } = await import('./ui/studio/StudioView');
+      currentStudioView = new StudioView(targetSong);
+      app.appendChild(currentStudioView.element);
+    }
+  } catch (err) {
+    console.error('Failed to open Studio view:', err);
   }
 }
 
@@ -968,6 +986,14 @@ onAuthStateChange((user) => {
 
 // Initial boot route check
 async function handleInitialRoute() {
+  // Support pathname routing (e.g. /studio or /studio/song-123)
+  if (window.location.pathname.startsWith('/studio')) {
+    const songId = window.location.pathname.slice('/studio'.length).replace(/^\//, '');
+    const targetHash = songId ? `#/studio/${songId}` : '#/studio';
+    window.location.hash = targetHash;
+    window.history.replaceState(null, '', '/' + targetHash);
+  }
+
   await creationManager.init();
   await updateGateLoadButton();
 

@@ -308,6 +308,17 @@ export class Timeline {
     });
   }
 
+  private updateClipSelectionClasses() {
+    this.lanesContainerEl.querySelectorAll<HTMLElement>('.studio-clip').forEach((el) => {
+      const pid = el.dataset.placementId;
+      if (pid && this.selectedPlacementIds.has(pid)) {
+        el.classList.add('selected');
+      } else {
+        el.classList.remove('selected');
+      }
+    });
+  }
+
   private attachClipGestures(clipEl: HTMLElement, placement: SongPlacement) {
     let startX = 0;
     let initialBar = placement.startBar;
@@ -337,7 +348,7 @@ export class Timeline {
         this.selectedPlacementIds.clear();
       }
       this.selectedPlacementIds.add(placement.id);
-      this.renderClips();
+      this.updateClipSelectionClasses();
       this.callbacks.onSelectPlacement(placement);
 
       // On mobile touch, require 300ms long press to initiate drag to allow normal scroll
@@ -345,12 +356,16 @@ export class Timeline {
         longPressTimer = setTimeout(() => {
           isDragging = true;
           clipEl.classList.add('dragging');
-          clipEl.setPointerCapture(e.pointerId);
+          try {
+            clipEl.setPointerCapture(e.pointerId);
+          } catch {}
         }, 300);
       } else {
         isDragging = true;
         clipEl.classList.add('dragging');
-        clipEl.setPointerCapture(e.pointerId);
+        try {
+          clipEl.setPointerCapture(e.pointerId);
+        } catch {}
       }
     };
 
