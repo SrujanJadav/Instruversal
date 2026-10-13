@@ -22,7 +22,7 @@ export type Stroke = {
   width: number;
 };
 
-export type ToolMode = 'draw' | 'eraser';
+export type ToolMode = 'draw' | 'eraser' | 'select';
 export type PlaybackMode = 'flow' | 'notes';
 export type TrackType = 'melodic' | 'beat';
 export type BeatPlaybackMode = 'hits' | 'flow';
@@ -104,6 +104,10 @@ export type EventMap = {
   'eraser:radius-change': number;
   'eraser:mode-change': 'part' | 'stroke';
   'eraser:track-only-change': boolean;
+  'selection:change': string[];
+  'selection:add-mode-change': boolean;
+  'clipboard:change': boolean;
+  'snap:change': boolean;
   'polyphony:change': PolyphonyCap;
   'polyphony:thinned': boolean;
   'app:start': { startAudio?: boolean } | undefined;
@@ -153,6 +157,10 @@ export interface AppState {
   eraserRadius: number; // radius in canvas px, 6..40
   eraserMode: 'part' | 'stroke';
   eraserSelectedTrackOnly: boolean;
+  selectedStrokeIds: string[];
+  snapToGrid: boolean;
+  selectThisColourOnly: boolean;
+  selectAddMode: boolean;
   playbackMode: PlaybackMode;
   glide: number; // 0 to 100
   showHitNotes: boolean;
@@ -203,6 +211,20 @@ export function loadPolyphony(): PolyphonyCap {
 export function savePolyphony(cap: PolyphonyCap): void {
   try {
     localStorage.setItem(POLYPHONY_STORAGE_KEY, cap);
+  } catch {}
+}
+
+// Persisted snap to grid
+const SNAP_STORAGE_KEY = 'instruversal:snap';
+export function loadSnap(): boolean {
+  try {
+    return localStorage.getItem(SNAP_STORAGE_KEY) === 'true';
+  } catch {}
+  return false;
+}
+export function saveSnap(enabled: boolean): void {
+  try {
+    localStorage.setItem(SNAP_STORAGE_KEY, String(enabled));
   } catch {}
 }
 
@@ -314,6 +336,10 @@ export const state: AppState = {
   eraserRadius: loadEraserSize(),
   eraserMode: loadEraserMode(),
   eraserSelectedTrackOnly: loadEraserTrackOnly(),
+  selectedStrokeIds: [],
+  snapToGrid: loadSnap(),
+  selectThisColourOnly: false,
+  selectAddMode: false,
   playbackMode: 'flow',
   glide: 25,
   syncOffsetMs: loadSyncOffset(),
@@ -368,6 +394,18 @@ export function pushHistorySnapshot() {
   undoStack.push({
     type: 'snapshot',
     strokes: state.strokes.map((s) => ({ ...s, points: [...s.points] })),
+  });
+  if (undoStack.length > MAX_HISTORY) {
+    undoStack.shift();
+  }
+  redoStack = [];
+  emitHistoryChange();
+}
+
+export function recordSnapshotHistory(beforeStrokes: Stroke[]) {
+  undoStack.push({
+    type: 'snapshot',
+    strokes: beforeStrokes.map((s) => ({ ...s, points: [...s.points] })),
   });
   if (undoStack.length > MAX_HISTORY) {
     undoStack.shift();
@@ -563,3 +601,60 @@ export function clearHistory(): void {
   redoStack = [];
   emitHistoryChange();
 }
+
+export function setSelectedStrokeIds(ids: string[]): void {
+  state.selectedStrokeIds = ids;
+  events.emit('selection:change', state.selectedStrokeIds);
+}
+
+export function clearSelection(): void {
+  if (state.selectedStrokeIds.length === 0) return;
+  state.selectedStrokeIds = [];
+  events.emit('selection:change', []);
+}
+
+export function toggleStrokeSelection(id: string): void {
+  const idx = state.selectedStrokeIds.indexOf(id);
+  if (idx >= 0) {
+    state.selectedStrokeIds = state.selectedStrokeIds.filter((sId) => sId !== id);
+  } else {
+    state.selectedStrokeIds = [...state.selectedStrokeIds, id];
+  }
+  events.emit('selection:change', state.selectedStrokeIds);
+}
+
+export function selectAllStrokes(trackIdOnly?: string): void {
+  const eligible = trackIdOnly
+    ? state.strokes.filter((s) => s.trackId === trackIdOnly)
+    : state.strokes;
+  state.selectedStrokeIds = eligible.map((s) => s.id);
+  events.emit('selection:change', state.selectedStrokeIds);
+}
+
+// In-memory clipboard for strokes
+let strokeClipboard: Stroke[] = [];
+
+export function getStrokeClipboard(): Stroke[] {
+  return strokeClipboard.map((s) => ({
+    ...s,
+    points: s.points.map((p) => ({ ...p })),
+  }));
+}
+
+export function setStrokeClipboard(strokes: Stroke[]): void {
+  strokeClipboard = strokes.map((s) => ({
+    ...s,
+    points: s.points.map((p) => ({ ...p })),
+  }));
+  events.emit('clipboard:change', strokeClipboard.length > 0);
+}
+
+export function hasStrokeClipboard(): boolean {
+  return strokeClipboard.length > 0;
+}
+
+export function clearStrokeClipboard(): void {
+  strokeClipboard = [];
+  events.emit('clipboard:change', false);
+}
+

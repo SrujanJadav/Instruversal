@@ -10,6 +10,14 @@ import {
   saveEraserSize,
   saveEraserMode,
   saveEraserTrackOnly,
+  saveSnap,
+  setSelectedStrokeIds,
+  clearSelection,
+  selectAllStrokes,
+  pushHistorySnapshot,
+  getStrokeClipboard,
+  setStrokeClipboard,
+  hasStrokeClipboard,
   BeatFlowStyle,
   BeatRollVoice,
   BeatSweepCharacter,
@@ -20,6 +28,17 @@ import { INSTRUMENTS_MAP } from '../audio/instruments';
 import { DRUM_KITS, DrumKitId } from '../audio/drums';
 import { BeatRate } from '../audio/beatSchedule';
 import { triggerHaptic } from './haptics';
+import {
+  duplicateStrokes,
+  copyStrokes,
+  pasteStrokes,
+  flipStrokesHorizontal,
+  flipStrokesVertical,
+  deleteStrokes,
+  nudgeStrokes,
+} from '../canvas/selection';
+import { invalidateStrokeBranches } from '../audio/branches';
+import { effectiveKey } from '../audio/scales';
 
 // 1.5px stroke custom inline SVGs (strictly matching design system)
 const ICONS = {
@@ -27,6 +46,7 @@ const ICONS = {
   pause: `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="8" y1="5" x2="8" y2="19"/><line x1="16" y1="5" x2="16" y2="19"/></svg>`,
   pen: `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>`,
   eraser: `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m19 11-8-8-8.5 8.5a2.12 2.12 0 0 0 0 3L6 18l4 4h10"/><path d="m14 16 4-4"/></svg>`,
+  select: `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m3 3 7 18 3-7 7-3z"/><path d="m13 13 6 6"/></svg>`,
   undo: `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg>`,
   redo: `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 7v6h-6"/><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3L21 13"/></svg>`,
   trash: `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`,
@@ -102,13 +122,16 @@ export class Toolbar {
 
             <div class="toolbar-divider" aria-hidden="true"></div>
 
-            <!-- 3. Tool Selection: Pencil & Eraser side-by-side segmented -->
+            <!-- 3. Tool Selection: Pencil, Eraser & Select segmented -->
             <div class="toolbar-tool-toggle" role="group" aria-label="Tool selection">
               <button type="button" class="tool-seg-btn ${state.activeTool === 'draw' ? 'active' : ''}" id="tb-tool-draw" aria-label="Pencil tool" tabindex="0">
                 ${ICONS.pen}
               </button>
               <button type="button" class="tool-seg-btn ${state.activeTool === 'eraser' ? 'active' : ''}" id="tb-tool-eraser" aria-label="Eraser tool" tabindex="0">
                 ${ICONS.eraser}
+              </button>
+              <button type="button" class="tool-seg-btn ${state.activeTool === 'select' ? 'active' : ''}" id="tb-tool-select" aria-label="Select tool" tabindex="0">
+                ${ICONS.select}
               </button>
             </div>
 
@@ -129,6 +152,38 @@ export class Toolbar {
                 <input type="checkbox" id="tb-eraser-track-only" class="eraser-track-checkbox" ${state.eraserSelectedTrackOnly ? 'checked' : ''} tabindex="0" />
                 <span class="eraser-track-only-text">This colour only</span>
               </label>
+            </div>
+
+            <!-- Select Options: appears only when select tool is active -->
+            <div class="toolbar-select-options ${state.activeTool === 'select' ? '' : 'hidden'}" id="tb-select-options" role="group" aria-label="Select options">
+              <label class="select-option-label" title="Snap to 16th grid and scale notes">
+                <input type="checkbox" id="tb-snap-toggle" class="select-checkbox" ${state.snapToGrid ? 'checked' : ''} tabindex="0" />
+                <span class="select-option-text">Snap</span>
+              </label>
+
+              <label class="select-option-label" title="Only select strokes of active track">
+                <input type="checkbox" id="tb-select-track-only" class="select-checkbox" ${state.selectThisColourOnly ? 'checked' : ''} tabindex="0" />
+                <span class="select-option-text">This colour only</span>
+              </label>
+
+              <label class="select-option-label" title="Add to selection without Shift key">
+                <input type="checkbox" id="tb-select-add-mode" class="select-checkbox" ${state.selectAddMode ? 'checked' : ''} tabindex="0" />
+                <span class="select-option-text">Add</span>
+              </label>
+
+              <button type="button" class="chip-btn select-action-btn ${hasStrokeClipboard() ? '' : 'hidden'}" id="tb-select-paste-btn" title="Paste (Ctrl+V)" tabindex="0">Paste</button>
+
+              <div class="selection-actions ${state.selectedStrokeIds.length > 0 ? '' : 'hidden'}" id="tb-selection-actions" role="group" aria-label="Selection actions">
+                <span class="selection-count-badge" id="tb-selection-count">${state.selectedStrokeIds.length} selected</span>
+
+                <button type="button" class="chip-btn select-action-btn" id="tb-select-copy" title="Copy selection (Ctrl+C)" tabindex="0">Copy</button>
+                <button type="button" class="chip-btn select-action-btn" id="tb-select-cut" title="Cut selection (Ctrl+X)" tabindex="0">Cut</button>
+                <button type="button" class="chip-btn select-action-btn" id="tb-select-dupe" title="Duplicate selection (Ctrl+D)" tabindex="0">Duplicate</button>
+                <button type="button" class="chip-btn select-action-btn" id="tb-select-flip-h" title="Flip horizontally" tabindex="0">Flip H</button>
+                <button type="button" class="chip-btn select-action-btn" id="tb-select-flip-v" title="Flip vertically" tabindex="0">Flip V</button>
+                <button type="button" class="chip-btn select-action-btn select-delete-btn" id="tb-select-delete" title="Delete selection (Del)" tabindex="0">Delete</button>
+                <button type="button" class="chip-btn select-action-btn" id="tb-select-deselect" title="Deselect (Esc)" tabindex="0">Deselect</button>
+              </div>
             </div>
 
             <div class="toolbar-divider" aria-hidden="true"></div>
@@ -332,9 +387,10 @@ export class Toolbar {
     // 3. Render context controls (Flow/Notes + Glide or Drum Kit + Rate + Swing + Human)
     this.renderContextControls();
 
-    // Segmented tool buttons (Pencil / Eraser side-by-side)
+    // Segmented tool buttons (Pencil / Eraser / Select)
     const drawBtn = this.element.querySelector<HTMLButtonElement>('#tb-tool-draw')!;
     const eraserBtn = this.element.querySelector<HTMLButtonElement>('#tb-tool-eraser')!;
+    const selectBtn = this.element.querySelector<HTMLButtonElement>('#tb-tool-select')!;
 
     drawBtn.addEventListener('click', () => {
       if (this.hasDragged) return;
@@ -346,6 +402,12 @@ export class Toolbar {
       if (this.hasDragged) return;
       triggerHaptic(6);
       this.setTool('eraser');
+    });
+
+    selectBtn.addEventListener('click', () => {
+      if (this.hasDragged) return;
+      triggerHaptic(6);
+      this.setTool('select');
     });
 
     // Eraser options controls
@@ -390,6 +452,75 @@ export class Toolbar {
       events.emit('eraser:track-only-change', checked);
     });
 
+    // Select options controls
+    const snapToggle = this.element.querySelector<HTMLInputElement>('#tb-snap-toggle');
+    const selectTrackOnly = this.element.querySelector<HTMLInputElement>('#tb-select-track-only');
+    const selectAddMode = this.element.querySelector<HTMLInputElement>('#tb-select-add-mode');
+    const copyBtn = this.element.querySelector<HTMLButtonElement>('#tb-select-copy');
+    const cutBtn = this.element.querySelector<HTMLButtonElement>('#tb-select-cut');
+    const pasteBtn = this.element.querySelector<HTMLButtonElement>('#tb-select-paste-btn');
+    const dupeBtn = this.element.querySelector<HTMLButtonElement>('#tb-select-dupe');
+    const flipHBtn = this.element.querySelector<HTMLButtonElement>('#tb-select-flip-h');
+    const flipVBtn = this.element.querySelector<HTMLButtonElement>('#tb-select-flip-v');
+    const deleteBtn = this.element.querySelector<HTMLButtonElement>('#tb-select-delete');
+    const deselectBtn = this.element.querySelector<HTMLButtonElement>('#tb-select-deselect');
+
+    snapToggle?.addEventListener('change', () => {
+      const enabled = snapToggle.checked;
+      state.snapToGrid = enabled;
+      saveSnap(enabled);
+      events.emit('snap:change', enabled);
+    });
+
+    selectTrackOnly?.addEventListener('change', () => {
+      state.selectThisColourOnly = selectTrackOnly.checked;
+    });
+
+    selectAddMode?.addEventListener('change', () => {
+      state.selectAddMode = selectAddMode.checked;
+      events.emit('selection:add-mode-change', selectAddMode.checked);
+    });
+
+    copyBtn?.addEventListener('click', () => {
+      if (this.hasDragged) return;
+      this.copySelection();
+    });
+
+    cutBtn?.addEventListener('click', () => {
+      if (this.hasDragged) return;
+      this.cutSelection();
+    });
+
+    pasteBtn?.addEventListener('click', () => {
+      if (this.hasDragged) return;
+      this.pasteClipboard();
+    });
+
+    dupeBtn?.addEventListener('click', () => {
+      if (this.hasDragged) return;
+      this.duplicateSelection();
+    });
+
+    flipHBtn?.addEventListener('click', () => {
+      if (this.hasDragged) return;
+      this.flipSelectionHorizontal();
+    });
+
+    flipVBtn?.addEventListener('click', () => {
+      if (this.hasDragged) return;
+      this.flipSelectionVertical();
+    });
+
+    deleteBtn?.addEventListener('click', () => {
+      if (this.hasDragged) return;
+      this.deleteSelection();
+    });
+
+    deselectBtn?.addEventListener('click', () => {
+      if (this.hasDragged) return;
+      clearSelection();
+    });
+
     // Track Palette dots
     const dotBtns = this.element.querySelectorAll<HTMLButtonElement>('.palette-dot-btn');
     dotBtns.forEach((btn) => {
@@ -399,6 +530,12 @@ export class Toolbar {
         if (!trackId) return;
 
         triggerHaptic(8);
+
+        // If in select tool and strokes are selected, recolour them to this track (1 undo step)
+        if (state.activeTool === 'select' && state.selectedStrokeIds.length > 0) {
+          this.recolourSelection(trackId);
+        }
+
         state.selectedTrackId = trackId;
         dotBtns.forEach((b) => b.classList.toggle('active', b.dataset.trackId === trackId));
 
@@ -469,14 +606,133 @@ export class Toolbar {
     state.activeTool = tool;
     const drawBtn = this.element.querySelector('#tb-tool-draw');
     const eraserBtn = this.element.querySelector('#tb-tool-eraser');
+    const selectBtn = this.element.querySelector('#tb-tool-select');
     const eraserOpts = this.element.querySelector('#tb-eraser-options');
+    const selectOpts = this.element.querySelector('#tb-select-options');
 
     drawBtn?.classList.toggle('active', tool === 'draw');
     eraserBtn?.classList.toggle('active', tool === 'eraser');
+    selectBtn?.classList.toggle('active', tool === 'select');
     eraserOpts?.classList.toggle('hidden', tool !== 'eraser');
+    selectOpts?.classList.toggle('hidden', tool !== 'select');
+
+    if (tool !== 'select') {
+      clearSelection();
+    }
 
     events.emit('tool:change', tool);
     this.updateFadeIndicators();
+  }
+
+  private copySelection() {
+    if (state.selectedStrokeIds.length === 0) return;
+    triggerHaptic(4);
+    const sel = state.strokes.filter((s) => state.selectedStrokeIds.includes(s.id));
+    if (sel.length === 0) return;
+    setStrokeClipboard(copyStrokes(sel));
+  }
+
+  private cutSelection() {
+    if (state.selectedStrokeIds.length === 0) return;
+    triggerHaptic(6);
+    const sel = state.strokes.filter((s) => state.selectedStrokeIds.includes(s.id));
+    if (sel.length === 0) return;
+    setStrokeClipboard(copyStrokes(sel));
+    pushHistorySnapshot();
+    state.strokes = deleteStrokes(state.strokes, state.selectedStrokeIds);
+    for (const s of sel) invalidateStrokeBranches(s.id);
+    clearSelection();
+    events.emit('strokes:updated', state.strokes);
+  }
+
+  private pasteClipboard() {
+    const clip = getStrokeClipboard();
+    if (clip.length === 0) return;
+    triggerHaptic(6);
+    pushHistorySnapshot();
+    const pasted = pasteStrokes(clip, state.bars);
+    state.strokes = [...state.strokes, ...pasted];
+    if (state.activeTool !== 'select') {
+      this.setTool('select');
+    }
+    setSelectedStrokeIds(pasted.map((s) => s.id));
+    events.emit('strokes:updated', state.strokes);
+  }
+
+  private duplicateSelection() {
+    if (state.selectedStrokeIds.length === 0) return;
+    triggerHaptic(6);
+    const sel = state.strokes.filter((s) => state.selectedStrokeIds.includes(s.id));
+    if (sel.length === 0) return;
+    pushHistorySnapshot();
+    const dupes = duplicateStrokes(sel, state.bars);
+    state.strokes = [...state.strokes, ...dupes];
+    setSelectedStrokeIds(dupes.map((d) => d.id));
+    events.emit('strokes:updated', state.strokes);
+  }
+
+  private flipSelectionHorizontal() {
+    if (state.selectedStrokeIds.length === 0) return;
+    triggerHaptic(6);
+    const sel = state.strokes.filter((s) => state.selectedStrokeIds.includes(s.id));
+    if (sel.length === 0) return;
+    pushHistorySnapshot();
+    const flipped = flipStrokesHorizontal(sel);
+    const flipMap = new Map(flipped.map((f) => [f.id, f]));
+    state.strokes = state.strokes.map((s) => flipMap.get(s.id) || s);
+    for (const s of flipped) invalidateStrokeBranches(s.id);
+    events.emit('strokes:updated', state.strokes);
+  }
+
+  private flipSelectionVertical() {
+    if (state.selectedStrokeIds.length === 0) return;
+    triggerHaptic(6);
+    const sel = state.strokes.filter((s) => state.selectedStrokeIds.includes(s.id));
+    if (sel.length === 0) return;
+    pushHistorySnapshot();
+    const flipped = flipStrokesVertical(sel);
+    const flipMap = new Map(flipped.map((f) => [f.id, f]));
+    state.strokes = state.strokes.map((s) => flipMap.get(s.id) || s);
+    for (const s of flipped) invalidateStrokeBranches(s.id);
+    events.emit('strokes:updated', state.strokes);
+  }
+
+  private deleteSelection() {
+    if (state.selectedStrokeIds.length === 0) return;
+    triggerHaptic(6);
+    pushHistorySnapshot();
+    state.strokes = deleteStrokes(state.strokes, state.selectedStrokeIds);
+    clearSelection();
+    events.emit('strokes:updated', state.strokes);
+  }
+
+  private recolourSelection(newTrackId: string) {
+    const selSet = new Set(state.selectedStrokeIds);
+    const affected = state.strokes.filter((s) => selSet.has(s.id) && s.trackId !== newTrackId);
+    if (affected.length === 0) return;
+    pushHistorySnapshot();
+    state.strokes = state.strokes.map((s) => (selSet.has(s.id) ? { ...s, trackId: newTrackId } : s));
+    for (const s of affected) invalidateStrokeBranches(s.id);
+    events.emit('strokes:updated', state.strokes);
+  }
+
+  private nudgeSelection(direction: 'up' | 'down' | 'left' | 'right') {
+    if (state.selectedStrokeIds.length === 0) return;
+    const sel = state.strokes.filter((s) => state.selectedStrokeIds.includes(s.id));
+    if (sel.length === 0) return;
+    pushHistorySnapshot();
+    const tm = getTrackManager();
+    const trackLookup = (tId: string) => {
+      const tr = tm.getTrack(tId);
+      const isBeat = tr?.trackType === 'beat';
+      const key = isBeat ? { root: 0, scale: 'natural minor' as const } : effectiveKey(tr, state);
+      return { root: key.root, scale: key.scale, isBeat };
+    };
+    const nudged = nudgeStrokes(sel, direction, state.bars, trackLookup);
+    const nudgeMap = new Map(nudged.map((n) => [n.id, n]));
+    state.strokes = state.strokes.map((s) => nudgeMap.get(s.id) || s);
+    for (const s of nudged) invalidateStrokeBranches(s.id);
+    events.emit('strokes:updated', state.strokes);
   }
 
   private showClearConfirmation(wrapper: HTMLElement) {
@@ -844,11 +1100,39 @@ export class Toolbar {
       events.on('tool:change', (tool) => {
         const drawBtn = this.element.querySelector('#tb-tool-draw');
         const eraserBtn = this.element.querySelector('#tb-tool-eraser');
+        const selectBtn = this.element.querySelector('#tb-tool-select');
         const eraserOpts = this.element.querySelector('#tb-eraser-options');
+        const selectOpts = this.element.querySelector('#tb-select-options');
         drawBtn?.classList.toggle('active', tool === 'draw');
         eraserBtn?.classList.toggle('active', tool === 'eraser');
+        selectBtn?.classList.toggle('active', tool === 'select');
         eraserOpts?.classList.toggle('hidden', tool !== 'eraser');
+        selectOpts?.classList.toggle('hidden', tool !== 'select');
         this.updateFadeIndicators();
+      }),
+      events.on('selection:change', (ids) => {
+        const countBadge = this.element.querySelector<HTMLElement>('#tb-selection-count');
+        const actionsGroup = this.element.querySelector<HTMLElement>('#tb-selection-actions');
+        if (countBadge) {
+          countBadge.textContent = `${ids.length} selected`;
+        }
+        if (actionsGroup) {
+          actionsGroup.classList.toggle('hidden', ids.length === 0);
+        }
+        this.updateFadeIndicators();
+      }),
+      events.on('clipboard:change', (hasItems) => {
+        const pasteBtn = this.element.querySelector<HTMLElement>('#tb-select-paste-btn');
+        if (pasteBtn) {
+          pasteBtn.classList.toggle('hidden', !hasItems);
+        }
+        this.updateFadeIndicators();
+      }),
+      events.on('snap:change', (enabled) => {
+        const check = this.element.querySelector<HTMLInputElement>('#tb-snap-toggle');
+        if (check && check.checked !== enabled) {
+          check.checked = enabled;
+        }
       }),
       events.on('eraser:radius-change', (val) => {
         const input = this.element.querySelector<HTMLInputElement>('#tb-eraser-size');
@@ -913,6 +1197,12 @@ export class Toolbar {
       return;
     }
 
+    // V: Select tool toggle
+    if (e.key.toLowerCase() === 'v' && !e.ctrlKey && !e.metaKey) {
+      this.setTool(state.activeTool === 'select' ? 'draw' : 'select');
+      return;
+    }
+
     // E: Eraser tool toggle
     if (e.key.toLowerCase() === 'e' && !e.ctrlKey && !e.metaKey) {
       this.setTool(state.activeTool === 'eraser' ? 'draw' : 'eraser');
@@ -925,7 +1215,77 @@ export class Toolbar {
       return;
     }
 
-    // Arrow keys: move focus between dock controls and scroll into view
+    // Ctrl/Cmd + C: Copy selection
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') {
+      if (state.selectedStrokeIds.length > 0) {
+        e.preventDefault();
+        this.copySelection();
+        return;
+      }
+    }
+
+    // Ctrl/Cmd + X: Cut selection
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'x') {
+      if (state.selectedStrokeIds.length > 0) {
+        e.preventDefault();
+        this.cutSelection();
+        return;
+      }
+    }
+
+    // Ctrl/Cmd + V: Paste clipboard
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') {
+      if (hasStrokeClipboard()) {
+        e.preventDefault();
+        this.pasteClipboard();
+        return;
+      }
+    }
+
+    // Ctrl/Cmd + D: Duplicate selection
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') {
+      if (state.selectedStrokeIds.length > 0) {
+        e.preventDefault();
+        this.duplicateSelection();
+        return;
+      }
+    }
+
+    // Ctrl/Cmd + A: Select all
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
+      e.preventDefault();
+      this.setTool('select');
+      selectAllStrokes(state.selectThisColourOnly ? state.selectedTrackId : undefined);
+      return;
+    }
+
+    // Escape: Deselect
+    if (e.key === 'Escape') {
+      clearSelection();
+      return;
+    }
+
+    // Delete or Backspace: Delete selection
+    if ((e.key === 'Delete' || e.key === 'Backspace') && state.selectedStrokeIds.length > 0) {
+      e.preventDefault();
+      this.deleteSelection();
+      return;
+    }
+
+    // Arrow keys: If strokes are selected, nudge selection by 1 grid step!
+    if (state.selectedStrokeIds.length > 0 && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+      e.preventDefault();
+      const dirMap: Record<string, 'up' | 'down' | 'left' | 'right'> = {
+        ArrowUp: 'up',
+        ArrowDown: 'down',
+        ArrowLeft: 'left',
+        ArrowRight: 'right',
+      };
+      this.nudgeSelection(dirMap[e.key]);
+      return;
+    }
+
+    // Arrow keys: move focus between dock controls and scroll into view when nothing selected
     if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
       const activeEl = document.activeElement as HTMLElement | null;
       if (this.element.contains(activeEl)) {

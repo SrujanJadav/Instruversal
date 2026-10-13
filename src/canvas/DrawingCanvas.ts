@@ -3,8 +3,13 @@ import {
   state,
   events,
   pushHistorySnapshot,
+  recordSnapshotHistory,
   recordDeltaHistory,
   HistoryDeltaItem,
+  setSelectedStrokeIds,
+  clearSelection,
+  toggleStrokeSelection,
+  Pt as Point,
 } from '../state';
 import {
   buildScaleNotes,
@@ -21,7 +26,17 @@ import { getThemeTokens, getTrackThemeColor, getTheme } from '../ui/theme';
 import { eraseStrokes, Capsule, Point2D } from './eraser';
 import { getFlowVoicePool } from '../audio/voicePool';
 import { getBeatFlowVoicePool } from '../audio/beatFlowVoices';
-import { getStrokeBranches, interpolateBranchY } from '../audio/branches';
+import { getStrokeBranches, interpolateBranchY, invalidateStrokeBranches } from '../audio/branches';
+import {
+  hitTestStroke,
+  isStrokeInsideLasso,
+  isStrokeInsideRect,
+  computeBoundingBox,
+  snapCoordinateX,
+  snapCoordinateYMelodic,
+  snapCoordinateYBeat,
+  translateStrokes,
+} from './selection';
 // Dev-only debug tools (dynamically imported on demand, excluded from production)
 let devDebugModule: {
   drawDebugOverlay: (ctx: CanvasRenderingContext2D, width: number, height: number) => void;
@@ -72,6 +87,16 @@ export class DrawingCanvas {
   private createdFragmentIdsInDrag: Set<string> = new Set();
   private audioRebuildThrottleTimer: number | null = null;
   private lastAudioRebuildTime: number = 0;
+
+  // Selection & Lasso state
+  private selectionDragMode: 'none' | 'move' | 'lasso' | 'rect' = 'none';
+  private dragStartPos: { x: number; y: number } | null = null;
+  private lassoPoints: Point[] = [];
+  private rectStartPos: { x: number; y: number } | null = null;
+  private rectEndPos: { x: number; y: number } | null = null;
+  private initialSelectedStrokes: Stroke[] = [];
+  private hasMovedSelection: boolean = false;
+  private preDragAllStrokesSnapshot: Stroke[] | null = null;
 
   // Live pitch preview & readout
   private lastPreviewMidi: number | null = null;
@@ -238,7 +263,14 @@ export class DrawingCanvas {
       events.on('scale:change', () => this.markStaticDirty()),
       events.on('key-mode:change', () => this.markStaticDirty()),
       events.on('track:key-change', () => this.markStaticDirty()),
-      events.on('tool:change', () => this.updateCursor()),
+      events.on('tool:change', () => {
+        if (state.activeTool !== 'select') {
+          clearSelection();
+        }
+        this.updateCursor();
+      }),
+      events.on('selection:change', () => this.redraw()),
+      events.on('snap:change', () => this.redraw()),
       events.on('eraser:radius-change', () => this.redraw()),
       events.on('eraser:mode-change', () => this.redraw()),
       events.on('strokes:updated', () => this.markStaticDirty()),
@@ -314,7 +346,7 @@ export class DrawingCanvas {
   }
 
   private get isEraserActive(): boolean {
-    return state.activeTool === 'eraser' || this.isAltHeld;
+    return state.activeTool === 'eraser' || (this.isAltHeld && state.activeTool !== 'select');
   }
 
   private markStaticDirty() {
@@ -568,7 +600,7 @@ export class DrawingCanvas {
     const rawX = e.clientX - rect.left;
     const rawY = e.clientY - rect.top;
 
-    const isErasing = this.isEraserActive || e.altKey;
+    const isErasing = this.isEraserActive;
 
     if (isErasing) {
       this.eraserDragActive = true;
@@ -589,6 +621,87 @@ export class DrawingCanvas {
 
     const normX = Math.max(0, Math.min(1, rawX / this.width));
     const normY = Math.max(0, Math.min(1, rawY / this.height));
+
+    if (state.activeTool === 'select') {
+      const isTouch = e.pointerType === 'touch';
+      const tolPx = isTouch ? 30 : 18;
+      const tolNorm = tolPx / Math.min(this.width, this.height);
+
+      const candidates = state.selectThisColourOnly
+        ? state.strokes.filter((s) => s.trackId === state.selectedTrackId)
+        : state.strokes;
+
+      const hit = [...candidates].reverse().find((s) => hitTestStroke(s, { x: normX, y: normY, t: 0 }, tolNorm));
+
+      const selectedStrokes = state.strokes.filter((s) => state.selectedStrokeIds.includes(s.id));
+      const box = computeBoundingBox(selectedStrokes);
+      let hitHandleOrBox = false;
+
+      if (box && selectedStrokes.length > 0) {
+        const handlePxX = ((box.minX + box.maxX) / 2) * this.width;
+        const handlePxY = box.minY * this.height - 14;
+        if (Math.hypot(rawX - handlePxX, rawY - handlePxY) <= (isTouch ? 24 : 14)) {
+          hitHandleOrBox = true;
+        } else if (normX >= box.minX && normX <= box.maxX && normY >= box.minY && normY <= box.maxY) {
+          hitHandleOrBox = true;
+        }
+      }
+
+      const isMultiAdd = e.shiftKey || state.selectAddMode;
+
+      if (hit) {
+        if (!state.selectedStrokeIds.includes(hit.id)) {
+          if (isMultiAdd) {
+            toggleStrokeSelection(hit.id);
+          } else {
+            setSelectedStrokeIds([hit.id]);
+          }
+        } else if (isMultiAdd) {
+          toggleStrokeSelection(hit.id);
+          this.redraw();
+          return;
+        }
+
+        // Prepare move
+        this.selectionDragMode = 'move';
+        this.dragStartPos = { x: normX, y: normY };
+        this.hasMovedSelection = false;
+        this.preDragAllStrokesSnapshot = state.strokes.map((s) => ({ ...s, points: s.points.map((p) => ({ ...p })) }));
+        this.initialSelectedStrokes = state.strokes
+          .filter((s) => state.selectedStrokeIds.includes(s.id))
+          .map((s) => ({ ...s, points: s.points.map((p) => ({ ...p })) }));
+        this.canvas.style.cursor = 'grabbing';
+        this.startAnimation();
+        return;
+      }
+
+      if (hitHandleOrBox) {
+        this.selectionDragMode = 'move';
+        this.dragStartPos = { x: normX, y: normY };
+        this.hasMovedSelection = false;
+        this.preDragAllStrokesSnapshot = state.strokes.map((s) => ({ ...s, points: s.points.map((p) => ({ ...p })) }));
+        this.initialSelectedStrokes = selectedStrokes.map((s) => ({ ...s, points: s.points.map((p) => ({ ...p })) }));
+        this.canvas.style.cursor = 'grabbing';
+        this.startAnimation();
+        return;
+      }
+
+      // Empty canvas tapped
+      if (!isMultiAdd) {
+        clearSelection();
+      }
+
+      if (e.altKey) {
+        this.selectionDragMode = 'rect';
+        this.rectStartPos = { x: normX, y: normY };
+        this.rectEndPos = { x: normX, y: normY };
+      } else {
+        this.selectionDragMode = 'lasso';
+        this.lassoPoints = [{ x: normX, y: normY, t: 0 }];
+      }
+      this.startAnimation();
+      return;
+    }
 
     this.strokeStartTime = performance.now();
     this.lastPointTime = this.strokeStartTime;
@@ -621,6 +734,85 @@ export class DrawingCanvas {
       return;
     }
 
+    const normX = Math.max(0, Math.min(1, rawX / this.width));
+    const normY = Math.max(0, Math.min(1, rawY / this.height));
+
+    if (state.activeTool === 'select') {
+      if (this.selectionDragMode === 'move' && this.dragStartPos) {
+        const rawDx = normX - this.dragStartPos.x;
+        const rawDy = normY - this.dragStartPos.y;
+
+        if (Math.hypot(rawDx * this.width, rawDy * this.height) > 3) {
+          this.hasMovedSelection = true;
+        }
+
+        let effectiveDx = rawDx;
+        let effectiveDy = rawDy;
+
+        if (state.snapToGrid && this.initialSelectedStrokes.length > 0) {
+          const box = computeBoundingBox(this.initialSelectedStrokes);
+          if (box) {
+            const snappedNewX = snapCoordinateX(box.minX + rawDx, state.bars);
+            effectiveDx = snappedNewX - box.minX;
+
+            const primary = this.initialSelectedStrokes[0];
+            const tr = getTrackManager().getTrack(primary.trackId);
+            if (tr && tr.trackType === 'beat') {
+              const snappedNewY = snapCoordinateYBeat(box.minY + rawDy, 8);
+              effectiveDy = snappedNewY - box.minY;
+            } else {
+              const key = effectiveKey(tr, state);
+              const snappedNewY = snapCoordinateYMelodic(box.minY + rawDy, key.root, key.scale);
+              effectiveDy = snappedNewY - box.minY;
+            }
+          }
+        }
+
+        const movedStrokes = translateStrokes(this.initialSelectedStrokes, effectiveDx, effectiveDy, true);
+        const movedMap = new Map(movedStrokes.map((s) => [s.id, s]));
+        state.strokes = state.strokes.map((s) => movedMap.get(s.id) || s);
+
+        for (const s of movedStrokes) {
+          invalidateStrokeBranches(s.id);
+        }
+
+        this.markStaticDirty();
+        this.scheduleThrottledAudioRebuild();
+        return;
+      }
+
+      if (this.selectionDragMode === 'lasso') {
+        const last = this.lassoPoints[this.lassoPoints.length - 1];
+        if (!last || Math.hypot((normX - last.x) * this.width, (normY - last.y) * this.height) >= 4) {
+          this.lassoPoints.push({ x: normX, y: normY, t: 0 });
+          this.redraw();
+        }
+        return;
+      }
+
+      if (this.selectionDragMode === 'rect') {
+        this.rectEndPos = { x: normX, y: normY };
+        this.redraw();
+        return;
+      }
+
+      // Passive hover in select mode to update cursor
+      if (this.activePointerId === null && e.pointerType !== 'touch') {
+        const tolPx = 18;
+        const tolNorm = tolPx / Math.min(this.width, this.height);
+        const candidates = state.selectThisColourOnly
+          ? state.strokes.filter((s) => s.trackId === state.selectedTrackId)
+          : state.strokes;
+        const hit = candidates.some((s) => hitTestStroke(s, { x: normX, y: normY, t: 0 }, tolNorm));
+        const selectedStrokes = state.strokes.filter((s) => state.selectedStrokeIds.includes(s.id));
+        const box = computeBoundingBox(selectedStrokes);
+        const insideBox = box && (normX >= box.minX && normX <= box.maxX && normY >= box.minY && normY <= box.maxY);
+
+        this.canvas.style.cursor = hit || insideBox ? 'grab' : 'crosshair';
+      }
+      return;
+    }
+
     if (e.pointerId !== this.activePointerId) return;
 
     if (this.eraserDragActive) {
@@ -640,9 +832,6 @@ export class DrawingCanvas {
     }
 
     if (!this.currentStroke) return;
-
-    const normX = Math.max(0, Math.min(1, rawX / this.width));
-    const normY = Math.max(0, Math.min(1, rawY / this.height));
 
     if (!this.lastPointPos) {
       this.lastPointPos = { x: normX, y: normY };
@@ -688,6 +877,82 @@ export class DrawingCanvas {
     this.activePointerId = null;
     this.activeNoteDisplay = null;
     this.lastPreviewMidi = null;
+
+    if (state.activeTool === 'select') {
+      this.canvas.style.cursor = 'default';
+
+      if (this.selectionDragMode === 'move') {
+        if (this.hasMovedSelection && this.preDragAllStrokesSnapshot) {
+          recordSnapshotHistory(this.preDragAllStrokesSnapshot);
+          if (this.audioRebuildThrottleTimer !== null) {
+            window.clearTimeout(this.audioRebuildThrottleTimer);
+            this.audioRebuildThrottleTimer = null;
+          }
+          this.lastAudioRebuildTime = performance.now();
+          events.emit('strokes:updated', state.strokes);
+        }
+        this.selectionDragMode = 'none';
+        this.dragStartPos = null;
+        this.preDragAllStrokesSnapshot = null;
+        this.initialSelectedStrokes = [];
+        this.hasMovedSelection = false;
+        this.markStaticDirty();
+        return;
+      }
+
+      if (this.selectionDragMode === 'lasso') {
+        if (this.lassoPoints.length >= 3) {
+          const polygon = [...this.lassoPoints, this.lassoPoints[0]];
+          const candidates = state.selectThisColourOnly
+            ? state.strokes.filter((s) => s.trackId === state.selectedTrackId)
+            : state.strokes;
+          const newlySelected = candidates
+            .filter((s) => isStrokeInsideLasso(s, polygon, 0.5))
+            .map((s) => s.id);
+
+          if (e.shiftKey || state.selectAddMode) {
+            setSelectedStrokeIds(Array.from(new Set([...state.selectedStrokeIds, ...newlySelected])));
+          } else {
+            setSelectedStrokeIds(newlySelected);
+          }
+        }
+        this.lassoPoints = [];
+        this.selectionDragMode = 'none';
+        this.redraw();
+        return;
+      }
+
+      if (this.selectionDragMode === 'rect') {
+        if (this.rectStartPos && this.rectEndPos) {
+          const minX = Math.min(this.rectStartPos.x, this.rectEndPos.x);
+          const maxX = Math.max(this.rectStartPos.x, this.rectEndPos.x);
+          const minY = Math.min(this.rectStartPos.y, this.rectEndPos.y);
+          const maxY = Math.max(this.rectStartPos.y, this.rectEndPos.y);
+          const rectBounds = { minX, maxX, minY, maxY, width: maxX - minX, height: maxY - minY };
+
+          const candidates = state.selectThisColourOnly
+            ? state.strokes.filter((s) => s.trackId === state.selectedTrackId)
+            : state.strokes;
+          const newlySelected = candidates
+            .filter((s) => isStrokeInsideRect(s, rectBounds))
+            .map((s) => s.id);
+
+          if (e.shiftKey || state.selectAddMode) {
+            setSelectedStrokeIds(Array.from(new Set([...state.selectedStrokeIds, ...newlySelected])));
+          } else {
+            setSelectedStrokeIds(newlySelected);
+          }
+        }
+        this.rectStartPos = null;
+        this.rectEndPos = null;
+        this.selectionDragMode = 'none';
+        this.redraw();
+        return;
+      }
+
+      this.selectionDragMode = 'none';
+      return;
+    }
 
     if (this.eraserDragActive) {
       this.eraserDragActive = false;
@@ -744,6 +1009,24 @@ export class DrawingCanvas {
       this.activePointerId = null;
       this.activeNoteDisplay = null;
       this.lastPreviewMidi = null;
+
+      if (state.activeTool === 'select') {
+        if (this.selectionDragMode === 'move' && this.hasMovedSelection && this.preDragAllStrokesSnapshot) {
+          state.strokes = this.preDragAllStrokesSnapshot;
+          this.markStaticDirty();
+          events.emit('strokes:updated', state.strokes);
+        }
+        this.selectionDragMode = 'none';
+        this.dragStartPos = null;
+        this.lassoPoints = [];
+        this.rectStartPos = null;
+        this.rectEndPos = null;
+        this.preDragAllStrokesSnapshot = null;
+        this.initialSelectedStrokes = [];
+        this.hasMovedSelection = false;
+        this.redraw();
+        return;
+      }
 
       if (this.eraserDragActive) {
         this.eraserDragActive = false;
@@ -861,10 +1144,168 @@ export class DrawingCanvas {
       this.drawEraserRing(this.eraserPos.x, this.eraserPos.y);
     }
 
-    // 8. Dev-only debug overlay (only active when explicitly switched on)
+    // 8. Selection rendering: dashed outline, bounding box, handle, count chip
+    this.drawSelectionOverlay();
+
+    // 9. Active lasso or rect marquee while dragging
+    if (this.selectionDragMode === 'lasso' && this.lassoPoints.length > 1) {
+      this.drawLassoPath();
+    } else if (this.selectionDragMode === 'rect' && this.rectStartPos && this.rectEndPos) {
+      this.drawRectMarquee();
+    }
+
+    // 10. Dev-only debug overlay (only active when explicitly switched on)
     if (import.meta.env.DEV && isDevDebugActive && devDebugModule) {
       devDebugModule.drawDebugOverlay(this.ctx, this.width, this.height);
     }
+  }
+
+  private drawSelectionOverlay() {
+    if (state.selectedStrokeIds.length === 0) return;
+    const tokens = getThemeTokens();
+    const isDark = getTheme() === 'dark';
+    const ctx = this.ctx;
+
+    const selectedStrokes = state.strokes.filter((s) => state.selectedStrokeIds.includes(s.id));
+    if (selectedStrokes.length === 0) return;
+
+    // 1. Thin dashed outline around each selected stroke
+    ctx.save();
+    ctx.setLineDash([4, 4]);
+    ctx.strokeStyle = isDark ? 'rgba(237, 229, 211, 0.75)' : 'rgba(28, 26, 22, 0.75)';
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    for (const stroke of selectedStrokes) {
+      const pts = stroke.points;
+      if (pts.length === 0) continue;
+      ctx.lineWidth = stroke.width + 3.2;
+
+      if (pts.length === 1) {
+        ctx.beginPath();
+        ctx.arc(pts[0].x * this.width, pts[0].y * this.height, Math.max(3, stroke.width * 0.7 + 2), 0, Math.PI * 2);
+        ctx.stroke();
+        continue;
+      }
+
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x * this.width, pts[0].y * this.height);
+      for (let i = 1; i < pts.length - 1; i++) {
+        const midX = ((pts[i].x + pts[i + 1].x) / 2) * this.width;
+        const midY = ((pts[i].y + pts[i + 1].y) / 2) * this.height;
+        ctx.quadraticCurveTo(pts[i].x * this.width, pts[i].y * this.height, midX, midY);
+      }
+      ctx.lineTo(pts[pts.length - 1].x * this.width, pts[pts.length - 1].y * this.height);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    // 2. Bounding Box enclosing all selected strokes
+    const box = computeBoundingBox(selectedStrokes);
+    if (!box) return;
+
+    const pad = 8;
+    const bx = Math.max(2, box.minX * this.width - pad);
+    const by = Math.max(2, box.minY * this.height - pad);
+    const bw = Math.min(this.width - bx - 2, (box.maxX - box.minX) * this.width + pad * 2);
+    const bh = Math.min(this.height - by - 2, (box.maxY - box.minY) * this.height + pad * 2);
+
+    ctx.save();
+    ctx.lineWidth = 1.2;
+    ctx.strokeStyle = isDark ? 'rgba(237, 229, 211, 0.55)' : 'rgba(28, 26, 22, 0.5)';
+    ctx.setLineDash([5, 4]);
+    ctx.strokeRect(bx, by, bw, bh);
+
+    // 3. Move handle at top center
+    const handleX = bx + bw / 2;
+    const handleY = Math.max(8, by - 14);
+    ctx.setLineDash([]);
+
+    // Stalk line
+    ctx.beginPath();
+    ctx.moveTo(handleX, by);
+    ctx.lineTo(handleX, handleY);
+    ctx.strokeStyle = tokens.ink;
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+
+    // Handle disc
+    ctx.beginPath();
+    ctx.arc(handleX, handleY, 6, 0, Math.PI * 2);
+    ctx.fillStyle = tokens.paperDeep;
+    ctx.fill();
+    ctx.strokeStyle = tokens.ink;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // Center dot
+    ctx.beginPath();
+    ctx.arc(handleX, handleY, 2, 0, Math.PI * 2);
+    ctx.fillStyle = tokens.ink;
+    ctx.fill();
+
+    // 4. Count badge chip (top-left above box)
+    const countText = `${selectedStrokes.length} selected`;
+    ctx.font = '500 10px "DM Mono", monospace';
+    const textW = ctx.measureText(countText).width;
+    const chipW = textW + 12;
+    const chipH = 18;
+    const chipX = Math.max(4, Math.min(this.width - chipW - 4, bx));
+    const chipY = Math.max(4, by - 24);
+
+    ctx.fillStyle = tokens.paperDeep;
+    ctx.strokeStyle = tokens.line;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect(chipX, chipY, chipW, chipH, 4);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = tokens.ink;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(countText, chipX + 6, chipY + chipH / 2 + 0.5);
+
+    ctx.restore();
+  }
+
+  private drawLassoPath() {
+    const ctx = this.ctx;
+    const isDark = getTheme() === 'dark';
+    ctx.save();
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = getThemeTokens().ink;
+    ctx.setLineDash([5, 4]);
+
+    ctx.beginPath();
+    ctx.moveTo(this.lassoPoints[0].x * this.width, this.lassoPoints[0].y * this.height);
+    for (let i = 1; i < this.lassoPoints.length; i++) {
+      ctx.lineTo(this.lassoPoints[i].x * this.width, this.lassoPoints[i].y * this.height);
+    }
+    ctx.closePath();
+    ctx.fillStyle = isDark ? 'rgba(237, 229, 211, 0.05)' : 'rgba(28, 26, 22, 0.04)';
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  private drawRectMarquee() {
+    if (!this.rectStartPos || !this.rectEndPos) return;
+    const ctx = this.ctx;
+    const isDark = getTheme() === 'dark';
+    const rx = Math.min(this.rectStartPos.x, this.rectEndPos.x) * this.width;
+    const ry = Math.min(this.rectStartPos.y, this.rectEndPos.y) * this.height;
+    const rw = Math.abs(this.rectEndPos.x - this.rectStartPos.x) * this.width;
+    const rh = Math.abs(this.rectEndPos.y - this.rectStartPos.y) * this.height;
+
+    ctx.save();
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = getThemeTokens().ink;
+    ctx.setLineDash([5, 4]);
+    ctx.fillStyle = isDark ? 'rgba(237, 229, 211, 0.05)' : 'rgba(28, 26, 22, 0.04)';
+    ctx.fillRect(rx, ry, rw, rh);
+    ctx.strokeRect(rx, ry, rw, rh);
+    ctx.restore();
   }
 
   private drawMelodicGuides(ctx: CanvasRenderingContext2D, key: MusicalKey) {

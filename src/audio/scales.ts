@@ -127,6 +127,18 @@ export function yToMidi(yNormalized: number, notes: number[]): number {
 }
 
 /**
+ * Converts a MIDI note number to its normalized Y coordinate [0, 1].
+ */
+export function midiToY(midi: number, notes: number[]): number {
+  if (!notes || notes.length <= 1) return 0.5;
+  const index = notes.indexOf(midi);
+  if (index === -1) return 0.5;
+  const pitchProgress = index / (notes.length - 1);
+  return 1 - pitchProgress;
+}
+
+
+/**
  * Converts a MIDI note number to its frequency in Hertz (A4 = 440Hz).
  */
 export function midiToFreq(midi: number): number {

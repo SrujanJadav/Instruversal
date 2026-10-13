@@ -29,6 +29,14 @@ export function clearBranchCache(): void {
   branchCache.clear();
 }
 
+export function invalidateStrokeBranches(strokeId: string): void {
+  for (const key of branchCache.keys()) {
+    if (key.startsWith(`${strokeId}:`)) {
+      branchCache.delete(key);
+    }
+  }
+}
+
 /**
  * Calculates perpendicular distance from point p to line segment (p1, p2).
  */
@@ -307,7 +315,10 @@ export function extractBranchesFromStroke(stroke: Stroke): StrokeBranch[] {
  * Cached lookup of branches for a stroke.
  */
 export function getStrokeBranches(stroke: Stroke): StrokeBranch[] {
-  const cacheKey = `${stroke.id}:${stroke.points.length}:${stroke.width}`;
+  const p0 = stroke.points[0];
+  const pEnd = stroke.points[stroke.points.length - 1];
+  const coordKey = p0 && pEnd ? `${p0.x.toFixed(4)},${p0.y.toFixed(4)},${pEnd.x.toFixed(4)},${pEnd.y.toFixed(4)}` : '';
+  const cacheKey = `${stroke.id}:${coordKey}:${stroke.points.length}:${stroke.width}`;
   const existing = branchCache.get(cacheKey);
   if (existing) return existing;
 
