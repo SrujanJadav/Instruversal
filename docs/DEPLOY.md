@@ -56,37 +56,75 @@ Click **Save and Deploy**.
 
 ---
 
-## 4. Google OAuth Sign-In (Optional)
+## 4. Google OAuth Sign-In & Troubleshooting
 
-If enabling Google Sign-In:
+> [!NOTE]
+> **Why clicking "Continue with Google" returned:**
+> `{"code":400,"error_code":"validation_failed","msg":"Unsupported provider: provider is not enabled"}`
+> This error occurs because Google OAuth is currently **Disabled** by default in your Supabase project.
 
-1. In Supabase Dashboard, go to **Authentication > Providers > Google**.
+You have two simple options for launch:
+
+### Option A: Use Email Magic Link (Zero Configuration Required)
+Users can sign in immediately using their email address without configuring Google Cloud Console. Supabase sends a secure one-click sign-in link.
+
+### Option B: Enable Google Sign-In
+To enable Google sign-in:
+1. Open the [Supabase Dashboard](https://supabase.com/dashboard) and go to **Authentication > Providers > Google**.
 2. Toggle Google to **Enabled**.
-3. Copy the **Callback URL (for OAuth)** shown in Supabase (e.g. `https://<project-id>.supabase.co/auth/v1/callback`).
-4. In [Google Cloud Console](https://console.cloud.google.com/):
-   - Navigate to **APIs & Services > Credentials**.
-   - Create or edit an **OAuth 2.0 Client ID** (Web application).
-   - Under **Authorized redirect URIs**, paste the Supabase Callback URL.
-   - Copy the generated **Client ID** and **Client Secret**.
-5. Back in Supabase, paste the Client ID and Client Secret, then click **Save**.
-6. **OAuth Consent Screen**: If your consent screen is in *Testing* mode, only added test users can log in. Publish the screen to *Production* when ready for general public sign-in.
+3. Copy the **Callback URL (for OAuth)** shown in Supabase (e.g. `https://<your-project-id>.supabase.co/auth/v1/callback`).
+4. In the [Google Cloud Console](https://console.cloud.google.com/):
+   - Select or create a project.
+   - Go to **APIs & Services > Credentials**.
+   - Click **Create Credentials > OAuth Client ID** (select Application Type: **Web application**).
+   - Under **Authorized JavaScript origins**, add:
+     - `https://instruversal.pages.dev`
+     - `http://localhost:5173`
+   - Under **Authorized redirect URIs**, paste the Supabase Callback URL from step 3.
+   - Click **Create** and copy the **Client ID** and **Client Secret**.
+5. Back in the Supabase Dashboard:
+   - Paste the **Client ID** and **Client Secret**.
+   - Click **Save**.
+6. **OAuth Consent Screen**: In Google Cloud Console, if your app is set to **Testing**, only test user email addresses added in the Google Console can sign in. Once you are ready for everyone to sign in, click **Publish App** on the OAuth consent screen.
 
 ---
 
-## 5. Custom SMTP Settings in Supabase
+## 5. Custom SMTP Settings in Supabase (Recommended Setup)
 
-By default, Supabase's built-in email service is rate-limited to 3-4 emails per hour. For production, configure a custom SMTP provider (such as Resend, SendGrid, Postmark, or Brevo):
+Supabase includes a default built-in email service, but it is strictly rate-limited to **3–4 emails per hour**. For a public launch, you should configure custom SMTP.
 
-1. Go to **Authentication > SMTP Settings** in Supabase.
-2. Toggle **Enable Custom SMTP** to ON.
-3. Enter your SMTP details:
-   - **Sender email**: `noreply@yourdomain.com` (must match a verified domain in your SMTP provider)
+### Recommended Choice 1: Gmail SMTP (Best if you do NOT have a custom domain)
+If you are deploying on `instruversal.pages.dev` and do not own a custom domain, Gmail SMTP is completely free, allows **500 emails/day**, and requires **no DNS or domain verification**:
+
+1. Go to your [Google Account Security Settings](https://myaccount.google.com/security).
+2. Ensure **2-Step Verification** is turned ON.
+3. Search for or navigate to **App passwords** (or visit [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords)).
+4. Create an App Password with the name `Supabase Auth`. Copy the 16-character generated password (e.g. `abcd efgh ijkl mnop`).
+5. In Supabase Dashboard, go to **Authentication > SMTP Settings**:
+   - Toggle **Enable Custom SMTP**: **ON**
+   - **Sender email**: `your-email@gmail.com`
    - **Sender name**: `Instruversal`
-   - **Host**: (e.g. `smtp.resend.com` or `smtp.sendgrid.net`)
-   - **Port**: `587` (TLS) or `465` (SSL)
-   - **Username**: `resend` or `apikey`
-   - **Password**: Your SMTP API Key / Password
-4. Click **Save** and use **Send test email** to verify delivery.
+   - **Host**: `smtp.gmail.com`
+   - **Port**: `587`
+   - **Minimum TLS version**: `TLSv1.2`
+   - **Username**: `your-email@gmail.com`
+   - **Password**: `<your-16-character-app-password>` (remove spaces)
+6. Click **Save** and click **Send test email** to confirm.
+
+### Recommended Choice 2: Resend (Best if you purchase a custom domain later)
+If you ever connect a custom domain:
+1. Create a free account at [Resend](https://resend.com) (3,000 emails/month free, 100/day).
+2. Add and verify your domain DNS records in Resend.
+3. In Resend, go to **API Keys** and generate a new key.
+4. In Supabase **Authentication > SMTP Settings**:
+   - **Sender email**: `auth@yourdomain.com`
+   - **Sender name**: `Instruversal`
+   - **Host**: `smtp.resend.com`
+   - **Port**: `465` (SSL) or `587` (TLS)
+   - **Username**: `resend`
+   - **Password**: `re_your_api_key_here`
+5. Click **Save**.
+
 
 ---
 
