@@ -77,6 +77,24 @@ export function showFirstRunHintOverlay(force = false): void {
         <button type="button" class="auth-pill-btn" id="hint-account-btn" style="flex-shrink: 0;">${currentUser ? 'Manage' : 'Sign in'}</button>
       </div>
 
+      <div class="hint-shortcuts-section desktop-only">
+        <div class="hint-shortcuts-header">
+          <span class="hint-section-title">Keyboard shortcuts</span>
+        </div>
+        <ul class="hint-shortcuts-list">
+          <li><kbd>Space</kbd><span>Play and pause</span></li>
+          <li><kbd>D</kbd><span>Draw</span></li>
+          <li><kbd>E</kbd><span>Erase</span></li>
+          <li><kbd>V</kbd><span>Select</span></li>
+          <li><kbd>Ctrl/Cmd+Z</kbd><span>Undo</span></li>
+          <li><kbd>Shift+Ctrl/Cmd+Z</kbd><span>Redo</span></li>
+          <li><kbd>Ctrl/Cmd+D</kbd><span>Duplicate</span></li>
+          <li><kbd>Ctrl/Cmd+A</kbd><span>Select all</span></li>
+          <li><kbd>Arrows</kbd><span>Nudge</span></li>
+          <li><kbd>Esc</kbd><span>Closes sheets</span></li>
+        </ul>
+      </div>
+
       <button type="button" class="hint-dismiss-btn" id="hint-got-it-btn">
         Got it
       </button>
@@ -84,6 +102,24 @@ export function showFirstRunHintOverlay(force = false): void {
   `;
 
   document.body.appendChild(overlayEl);
+
+  const onKeyDown = (e: KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      dismiss();
+    }
+  };
+  window.addEventListener('keydown', onKeyDown);
+
+  const dismiss = () => {
+    window.removeEventListener('keydown', onKeyDown);
+    try {
+      localStorage.setItem(HINT_INTRO_KEY, 'true');
+    } catch {}
+    if (overlayEl) {
+      overlayEl.remove();
+      overlayEl = null;
+    }
+  };
 
   overlayEl.querySelector('#hint-install-btn')?.addEventListener('click', async () => {
     const installed = await promptInstall();
@@ -100,16 +136,6 @@ export function showFirstRunHintOverlay(force = false): void {
     dismiss();
     getAccountSheet().open();
   });
-
-  const dismiss = () => {
-    try {
-      localStorage.setItem(HINT_INTRO_KEY, 'true');
-    } catch {}
-    if (overlayEl) {
-      overlayEl.remove();
-      overlayEl = null;
-    }
-  };
 
   overlayEl.querySelector('#hint-got-it-btn')?.addEventListener('click', dismiss);
   overlayEl.addEventListener('click', (e) => {

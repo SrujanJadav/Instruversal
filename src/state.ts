@@ -72,6 +72,7 @@ export type EventMap = {
   'ui:open-mixer': 'tracks' | 'key' | undefined;
   'ui:open-fx': void;
   'ui:open-instruments': string | undefined;
+  'ui:close-all-sheets': void;
   'tool:change': ToolMode;
   'playback-mode:change': PlaybackMode;
   'glide:change': number;

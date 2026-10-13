@@ -1175,7 +1175,7 @@ export class Toolbar {
     }
 
     // Space: toggle play/pause
-    if (e.code === 'Space' && state.audioStarted) {
+    if (e.code === 'Space') {
       e.preventDefault();
       const transport = getTransport();
       transport.toggle();
@@ -1261,9 +1261,13 @@ export class Toolbar {
       return;
     }
 
-    // Escape: Deselect
+    // Escape: Deselect or close sheets
     if (e.key === 'Escape') {
-      clearSelection();
+      if (state.selectedStrokeIds.length > 0) {
+        clearSelection();
+        return;
+      }
+      events.emit('ui:close-all-sheets', undefined);
       return;
     }
 

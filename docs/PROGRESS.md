@@ -41,7 +41,7 @@ This document tracks progress across all steps of Instruversal, including founda
 | **2: Lasso select, move, duplicate, snap** | Editor features | Done | 2026-10-13 | `ce934cf` | Third tool in dock (V), tap/lasso/rect selection, move, duplicate (+1 beat), copy/cut/paste (Ctrl+C/X/V), flip H/V, recolour, snap (16th/scale), 1 undo step. |
 | **3: MIDI export (single drawing)** | Editor features | Done | 2026-10-13 | `a0c6075` | Pure SMF Format 1 encoder, multi-track export, GM drums ch10, flow/notes/beat extraction, 1/2/4 repeats, iPhone fallback link. |
 | **4: Practice aids (drone, metronome, count-in)** | Editor features | Done | 2026-10-13 | `c4de17f` | Mixer sheet Practice section, sustained root+5th pad drone with key glide, Transport metronome, 1-bar count-in pre-roll with 1 2 3 4 overlay. |
-| **5: Resume link and keyboard shortcuts** | Editor features | Queued | - | - | Start page resume link, desktop keyboard shortcuts list. |
+| **5: Resume link and keyboard shortcuts** | Editor features | Done | 2026-10-13 | `step-5` | Start page resume link (30m session / 24h fresh visit), desktop-only shortcuts list in ? sheet, full keyboard workflow with input guard. |
 | **6: Song data model, storage and database** | Song Studio | Queued | - | - | Song types, validation, IndexedDB + Supabase migration 002_songs.sql. |
 | **7: Studio screen: arrangement canvas** | Song Studio | Queued | - | - | Multi-lane timeline, drawing clips, clip inspector, picker sheet. |
 | **8: Song playback engine** | Song Studio | Queued | - | - | Windowed scheduling, clip transposition, polyphony management. |

@@ -40,6 +40,12 @@ import { generateUuid } from './library/manager';
 import { registerServiceWorker } from './pwa/registerSw';
 import { initCountInOverlay } from './ui/CountInOverlay';
 import { getPracticeEngine } from './audio/practice';
+import {
+  resolveActiveResumeTarget,
+  setStoredResumeData,
+  clearStoredResumeData,
+  CreationSummary,
+} from './library/resume';
 
 // Initialize color theme system
 initTheme();
@@ -78,6 +84,11 @@ app.innerHTML = `
         Load
       </button>
       <span class="load-count-badge" id="gate-load-count">0 saved</span>
+    </div>
+    <div class="gate-resume-container" id="gate-resume-container" style="display: none;">
+      <button class="gate-resume-link" id="gate-resume-btn" type="button" aria-label="Resume sketch">
+        Resume <span class="gate-resume-title" id="gate-resume-title"></span>
+      </button>
     </div>
     <div class="try-yourself-section" id="try-yourself-section">
       <div class="try-yourself-row" id="try-yourself-row" role="region" aria-label="Try yourself examples">
@@ -164,6 +175,12 @@ const gateLoadGroup = document.querySelector<HTMLElement>('#gate-load-group')!;
 const gateLoadBtn = document.querySelector<HTMLButtonElement>('#gate-load-btn')!;
 const gateLoadCount = document.querySelector<HTMLElement>('#gate-load-count')!;
 
+const gateResumeContainer = document.querySelector<HTMLElement>('#gate-resume-container')!;
+const gateResumeBtn = document.querySelector<HTMLButtonElement>('#gate-resume-btn')!;
+const gateResumeTitle = document.querySelector<HTMLElement>('#gate-resume-title')!;
+let activeResumeTarget: { id: string; title: string } | null = null;
+let isFreshVisit = true;
+
 // Initialize creation manager
 const creationManager = getCreationManager();
 
@@ -185,6 +202,21 @@ async function updateGateLoadButton() {
       gateLoadCount.textContent = `${list.length} saved`;
     } else {
       gateLoadGroup.style.display = 'none';
+    }
+
+    const summaries: CreationSummary[] = list.map((c) => ({
+      id: c.id,
+      title: c.title,
+      updatedAt: c.updatedAt,
+      strokesCount: c.strokeCount,
+    }));
+
+    activeResumeTarget = resolveActiveResumeTarget(summaries, isFreshVisit);
+    if (activeResumeTarget) {
+      gateResumeContainer.style.display = 'flex';
+      gateResumeTitle.textContent = activeResumeTarget.title;
+    } else {
+      gateResumeContainer.style.display = 'none';
     }
   } catch {}
 }
@@ -235,6 +267,19 @@ function closeAllOpenSheets() {
 export async function goHome() {
   if (isLeaving) return;
   isLeaving = true;
+
+  isFreshVisit = false;
+
+  // If there are strokes, store resume data; otherwise clear
+  if (state.strokes.length > 0) {
+    setStoredResumeData(
+      creationManager.getCurrentId(),
+      creationManager.getCurrentTitle(),
+      true
+    );
+  } else {
+    clearStoredResumeData();
+  }
 
   // 1. Close all open sheets/panels first
   closeAllOpenSheets();
@@ -355,6 +400,30 @@ gateLoadBtn.addEventListener('click', async () => {
     } catch {}
   }
   getGalleryModal().open();
+});
+
+gateResumeBtn.addEventListener('click', async () => {
+  if (!activeResumeTarget) return;
+  const targetId = activeResumeTarget.id;
+
+  // Unlock audio within the user tap gesture
+  if (Tone.context.state !== 'running') {
+    try {
+      await Tone.start();
+      state.audioStarted = true;
+      events.emit('audio:started', undefined);
+    } catch {}
+  }
+
+  try {
+    gateResumeBtn.disabled = true;
+    await creationManager.openCreation(targetId, false);
+    await enterMainView(true);
+  } catch (err) {
+    console.error('Failed to resume creation:', err);
+  } finally {
+    gateResumeBtn.disabled = false;
+  }
 });
 
 // Sync title with manager
@@ -558,6 +627,7 @@ tryCards.forEach((card) => {
     if (!exampleId || card.disabled) return;
     tryCards.forEach((c) => (c.disabled = true));
     try {
+      clearStoredResumeData();
       // 1. Audio unlock within user gesture
       if (Tone.context.state !== 'running') {
         try {
@@ -595,6 +665,14 @@ tryCards.forEach((card) => {
 });
 
 events.on('app:start', (opts) => enterMainView(opts?.startAudio));
+events.on('ui:close-all-sheets', () => closeAllOpenSheets());
+
+// Periodic check for resume link 30-minute expiry on gate screen
+window.setInterval(() => {
+  if (currentActiveScreen === 'gate' && activeResumeTarget) {
+    updateGateLoadButton();
+  }
+}, 30000);
 
 mixerBtn.addEventListener('click', () => {
   if (trackPanel) {

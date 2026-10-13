@@ -2950,6 +2950,61 @@
   opacity: 0.92;
 }
 
+/* Keyboard shortcuts inside "?" sheet (Desktop-only) */
+.hint-shortcuts-section {
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--line);
+  text-align: left;
+}
+
+.hint-shortcuts-header {
+  margin-bottom: var(--space-2);
+}
+
+.hint-section-title {
+  font-family: var(--font-ui);
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--ink);
+  letter-spacing: 0.01em;
+}
+
+.hint-shortcuts-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px 12px;
+  font-size: 0.76rem;
+}
+
+.hint-shortcuts-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  color: var(--ink-soft);
+}
+
+.hint-shortcuts-list kbd {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  padding: 2px 5px;
+  background-color: var(--paper-deep);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+@media (pointer: coarse), (max-width: 600px) {
+  .desktop-only {
+    display: none !important;
+  }
+}
+
 /* ==========================================================================
    Smooth Theme Transitions (Canvas explicitly exempted)
    ========================================================================== */

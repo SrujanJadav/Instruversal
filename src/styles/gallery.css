@@ -52,6 +52,54 @@
   letter-spacing: 0.02em;
 }
 
+/* Start Screen Resume Link */
+.gate-resume-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-top: 4px;
+}
+
+.gate-resume-link {
+  appearance: none;
+  background: transparent;
+  border: none;
+  padding: 6px 12px;
+  color: var(--ink-soft);
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--line);
+  transition: color var(--transition-fast), text-decoration-color var(--transition-fast);
+  touch-action: manipulation;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.gate-resume-link:hover {
+  color: var(--ink);
+  text-decoration-color: var(--ink);
+}
+
+.gate-resume-link:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+.gate-resume-title {
+  font-weight: 600;
+  max-width: 170px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Gallery View Overlay (Full Screen #/load) */
 .gallery-screen {
   position: fixed;
