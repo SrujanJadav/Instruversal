@@ -169,7 +169,7 @@ export function convertNotesToStrokes(song: ExampleSong): {
       // Melodic notes: determine effective scale
       const root = trackDef.root !== undefined ? trackDef.root : song.root;
       const scale: ScaleName = trackDef.scale !== undefined ? trackDef.scale : song.scale;
-      const scaleNotes = buildScaleNotes(root, scale, 1, 6);
+      const scaleNotes = buildScaleNotes(root, scale, 3, 6);
 
       trackDef.notes.forEach((note, idx) => {
         const noteIndex = scaleNotes.indexOf(note.midi);
@@ -205,7 +205,7 @@ export function convertNotesToStrokes(song: ExampleSong): {
             width: Math.max(1.5, Math.min(4.5, (note.velocity ?? 0.8) * 4)),
           });
         } else {
-          // Notes mode: short stroke centered around step
+          // Notes mode: short horizontal stroke centered around step
           const totalSteps = song.bars * 16;
           const stepIndex = Math.round(note.startBeat * 4);
           const stepX = (stepIndex + 0.5) / totalSteps;
@@ -214,8 +214,8 @@ export function convertNotesToStrokes(song: ExampleSong): {
             id: `${trackId}-note-${note.midi}-${idx}`,
             trackId,
             points: [
-              { x: Math.max(0, stepX - 0.004), y: normY, t: 0 },
-              { x: Math.min(1, stepX + 0.004), y: normY, t: 25 },
+              { x: Math.max(0, stepX - 0.009), y: normY, t: 0 },
+              { x: Math.min(1, stepX + 0.009), y: normY, t: 25 },
             ],
             width: Math.max(1.5, Math.min(4.5, (note.velocity ?? 0.8) * 4)),
           });
@@ -231,7 +231,7 @@ export function convertNotesToStrokes(song: ExampleSong): {
     rootNote: song.root,
     scaleName: song.scale,
     keyMode: (song.keyMode === 'per-color' ? 'perColour' : 'linked') as KeyMode,
-    playbackMode: 'flow',
+    playbackMode: song.playbackMode || (song.tracks.some((t) => t.mode === 'flow') ? 'flow' : 'notes'),
     glide: 20,
     tracks: trackConfigs,
     strokes,

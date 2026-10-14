@@ -118,7 +118,7 @@ export class LibraryModal {
             <div class="library-empty-title">Nothing saved yet</div>
             <div class="library-empty-desc">Draw something and it shows up here, or explore our demo song.</div>
             <button type="button" class="library-btn library-btn-primary" id="lib-empty-demo-btn" style="margin-top: var(--space-3);">
-              Try: Marimba Pop (original)
+              Try: Shape of Me
             </button>
           </div>
         </div>
@@ -271,7 +271,7 @@ export class LibraryModal {
     // Empty state demo button
     this.overlay.querySelector('#lib-empty-demo-btn')?.addEventListener('click', async () => {
       const { loadExampleProject } = await import('../examples');
-      const { project, song } = await loadExampleProject('example-marimba-pop');
+      const { project, song } = await loadExampleProject('example-shape-of-me');
       const newId = `creation-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
       const creation: Creation = {
         id: newId,

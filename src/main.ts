@@ -120,11 +120,11 @@ app.innerHTML = `
           <span class="try-yourself-subtitle">Tap to play and explore</span>
           <span class="try-yourself-credit">Ludwig van Beethoven</span>
         </button>
-        <button type="button" class="try-yourself-card" data-example-id="example-marimba-pop" aria-label="Try yourself: Marimba Pop (original) — Original">
+        <button type="button" class="try-yourself-card" data-example-id="example-shape-of-me" aria-label="Try yourself: Shape of Me — Ed Sheeran (Cover)">
           <span class="try-yourself-tag">TRY YOURSELF</span>
-          <span class="try-yourself-title">Marimba Pop</span>
+          <span class="try-yourself-title">Shape of Me</span>
           <span class="try-yourself-subtitle">Tap to play and explore</span>
-          <span class="try-yourself-credit">Original</span>
+          <span class="try-yourself-credit">Ed Sheeran (Cover)</span>
         </button>
         <button type="button" class="try-yourself-card" data-example-id="example-dreamy-arpeggio" aria-label="Try yourself: Dreamy Arpeggio — Original">
           <span class="try-yourself-tag">TRY YOURSELF</span>

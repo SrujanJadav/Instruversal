@@ -33,6 +33,7 @@ export interface ExampleSong {
   bars: 1 | 2 | 4 | 8;
   root: number; // 0..11
   scale: ScaleName;
+  playbackMode?: 'flow' | 'notes';
   keyMode?: 'per-color' | 'one-for-all';
   tracks: ExampleTrack[];
 }

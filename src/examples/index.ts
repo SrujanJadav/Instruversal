@@ -18,9 +18,9 @@ export const EXAMPLE_METAS: ExampleCardMeta[] = [
     subtitle: 'Tap to play and explore',
   },
   {
-    id: 'example-marimba-pop',
-    title: 'Marimba Pop (original)',
-    credit: 'Original',
+    id: 'example-shape-of-me',
+    title: 'Shape of Me',
+    credit: 'Ed Sheeran (Cover)',
     subtitle: 'Tap to play and explore',
   },
   {
@@ -37,9 +37,10 @@ export async function loadExampleSong(id: string): Promise<ExampleSong> {
       const mod = await import('./odeToJoy');
       return mod.ODE_TO_JOY;
     }
+    case 'example-shape-of-me':
     case 'example-marimba-pop': {
-      const mod = await import('./marimbaPop');
-      return mod.MARIMBA_POP;
+      const mod = await import('./shapeOfMe');
+      return mod.SHAPE_OF_ME;
     }
     case 'example-dreamy-arpeggio': {
       const mod = await import('./dreamyArpeggio');
