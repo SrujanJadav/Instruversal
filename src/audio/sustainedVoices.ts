@@ -350,9 +350,9 @@ export function createSustainedVoice(
     case 'sub-bass':
     default: {
       const subSynth = new Tone.MonoSynth({
-        oscillator: { type: 'sine' },
+        oscillator: { type: 'triangle' }, // Warm triangle wave with overtones for small speakers
         filter: {
-          frequency: 220,
+          frequency: 280,
           type: 'lowpass',
           rolloff: -12,
         },
@@ -367,7 +367,7 @@ export function createSustainedVoice(
           decay: 0.1,
           sustain: 0.85,
           release: 0.25,
-          baseFrequency: 70,
+          baseFrequency: 80,
           octaves: 1.6,
         },
       });

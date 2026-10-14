@@ -334,12 +334,18 @@ export class PracticeEngine {
     try {
       this.metronomeSynth = new Tone.Synth({
         oscillator: { type: 'sine' },
-        envelope: { attack: 0.001, decay: 0.03, sustain: 0, release: 0.02 },
+        envelope: { attack: 0.005, decay: 0.03, sustain: 0, release: 0.04 },
       });
 
       this.metronomeGain = new Tone.Gain(this.settings.metronomeVolume * 0.7);
       this.metronomeSynth.connect(this.metronomeGain);
-      this.metronomeGain.toDestination();
+
+      const rack = getMasterEffectsRack();
+      if (rack && rack.input) {
+        this.metronomeGain.connect(rack.input);
+      } else {
+        this.metronomeGain.toDestination();
+      }
 
       return true;
     } catch {

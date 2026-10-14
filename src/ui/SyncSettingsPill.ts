@@ -2,6 +2,7 @@ import * as Tone from 'tone';
 import { state } from '../state';
 import { getTransport } from '../audio/transport';
 import { getTotalAudioLatencySeconds } from '../audio/context';
+import { getMasterEffectsRack } from '../audio/effects';
 
 export class SyncSettingsPill {
   private wrapper: HTMLElement;
@@ -154,13 +155,20 @@ export class SyncSettingsPill {
       this.beatClickSynth = new Tone.Synth({
         oscillator: { type: 'square' },
         envelope: {
-          attack: 0.001,
+          attack: 0.005, // Anti-click floor (was 0.001)
           decay: 0.04,
           sustain: 0,
           release: 0.04,
         },
-        volume: -8,
-      }).toDestination();
+        volume: -10,
+      });
+
+      const rack = getMasterEffectsRack();
+      if (rack && rack.masterGain) {
+        this.beatClickSynth.connect(rack.masterGain);
+      } else {
+        this.beatClickSynth.toDestination();
+      }
 
       this.clickLoop = new Tone.Loop((time) => {
         if (this.beatClickSynth) {

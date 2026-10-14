@@ -22,6 +22,28 @@ export interface InstrumentMeta {
 }
 
 /**
+ * Helper to debounce rapid duplicate triggers of the exact same pitch within < 25ms
+ * (prevents voice-stacking click bursts when dragging dense overlapping strokes)
+ */
+function createPitchThrottler() {
+  const lastTimes = new Map<number, number>();
+  return (midi: number, time?: Tone.Unit.Time | number): boolean => {
+    const at = typeof time === 'number' ? time : Tone.now();
+    const prev = lastTimes.get(midi);
+    if (prev !== undefined && Math.abs(at - prev) < 0.025) {
+      return false;
+    }
+    lastTimes.set(midi, at);
+    if (lastTimes.size > 32) {
+      for (const [k, v] of lastTimes) {
+        if (at - v > 2) lastTimes.delete(k);
+      }
+    }
+    return true;
+  };
+}
+
+/**
  * 1. Pluck: Triangle wave + fast decay, subtle lowpass filter
  */
 export function createPluck(): InstrumentInstance {
@@ -41,14 +63,15 @@ export function createPluck(): InstrumentInstance {
     },
   });
   synth.maxPolyphony = 6;
-
   synth.connect(filter);
+  const throttle = createPitchThrottler();
 
   return {
     id: 'pluck',
     name: 'Pluck',
     output: filter,
     triggerNote(midi, duration, time, velocity = 0.75) {
+      if (!throttle(midi, time)) return;
       const freq = Tone.Frequency(midi, 'midi').toFrequency();
       synth.triggerAttackRelease(freq, duration, time, velocity);
     },
@@ -87,14 +110,15 @@ export function createBell(): InstrumentInstance {
     },
   });
   synth.maxPolyphony = 6;
-
   synth.connect(filter);
+  const throttle = createPitchThrottler();
 
   return {
     id: 'bell',
     name: 'Bell',
     output: filter,
     triggerNote(midi, duration, time, velocity = 0.65) {
+      if (!throttle(midi, time)) return;
       const freq = Tone.Frequency(midi, 'midi').toFrequency();
       synth.triggerAttackRelease(freq, duration, time, velocity);
     },
@@ -106,7 +130,7 @@ export function createBell(): InstrumentInstance {
 }
 
 /**
- * 3. Marimba: Sine + short envelope + subtle woody resonance
+ * 3. Marimba: Sine + short envelope + subtle woody resonance (anti-click attack >= 5ms)
  */
 export function createMarimba(): InstrumentInstance {
   const filter = new Tone.Filter({
@@ -122,7 +146,7 @@ export function createMarimba(): InstrumentInstance {
   const synth = new Tone.PolySynth(Tone.Synth, {
     oscillator: { type: 'sine' },
     envelope: {
-      attack: 0.003,
+      attack: 0.006, // Anti-click floor (was 0.003)
       decay: 0.32,
       sustain: 0.01,
       release: 0.28,
@@ -136,12 +160,14 @@ export function createMarimba(): InstrumentInstance {
 
   gainDirect.connect(outGain);
   gainResonance.connect(outGain);
+  const throttle = createPitchThrottler();
 
   return {
     id: 'marimba',
     name: 'Marimba',
     output: outGain,
     triggerNote(midi, duration, time, velocity = 0.8) {
+      if (!throttle(midi, time)) return;
       const freq = Tone.Frequency(midi, 'midi').toFrequency();
       synth.triggerAttackRelease(freq, duration, time, velocity);
     },
@@ -175,14 +201,15 @@ export function createSoftPad(): InstrumentInstance {
     },
   });
   synth.maxPolyphony = 6;
-
   synth.connect(filter);
+  const throttle = createPitchThrottler();
 
   return {
     id: 'soft-pad',
     name: 'Soft Pad',
     output: filter,
     triggerNote(midi, duration, time, velocity = 0.6) {
+      if (!throttle(midi, time)) return;
       const freq = Tone.Frequency(midi, 'midi').toFrequency();
       synth.triggerAttackRelease(freq, duration, time, velocity);
     },
@@ -221,14 +248,15 @@ export function createWarmKeys(): InstrumentInstance {
     },
   });
   synth.maxPolyphony = 6;
-
   synth.connect(filter);
+  const throttle = createPitchThrottler();
 
   return {
     id: 'warm-keys',
     name: 'Warm Keys',
     output: filter,
     triggerNote(midi, duration, time, velocity = 0.7) {
+      if (!throttle(midi, time)) return;
       const freq = Tone.Frequency(midi, 'midi').toFrequency();
       synth.triggerAttackRelease(freq, duration, time, velocity);
     },
@@ -240,7 +268,7 @@ export function createWarmKeys(): InstrumentInstance {
 }
 
 /**
- * 6. Kalimba: Plucky triangle/sine blend, bright and short
+ * 6. Kalimba: Plucky triangle/sine blend, bright and short (anti-click attack >= 5ms)
  */
 export function createKalimba(): InstrumentInstance {
   const filter = new Tone.Filter({
@@ -253,21 +281,22 @@ export function createKalimba(): InstrumentInstance {
   const synth = new Tone.PolySynth(Tone.Synth, {
     oscillator: { type: 'triangle' },
     envelope: {
-      attack: 0.003,
+      attack: 0.006, // Anti-click floor (was 0.003)
       decay: 0.26,
       sustain: 0.02,
       release: 0.22,
     },
   });
   synth.maxPolyphony = 6;
-
   synth.connect(filter);
+  const throttle = createPitchThrottler();
 
   return {
     id: 'kalimba',
     name: 'Kalimba',
     output: filter,
     triggerNote(midi, duration, time, velocity = 0.75) {
+      if (!throttle(midi, time)) return;
       const freq = Tone.Frequency(midi, 'midi').toFrequency();
       synth.triggerAttackRelease(freq, duration, time, velocity);
     },
@@ -279,13 +308,14 @@ export function createKalimba(): InstrumentInstance {
 }
 
 /**
- * 7. Sub Bass: Sine + low saw, mono, short punch
+ * 7. Sub Bass: Warm triangle oscillator with 280Hz lowpass filter for clear upper harmonics
+ * (audible on laptop/phone speakers without overdriving small cones)
  */
 export function createSubBass(): InstrumentInstance {
   const synth = new Tone.MonoSynth({
-    oscillator: { type: 'sine' },
+    oscillator: { type: 'triangle' }, // Warm triangle provides overtone presence around 120-250Hz
     filter: {
-      frequency: 220,
+      frequency: 280,
       type: 'lowpass',
       rolloff: -12,
     },
@@ -300,16 +330,19 @@ export function createSubBass(): InstrumentInstance {
       decay: 0.25,
       sustain: 0.1,
       release: 0.2,
-      baseFrequency: 70,
+      baseFrequency: 80,
       octaves: 1.8,
     },
   });
+
+  const throttle = createPitchThrottler();
 
   return {
     id: 'sub-bass',
     name: 'Sub Bass',
     output: synth,
     triggerNote(midi, duration, time, velocity = 0.8) {
+      if (!throttle(midi, time)) return;
       // Keep sub bass within deep octave range (e.g. C2–C3)
       const bassMidi = Math.max(36, Math.min(60, midi - 12));
       const freq = Tone.Frequency(bassMidi, 'midi').toFrequency();
@@ -322,7 +355,7 @@ export function createSubBass(): InstrumentInstance {
 }
 
 /**
- * 8. Music Box: Bright bell-like FM chime with short crystal tail
+ * 8. Music Box: Bright bell-like FM chime with anti-click envelope floor
  */
 export function createMusicBox(): InstrumentInstance {
   const filter = new Tone.Filter({
@@ -336,13 +369,13 @@ export function createMusicBox(): InstrumentInstance {
     oscillator: { type: 'sine' },
     modulation: { type: 'sine' },
     envelope: {
-      attack: 0.003,
+      attack: 0.006, // Anti-click floor (was 0.003)
       decay: 0.45,
       sustain: 0.02,
       release: 0.35,
     },
     modulationEnvelope: {
-      attack: 0.003,
+      attack: 0.006, // Anti-click floor (was 0.003)
       decay: 0.22,
       sustain: 0.01,
       release: 0.2,
@@ -350,12 +383,14 @@ export function createMusicBox(): InstrumentInstance {
   });
   synth.maxPolyphony = 6;
   synth.connect(filter);
+  const throttle = createPitchThrottler();
 
   return {
     id: 'music-box',
     name: 'Music Box',
     output: filter,
     triggerNote(midi, duration, time, velocity = 0.7) {
+      if (!throttle(midi, time)) return;
       const freq = Tone.Frequency(midi + 12, 'midi').toFrequency(); // one octave up for sparkle
       synth.triggerAttackRelease(freq, duration, time, velocity);
     },
@@ -382,13 +417,13 @@ export function createSteelPan(): InstrumentInstance {
     oscillator: { type: 'triangle' },
     modulation: { type: 'sine' },
     envelope: {
-      attack: 0.004,
+      attack: 0.006, // Anti-click floor (was 0.004)
       decay: 0.45,
       sustain: 0.03,
       release: 0.3,
     },
     modulationEnvelope: {
-      attack: 0.004,
+      attack: 0.006, // Anti-click floor (was 0.004)
       decay: 0.18,
       sustain: 0.01,
       release: 0.18,
@@ -396,12 +431,14 @@ export function createSteelPan(): InstrumentInstance {
   });
   synth.maxPolyphony = 6;
   synth.connect(filter);
+  const throttle = createPitchThrottler();
 
   return {
     id: 'steel-pan',
     name: 'Steel Pan',
     output: filter,
     triggerNote(midi, duration, time, velocity = 0.75) {
+      if (!throttle(midi, time)) return;
       const freq = Tone.Frequency(midi, 'midi').toFrequency();
       synth.triggerAttackRelease(freq, duration, time, velocity);
     },
@@ -432,12 +469,14 @@ export function createGlassHarmonica(): InstrumentInstance {
   });
   synth.maxPolyphony = 6;
   synth.connect(filter);
+  const throttle = createPitchThrottler();
 
   return {
     id: 'glass-harmonica',
     name: 'Glass Harmonica',
     output: filter,
     triggerNote(midi, duration, time, velocity = 0.65) {
+      if (!throttle(midi, time)) return;
       const freq = Tone.Frequency(midi, 'midi').toFrequency();
       synth.triggerAttackRelease(freq, duration, time, velocity);
     },
@@ -469,12 +508,14 @@ export function createStrings(): InstrumentInstance {
   });
   synth.maxPolyphony = 6;
   synth.connect(filter);
+  const throttle = createPitchThrottler();
 
   return {
     id: 'strings',
     name: 'Strings',
     output: filter,
     triggerNote(midi, duration, time, velocity = 0.6) {
+      if (!throttle(midi, time)) return;
       const freq = Tone.Frequency(midi, 'midi').toFrequency();
       synth.triggerAttackRelease(freq, duration, time, velocity);
     },
@@ -504,12 +545,14 @@ export function createTheremin(): InstrumentInstance {
     },
   });
   synth.connect(vibrato);
+  const throttle = createPitchThrottler();
 
   return {
     id: 'theremin',
     name: 'Theremin',
     output: vibrato,
     triggerNote(midi, duration, time, velocity = 0.7) {
+      if (!throttle(midi, time)) return;
       const freq = Tone.Frequency(midi, 'midi').toFrequency();
       synth.triggerAttackRelease(freq, duration, time, velocity);
     },
@@ -555,12 +598,14 @@ export function createWobbleBass(): InstrumentInstance {
     },
   });
   synth.connect(filter);
+  const throttle = createPitchThrottler();
 
   return {
     id: 'wobble-bass',
     name: 'Wobble Bass',
     output: filter,
     triggerNote(midi, duration, time, velocity = 0.75) {
+      if (!throttle(midi, time)) return;
       const bassMidi = Math.max(36, Math.min(60, midi - 12));
       const freq = Tone.Frequency(bassMidi, 'midi').toFrequency();
       synth.triggerAttackRelease(freq, duration, time, velocity);
@@ -603,12 +648,14 @@ export function createTapeKeys(): InstrumentInstance {
   });
   synth.maxPolyphony = 6;
   synth.connect(filter);
+  const throttle = createPitchThrottler();
 
   return {
     id: 'tape-keys',
     name: 'Tape Keys',
     output: filter,
     triggerNote(midi, duration, time, velocity = 0.7) {
+      if (!throttle(midi, time)) return;
       const freq = Tone.Frequency(midi, 'midi').toFrequency();
       synth.triggerAttackRelease(freq, duration, time, velocity);
     },
@@ -642,12 +689,14 @@ export function createChoirPad(): InstrumentInstance {
   synth.maxPolyphony = 6;
   synth.connect(formant1);
   synth.connect(formant2);
+  const throttle = createPitchThrottler();
 
   return {
     id: 'choir-pad',
     name: 'Choir Pad',
     output: merger,
     triggerNote(midi, duration, time, velocity = 0.65) {
+      if (!throttle(midi, time)) return;
       const freq = Tone.Frequency(midi, 'midi').toFrequency();
       synth.triggerAttackRelease(freq, duration, time, velocity);
     },

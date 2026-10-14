@@ -137,7 +137,7 @@ export class DrumKitInstance {
       octaves: 6,
       oscillator: { type: 'sine' },
       envelope: {
-        attack: 0.001,
+        attack: 0.006, // Anti-click floor (was 0.001)
         decay: 0.45,
         sustain: 0.01,
         release: 0.4,
@@ -151,7 +151,7 @@ export class DrumKitInstance {
       octaves: 4,
       oscillator: { type: 'sine' },
       envelope: {
-        attack: 0.002,
+        attack: 0.006, // Anti-click floor (was 0.002)
         decay: 0.35,
         sustain: 0.02,
         release: 0.3,
@@ -163,7 +163,7 @@ export class DrumKitInstance {
     this.snareNoise = new Tone.NoiseSynth({
       noise: { type: 'white' },
       envelope: {
-        attack: 0.001,
+        attack: 0.005, // Anti-click floor (was 0.001)
         decay: 0.2,
         sustain: 0,
         release: 0.2,
@@ -172,7 +172,7 @@ export class DrumKitInstance {
     this.snareBody = new Tone.Synth({
       oscillator: { type: 'triangle' },
       envelope: {
-        attack: 0.002,
+        attack: 0.005, // Anti-click floor (was 0.002)
         decay: 0.12,
         sustain: 0,
         release: 0.12,
@@ -185,7 +185,7 @@ export class DrumKitInstance {
     this.clapNoise = new Tone.NoiseSynth({
       noise: { type: 'pink' },
       envelope: {
-        attack: 0.002,
+        attack: 0.005, // Anti-click floor (was 0.002)
         decay: 0.22,
         sustain: 0,
         release: 0.22,
@@ -196,7 +196,7 @@ export class DrumKitInstance {
     // 5 & 6. Closed Hat & Open Hat (Choke group)
     this.closedHat = new Tone.MetalSynth({
       envelope: {
-        attack: 0.001,
+        attack: 0.005, // Anti-click floor (was 0.001)
         decay: 0.05,
         release: 0.05,
       },
@@ -210,7 +210,7 @@ export class DrumKitInstance {
     this.openHatGain = new Tone.Gain(1.0);
     this.openHat = new Tone.MetalSynth({
       envelope: {
-        attack: 0.001,
+        attack: 0.005, // Anti-click floor (was 0.001)
         decay: 0.35,
         release: 0.35,
       },
@@ -301,9 +301,9 @@ export class DrumKitInstance {
         }
 
         case 'closed-hat': {
-          // Choke open hat if ringing
+          // Choke open hat smoothly without hard click
           this.openHatGain.gain.cancelScheduledValues(at);
-          this.openHatGain.gain.setValueAtTime(0, at);
+          this.openHatGain.gain.rampTo(0, 0.01, at);
           this.openHatGain.gain.setValueAtTime(1.0, at + 0.05);
 
           this.closedHat.triggerAttackRelease(200, '32n', at, velocity * 0.75);
@@ -323,7 +323,8 @@ export class DrumKitInstance {
 
         case 'cowbell': {
           this.cowbellGain.gain.cancelScheduledValues(at);
-          this.cowbellGain.gain.setValueAtTime(velocity * 0.45, at);
+          this.cowbellGain.gain.setValueAtTime(0, at);
+          this.cowbellGain.gain.linearRampToValueAtTime(velocity * 0.45, at + 0.005);
           this.cowbellGain.gain.linearRampToValueAtTime(0, at + 0.25);
           break;
         }

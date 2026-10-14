@@ -56,6 +56,8 @@ export class Track {
   public channel: Tone.Gain;
   private instrument: InstrumentInstance | null = null;
   private drumKit: DrumKitInstance | null = null;
+  private lastPitchTriggerTime: Map<number, number> = new Map();
+  private lastDrumTriggerTime: Map<string, number> = new Map();
 
   constructor(config: TrackConfig, masterInput: Tone.ToneAudioNode) {
     this.id = config.id;
@@ -197,12 +199,40 @@ export class Track {
   ) {
     if (this.trackType === 'beat') return;
     if (!this.instrument) return;
+
+    // Prevent re-triggering the exact same pitch on the same track within < 25ms
+    const triggerSec = typeof time === 'number' ? time : Tone.now();
+    const lastSec = this.lastPitchTriggerTime.get(midi);
+    if (lastSec !== undefined && Math.abs(triggerSec - lastSec) < 0.025) {
+      return;
+    }
+    this.lastPitchTriggerTime.set(midi, triggerSec);
+    if (this.lastPitchTriggerTime.size > 32) {
+      for (const [m, t] of this.lastPitchTriggerTime) {
+        if (triggerSec - t > 2) this.lastPitchTriggerTime.delete(m);
+      }
+    }
+
     this.instrument.triggerNote(midi, duration, time, velocity);
   }
 
   public triggerDrum(soundId: DrumSoundId, time?: number, velocity: number = 0.8) {
     if (this.trackType !== 'beat') return;
     if (!this.drumKit) return;
+
+    // Prevent duplicate drum triggers on same voice within < 25ms
+    const triggerSec = time !== undefined ? time : Tone.now();
+    const lastSec = this.lastDrumTriggerTime.get(soundId);
+    if (lastSec !== undefined && Math.abs(triggerSec - lastSec) < 0.025) {
+      return;
+    }
+    this.lastDrumTriggerTime.set(soundId, triggerSec);
+    if (this.lastDrumTriggerTime.size > 16) {
+      for (const [s, t] of this.lastDrumTriggerTime) {
+        if (triggerSec - t > 2) this.lastDrumTriggerTime.delete(s);
+      }
+    }
+
     this.drumKit.trigger(soundId, time, velocity);
   }
 
@@ -240,27 +270,38 @@ export class Track {
 
 export class MasterAudioChain {
   public masterGain: Tone.Gain;
-  public reverb: Tone.Reverb;
+  public subCutFilter: Tone.Filter;
+  public glueCompressor: Tone.Compressor;
   public limiter: Tone.Limiter;
 
   constructor() {
-    this.masterGain = new Tone.Gain(0.9);
-    this.reverb = new Tone.Reverb({
-      decay: 1.5,
-      wet: 0.12,
-      preDelay: 0.01,
+    this.masterGain = new Tone.Gain(0.7);
+    this.subCutFilter = new Tone.Filter({
+      frequency: 55,
+      type: 'highpass',
+      rolloff: -12,
+      Q: 0.7,
     });
-    this.limiter = new Tone.Limiter(-0.5);
+    this.glueCompressor = new Tone.Compressor({
+      threshold: -14,
+      ratio: 3.5,
+      attack: 0.01,
+      release: 0.15,
+      knee: 12,
+    });
+    this.limiter = new Tone.Limiter(-1.5);
 
-    // Chain: Master Gain -> Reverb -> Limiter -> Destination
-    this.masterGain.connect(this.reverb);
-    this.reverb.connect(this.limiter);
+    // Chain: Master Gain -> Sub Cut Filter -> Glue Compressor -> Limiter -> Destination
+    this.masterGain.connect(this.subCutFilter);
+    this.subCutFilter.connect(this.glueCompressor);
+    this.glueCompressor.connect(this.limiter);
     this.limiter.toDestination();
   }
 
   public dispose() {
     this.masterGain.dispose();
-    this.reverb.dispose();
+    this.subCutFilter.dispose();
+    this.glueCompressor.dispose();
     this.limiter.dispose();
   }
 }
@@ -275,7 +316,7 @@ export const DEFAULT_TRACK_CONFIGS: TrackConfig[] = [
     instrumentId: 'pluck',
     muted: false,
     solo: false,
-    volume: 0.85,
+    volume: 0.60, // Calibrated -4dB base volume for safe multi-track summing
   },
   {
     id: 'track-2',
@@ -286,7 +327,7 @@ export const DEFAULT_TRACK_CONFIGS: TrackConfig[] = [
     instrumentId: 'bell',
     muted: false,
     solo: false,
-    volume: 0.8,
+    volume: 0.58,
   },
   {
     id: 'track-3',
@@ -297,7 +338,7 @@ export const DEFAULT_TRACK_CONFIGS: TrackConfig[] = [
     instrumentId: 'marimba',
     muted: false,
     solo: false,
-    volume: 0.85,
+    volume: 0.60,
   },
   {
     id: 'track-4',
@@ -308,7 +349,7 @@ export const DEFAULT_TRACK_CONFIGS: TrackConfig[] = [
     instrumentId: 'soft-pad',
     muted: false,
     solo: false,
-    volume: 0.85,
+    volume: 0.60,
   },
   {
     id: 'track-5',
@@ -319,7 +360,7 @@ export const DEFAULT_TRACK_CONFIGS: TrackConfig[] = [
     instrumentId: 'warm-keys',
     muted: false,
     solo: false,
-    volume: 0.85,
+    volume: 0.60,
   },
   {
     id: 'track-6',
@@ -330,7 +371,7 @@ export const DEFAULT_TRACK_CONFIGS: TrackConfig[] = [
     instrumentId: 'kalimba',
     muted: false,
     solo: false,
-    volume: 0.85,
+    volume: 0.60,
   },
 ];
 

@@ -116,6 +116,8 @@ class BypassStage {
 
 export class MasterEffectsRack {
   public masterGain: Tone.Gain;
+  public subCutFilter: Tone.Filter;
+  public glueCompressor: Tone.Compressor;
   public limiter: Tone.Limiter;
   public effectsOutput: Tone.Gain;
 
@@ -146,8 +148,28 @@ export class MasterEffectsRack {
   private reverbDebounceTimer: number | null = null;
 
   constructor() {
-    this.masterGain = new Tone.Gain(0.75); // Calibrated to prevent clipping across all combined effects
-    this.limiter = new Tone.Limiter(-0.5);
+    this.masterGain = new Tone.Gain(0.70); // Headroom-calibrated to prevent clipping across all combined effects
+
+    // Master Broadcast Chain
+    // 1. Sub-cut filter at 55Hz (12 dB/oct, Q=0.7) to protect phone & laptop speaker cones from sub-bass rattling
+    this.subCutFilter = new Tone.Filter({
+      frequency: 55,
+      type: 'highpass',
+      rolloff: -12,
+      Q: 0.7,
+    });
+
+    // 2. Glue compressor to control dynamic transients and multi-track summing spikes
+    this.glueCompressor = new Tone.Compressor({
+      threshold: -14,
+      ratio: 3.5,
+      attack: 0.01,
+      release: 0.15,
+      knee: 12,
+    });
+
+    // 3. Fast brickwall safety limiter at -1.5 dBFS before Destination
+    this.limiter = new Tone.Limiter(-1.5);
 
     // 1. Soft Drive (Distortion with 2x oversample + tone lowpass filter)
     this.driveDistortion = new Tone.Distortion({
@@ -159,6 +181,7 @@ export class MasterEffectsRack {
       frequency: 4000,
       type: 'lowpass',
       rolloff: -12,
+      Q: 1,
     });
     this.driveChainGain = new Tone.Gain(1);
     this.driveDistortion.connect(this.driveFilter);
@@ -212,7 +235,7 @@ export class MasterEffectsRack {
     } catch {}
     this.stageTremolo = new BypassStage(this.tremolo);
 
-    // 6. PingPongDelay
+    // 6. PingPongDelay (feedback safety clamped <= 0.75)
     this.delay = new Tone.PingPongDelay({
       delayTime: '8n',
       feedback: 0.35,
@@ -231,8 +254,8 @@ export class MasterEffectsRack {
     this.reverb.generate().catch(() => {});
     this.stageReverb = new BypassStage(this.reverb);
 
-    // Wire master effects chain:
-    // masterGain -> Drive -> AutoFilter -> Chorus -> Phaser -> Tremolo -> Delay -> Reverb -> Limiter -> destination
+    // Wire master chain:
+    // masterGain -> 7 FX stages -> effectsOutput -> subCutFilter -> glueCompressor -> limiter -> destination
     this.masterGain.connect(this.stageDrive.input);
     this.stageDrive.output.connect(this.stageAutoFilter.input);
     this.stageAutoFilter.output.connect(this.stageChorus.input);
@@ -242,7 +265,11 @@ export class MasterEffectsRack {
     this.stageDelay.output.connect(this.stageReverb.input);
     this.effectsOutput = new Tone.Gain(1);
     this.stageReverb.output.connect(this.effectsOutput);
-    this.effectsOutput.connect(this.limiter);
+
+    // Connect effects output through master broadcast chain
+    this.effectsOutput.connect(this.subCutFilter);
+    this.subCutFilter.connect(this.glueCompressor);
+    this.glueCompressor.connect(this.limiter);
     this.limiter.toDestination();
 
     // Load saved settings if present
@@ -252,17 +279,17 @@ export class MasterEffectsRack {
 
   public insertProcessing(nodeIn: Tone.ToneAudioNode, nodeOut: Tone.ToneAudioNode) {
     try {
-      this.effectsOutput.disconnect(this.limiter);
+      this.effectsOutput.disconnect(this.subCutFilter);
       this.effectsOutput.connect(nodeIn);
-      nodeOut.connect(this.limiter);
+      nodeOut.connect(this.subCutFilter);
     } catch {}
   }
 
   public removeProcessing(nodeIn: Tone.ToneAudioNode, nodeOut: Tone.ToneAudioNode) {
     try {
       this.effectsOutput.disconnect(nodeIn);
-      nodeOut.disconnect(this.limiter);
-      this.effectsOutput.connect(this.limiter);
+      nodeOut.disconnect(this.subCutFilter);
+      this.effectsOutput.connect(this.subCutFilter);
     } catch {}
   }
 
@@ -320,28 +347,30 @@ export class MasterEffectsRack {
     } catch {}
     this.stageTremolo.setRouting(tremWet, cfg.tremolo.bypassed);
 
-    // 6. Delay: amount 0..100 -> wet 0..0.6
+    // 6. Delay: amount 0..100 -> wet 0..0.6, feedback clamped <= 0.75 to prevent runaway oscillation
     const delayAmount = cfg.delay.bypassed ? 0 : cfg.delay.amount;
     const delayWet = (delayAmount / 100) * 0.6;
     try {
       this.delay.delayTime.setValueAtTime(cfg.delay.time, now);
+      this.delay.feedback.value = Math.min(0.75, Math.max(0, 0.35));
     } catch {}
     this.stageDelay.setRouting(delayWet, cfg.delay.bypassed);
 
-    // 7. Reverb: amount 0..100 -> wet 0..0.7
+    // 7. Reverb: amount 0..100 -> wet 0..0.7, decay capped <= 6.0s
     const reverbAmount = cfg.reverb.bypassed ? 0 : cfg.reverb.amount;
     const reverbWet = (reverbAmount / 100) * 0.7;
+    const safeReverbSize = Math.min(6.0, Math.max(0.5, cfg.reverb.size));
     this.stageReverb.setRouting(reverbWet, cfg.reverb.bypassed);
 
     // Debounced regeneration on size change
     const currentDecay = typeof this.reverb.decay === 'number' ? this.reverb.decay : parseFloat(String(this.reverb.decay));
-    if (Math.abs(currentDecay - cfg.reverb.size) > 0.1) {
+    if (Math.abs(currentDecay - safeReverbSize) > 0.1) {
       if (this.reverbDebounceTimer !== null) {
         window.clearTimeout(this.reverbDebounceTimer);
       }
       this.reverbDebounceTimer = window.setTimeout(async () => {
         this.reverbDebounceTimer = null;
-        this.reverb.decay = cfg.reverb.size;
+        this.reverb.decay = safeReverbSize;
         try {
           await this.reverb.generate();
         } catch {}
@@ -375,6 +404,8 @@ export class MasterEffectsRack {
     }
     this.masterGain.dispose();
     this.effectsOutput.dispose();
+    this.subCutFilter.dispose();
+    this.glueCompressor.dispose();
     this.limiter.dispose();
     this.stageDrive.dispose();
     this.driveFilter.dispose();
