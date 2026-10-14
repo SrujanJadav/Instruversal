@@ -4349,3 +4349,194 @@ canvas.instruversal-canvas {
     animation: none;
   }
 }
+
+/* ==========================================================================
+   Start Choice Modal ("Begin a session")
+   ========================================================================== */
+
+.start-choice-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1500;
+  background-color: rgba(28, 26, 22, 0.42);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  opacity: 1;
+  transition: opacity 180ms ease-out;
+}
+
+.start-choice-backdrop.hidden {
+  display: none !important;
+  opacity: 0;
+  pointer-events: none;
+}
+
+[data-theme="dark"] .start-choice-backdrop {
+  background-color: rgba(0, 0, 0, 0.65);
+}
+
+.start-choice-dialog {
+  width: 100%;
+  max-width: 380px;
+  background-color: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 22px 20px;
+  box-shadow: 0 12px 36px rgba(28, 26, 22, 0.18);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  text-align: left;
+  box-sizing: border-box;
+}
+
+[data-theme="dark"] .start-choice-dialog {
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+}
+
+.start-choice-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.start-choice-title {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--ink);
+  margin: 0;
+  line-height: 1.2;
+}
+
+.start-choice-close-btn {
+  appearance: none;
+  background: transparent;
+  border: none;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink-soft);
+  cursor: pointer;
+  padding: 0;
+  margin: -10px -10px -10px 0;
+  border-radius: var(--radius-sm);
+  transition: color var(--transition-fast), background-color var(--transition-fast);
+}
+
+.start-choice-close-btn:hover {
+  color: var(--ink);
+  background-color: var(--paper-deep);
+}
+
+.start-choice-close-btn:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.start-choice-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+
+.start-option-card {
+  appearance: none;
+  width: 100%;
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-sizing: border-box;
+  text-align: left;
+  touch-action: manipulation;
+  transition: transform var(--transition-fast), border-color var(--transition-fast), opacity var(--transition-fast), background-color var(--transition-fast);
+}
+
+.start-option-card:hover {
+  transform: translateY(-1px);
+}
+
+.start-option-card:active {
+  transform: translateY(0);
+}
+
+.start-option-card:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.start-option-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.start-option-heading {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+.start-option-new {
+  background-color: var(--ink);
+  color: var(--paper);
+  border: 1px solid var(--ink);
+}
+
+.start-option-new:hover {
+  opacity: 0.94;
+}
+
+.start-option-new .start-option-subtext {
+  font-family: var(--font-ui);
+  font-size: 0.78rem;
+  opacity: 0.82;
+}
+
+.start-option-gallery {
+  background-color: var(--paper-deep);
+  color: var(--ink);
+  border: 1px solid var(--line);
+}
+
+.start-option-gallery:hover {
+  border-color: var(--ink-soft);
+}
+
+.start-option-gallery .start-option-subtext {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--ink-soft);
+}
+
+.start-option-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-left: 12px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .start-choice-backdrop,
+  .start-option-card {
+    transition: none !important;
+  }
+  .start-option-card:hover {
+    transform: none !important;
+  }
+}

@@ -34,6 +34,7 @@ import { getCreationManager } from './library/manager';
 import { getCreationStore } from './library/store';
 import { getLibraryModal } from './ui/Library';
 import { getGalleryModal } from './gallery/GalleryModal';
+import { getStartChoiceModal } from './ui/StartChoiceModal';
 import { getExportModal } from './ui/ExportModal';
 import { getHeaderMoreSheet } from './ui/HeaderMoreSheet';
 import { Creation } from './library/types';
@@ -92,11 +93,11 @@ app.innerHTML = `
       `}
     </div>
     <button class="start-btn" id="start-btn" type="button" aria-label="Start audio and enter Instruversal">
-      Tap to start
+      Tap to Art
     </button>
     <div class="gate-load-group" id="gate-load-group" style="display: none;">
-      <button class="load-btn" id="gate-load-btn" type="button" aria-label="Open saved creations 3D gallery">
-        Load
+      <button class="load-btn" id="gate-load-btn" type="button" aria-label="Open saved creations gallery">
+        Gallery
       </button>
       <span class="load-count-badge" id="gate-load-count">0 saved</span>
     </div>
@@ -242,7 +243,7 @@ export function setScreen(screen: ScreenName) {
     gateScreen.style.pointerEvents = 'auto';
 
     startBtn.disabled = false;
-    startBtn.textContent = 'Tap to start';
+    startBtn.textContent = 'Tap to Art';
   } else if (screen === 'studio') {
     // When on 'studio', Home screen container must be completely hidden
     gateScreen.classList.add('hidden');
@@ -429,6 +430,7 @@ function closeAllOpenSheets() {
   syncPill?.close();
   getLibraryModal().close(false);
   getGalleryModal().close(false);
+  getStartChoiceModal().close();
   getHeaderMoreSheet(() => {}).close();
   document.querySelector('.first-run-hint-overlay')?.remove();
 }
@@ -773,17 +775,63 @@ export async function enterMainView(startAudio: boolean = true) {
 }
 
 async function handleStart() {
-  startBtn.disabled = true;
-  startBtn.textContent = 'Starting…';
-
   try {
-    await openStudio({ autoplay: false, startAudio: true });
-    showFirstRunHintOverlay(false);
+    const store = getCreationStore();
+    const list = await store.list();
+
+    if (list.length === 0) {
+      // 0 saved creations: immediately open a fresh, blank canvas in Studio
+      startBtn.disabled = true;
+      startBtn.textContent = 'Starting…';
+
+      try {
+        await creationManager.createNewCreation();
+        await openStudio({ autoplay: false, startAudio: true });
+        showFirstRunHintOverlay(false);
+      } catch (err) {
+        console.error('Audio initialization error:', err);
+      } finally {
+        startBtn.disabled = false;
+        startBtn.textContent = 'Tap to Art';
+      }
+    } else {
+      // 1 or more saved creations: open Start Choice Modal
+      getStartChoiceModal().open(
+        {
+          creationsCount: list.length,
+          recentTitle: list[0]?.title || '',
+          onNewCanvas: async () => {
+            startBtn.disabled = true;
+            startBtn.textContent = 'Starting…';
+            try {
+              await creationManager.createNewCreation();
+              await openStudio({ autoplay: false, startAudio: true });
+              showFirstRunHintOverlay(false);
+            } catch (err) {
+              console.error('Error starting new canvas:', err);
+            } finally {
+              startBtn.disabled = false;
+              startBtn.textContent = 'Tap to Art';
+            }
+          },
+          onOpenGallery: async () => {
+            if (Tone.context.state !== 'running') {
+              try {
+                await Tone.start();
+                state.audioStarted = true;
+                events.emit('audio:started', undefined);
+              } catch {}
+            }
+            getGalleryModal().open();
+          },
+        },
+        startBtn
+      );
+    }
   } catch (err) {
-    console.error('Audio initialization error:', err);
-  } finally {
+    console.error('Start error:', err);
     startBtn.disabled = false;
-    startBtn.textContent = 'Tap to start';
+    startBtn.textContent = 'Tap to Art';
   }
 }
 

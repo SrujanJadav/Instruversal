@@ -324,7 +324,7 @@ export class GalleryModal {
       const startBtn = document.querySelector<HTMLButtonElement>('#start-btn');
       if (startBtn) {
         startBtn.disabled = false;
-        startBtn.textContent = 'Tap to start';
+        startBtn.textContent = 'Tap to Art';
       }
 
       if (updateHash && window.location.hash === '#/load') {
