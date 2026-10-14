@@ -1,10 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { SHAPE_OF_ME } from './shapeOfMe';
 import { convertNotesToStrokes } from './notesToStrokes';
-import { buildScaleNotes, yToMidi } from '../audio/scales';
+import { buildScaleNotes } from '../audio/scales';
 import { generateEventsFromStrokes } from '../audio/schedule';
 import { generateBeatEventsFromStrokes } from '../audio/beatSchedule';
-import { yToDrumSound } from '../audio/drums';
 
 describe('Shape of Me preset verification', () => {
   it('has correct project metadata, tempo, scale and playback mode', () => {
